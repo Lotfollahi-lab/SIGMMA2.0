@@ -1,52 +1,62 @@
-import torch
-from torchvision import transforms
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any, Callable, Optional
+
 import numpy as np
+import scanpy
+import zarr
+import torch
+from torchvision.transforms import ToTensor, Resize, Compose
 
 
 class SpatialPatchDataset(torch.utils.data.Dataset):
-    def __init__(self, image, adata, patch_size=256, encoder=None):
-        self.image = image
-        self.adata = adata
-        self.encoder = encoder
-        self.patches = get_patches(image.size, patch_size)
-        self.spatial_coords = adata.obsm["novae_latent"]
-
-    def __len__(self):
-        return len(self.patches)
+    def __init__(
+        self,
+        image_file: Path | str,
+        spatial_file: Path | str,
+        indices_file: Path | str,
+        fov_size: int = 256,
+    ):
+        self.image_array = zarr.open(image_file, mode="r")
+        self.index_array = zarr.open(indices_file, mode="r")
+        self.spatial_anndata = scanpy.read_10x_h5(
+            spatial_file
+        )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
+        self.fov_size = fov_size
 
     def __getitem__(self, idx):
-        bbox = self.patches[idx]
-        # crop image patch
-        image_patch = self.image.crop(bbox)
+        slice_args = self.index_array[idx, :, :]
+        y_start = slice_args[0, :]
+        x_start = slice_args[1, :]
 
-        # get cell latent vectors in this patch
-        mask = cells_in_patch(self.spatial_coords, bbox)
-        if np.sum(mask) == 0:
-            latent_vecs = np.zeros((1, self.encoder.latent_dim))
-        else:
-            latent_vecs = self.encoder.transform(self.adata.X[mask])
+        # 1. spatial embedding (cells inside this FOV)
+        points = self.spatial_anndata.obsm["spatial"]
+
+        mask = (
+            (x_start <= points[:, 0])
+            & (points[:, 0] < x_start + self.fov_size)
+            & (y_start <= points[:, 1])
+            & (points[:, 1] < y_start + self.fov_size)
+        )
+
+        spatial_embedding = (
+            torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask])
+            .mean(dim=0)
+            .unsqueeze(0)
+        )
+
+        # 2. cropped image
+        fov_image = self.image_array[
+            x_start : x_start + self.fov_size, y_start : y_start + self.fov_size, :
+        ]
+        # → Resize image for ViT input
+        transform = Compose([ToTensor(), Resize((224, 224))])
+        image = transform(fov_image).unsqueeze(0)
 
         return {
-            "image_patch": transforms.ToTensor()(image_patch),
-            "cell_latents": torch.tensor(latent_vecs, dtype=torch.float),
-            "patch_coord": torch.tensor(bbox),
+            "image": image,
+            "spatial": torch.tensor(spatial_embedding),
         }
 
-
-def cells_in_patch(spatial_coords, patch_bbox):
-    x0, y0, x1, y1 = patch_bbox
-    mask = (
-        (spatial_coords[:, 0] >= x0)
-        & (spatial_coords[:, 0] < x1)
-        & (spatial_coords[:, 1] >= y0)
-        & (spatial_coords[:, 1] < y1)
-    )
-    return mask
-
-
-def get_patches(image_size, patch_size=256):
-    patches = []
-    for y in range(0, image_size[1], patch_size):
-        for x in range(0, image_size[0], patch_size):
-            patches.append((x, y, x + patch_size, y + patch_size))
-    return patches
+    def __len__(self) -> int:
+        return self.index_array.shape[0]

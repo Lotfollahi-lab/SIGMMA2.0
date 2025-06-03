@@ -55,7 +55,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         return {
             "image": image,
-            "spatial": torch.tensor(spatial_embedding),
+            "spatial": spatial_embedding,
         }
 
     def __len__(self) -> int:

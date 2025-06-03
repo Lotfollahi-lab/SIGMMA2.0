@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 
-from novae import Novae
-from .losses import HMLC
+from .losses import InfoNCE
 
 
 class base_contrastive(nn.Module):
@@ -31,7 +30,7 @@ class base_contrastive(nn.Module):
         spatial_embedding = self.spatial_projection(spatial_embedding)
 
         # constrastive loss
-        loss = self.contrastive_loss(image_embedding, spatial_embedding)
+        loss = InfoNCE(image_embedding, spatial_embedding)
         return loss, image_embedding, spatial_embedding
 
 

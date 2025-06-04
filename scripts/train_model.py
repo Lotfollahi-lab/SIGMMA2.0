@@ -1,36 +1,49 @@
 import os
 import torch
-import pandas as pd
+from torch.utils.data import random_split, DataLoader
 
 from ml_collections.config_dict import ConfigDict
 import yaml
 
 import timm
 
-from model.utils.train_utils import train_one_epoch, save_checkpoint
-from novae import Novae
-from huggingface_hub import login, hf_hub_download
-
-import wandb
+from model.utils.train_utils import (
+    train_one_epoch,
+    load_dataset,
+    load_model,
+)
 
 
 def main(args):
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     model_name = config.get("model.name")
+    print(f"Training model: {model_name}")
     out_dir = config.get("outdir")
 
     if os.path.exists(out_dir) == False:
         os.makedirs(out_dir)
 
-    train_dataset = None
-    val_dataset = None
+    dataset = load_dataset(config)
 
-    model, optimizer, lr_scheduler = None, None, None
+    train_dataset, eval_dataset = random_split(
+        dataset,
+        [int(len(dataset) * 0.8), int(len(dataset) * 0.2)],
+        generator=torch.Generator().manual_seed(42),
+    )
+
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=config.get("train.batch_size"), shuffle=True
+    )
+    eval_dataloader = DataLoader(
+        eval_dataset, batch_size=config.get("eval.batch_size"), shuffle=False
+    )
 
     # Load pretrained UNI model (UNI checkpoints "pytorch_model.bin" should be downloaded in assets)
-    pretrained_ckpt_dir = "../assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/"
+    pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
     os.makedirs(pretrained_ckpt_dir, exist_ok=True)
     pretrained_image_encoder = timm.create_model(
         "vit_large_patch16_224",
@@ -48,15 +61,28 @@ def main(args):
     )
     pretrained_image_encoder.eval()
 
-    # Load pretrained spatial encoder
-    pretrained_spatial_encoder = Novae.from_pretrained("MICS-Lab/novae-human-0")
+    # # Load pretrained spatial encoder
+    # pretrained_spatial_encoder = Novae.from_pretrained("MICS-Lab/novae-human-0")
 
-    global_step, first_epoch, num_train_epochs = 0, 0, config.get("num_train_epochs", 10)
-    
+    model, optimizer, lr_scheduler = load_model(config, pretrained_image_encoder)
+
+    global_step, first_epoch, num_train_epochs = (
+        0,
+        0,
+        config.get("train.epochs"),
+    )
+
     for current_epoch in range(first_epoch, num_train_epochs):
-        global_step = train_one_epoch(config, model, optimizer, lr_scheduler)
-
-    save_checkpoint()
+        global_step = train_one_epoch(
+            config,
+            model,
+            train_dataloader,
+            eval_dataloader,
+            optimizer,
+            lr_scheduler,
+            global_step,
+            device=device,
+        )
 
 
 if __name__ == "__main__":

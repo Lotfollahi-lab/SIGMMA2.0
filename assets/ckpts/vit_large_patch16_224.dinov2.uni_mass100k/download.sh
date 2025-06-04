@@ -1,0 +1,1 @@
+wget https://huggingface.co/MahmoodLab/UNI/resolve/main/pytorch_model.bin

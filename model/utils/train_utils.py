@@ -73,7 +73,7 @@ def train_one_epoch(
         if (global_step + 1) % config.train.save_every == 0:
             save_checkpoint(
                 model,
-                config.experiment.output_dir,
+                config.output_dir,
                 global_step + 1,
             )
 

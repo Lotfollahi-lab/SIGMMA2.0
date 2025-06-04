@@ -19,15 +19,15 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
     ):
         self.image_array = zarr.open(image_file, mode="r")
         self.index_array = zarr.open(indices_file, mode="r")
-        self.spatial_anndata = scanpy.read_10x_h5(
+        self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
         )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
         self.fov_size = fov_size
 
     def __getitem__(self, idx):
         slice_args = self.index_array[idx, :, :]
-        y_start = slice_args[0, :]
-        x_start = slice_args[1, :]
+        y_start = slice_args[0, :].item()
+        x_start = slice_args[1, :].item()
 
         # 1. spatial embedding (cells inside this FOV)
         points = self.spatial_anndata.obsm["spatial"]
@@ -47,11 +47,13 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         # 2. cropped image
         fov_image = self.image_array[
-            x_start : x_start + self.fov_size, y_start : y_start + self.fov_size, :
-        ]
+                    y_start : y_start + self.fov_size, 
+                    x_start : x_start + self.fov_size, 
+                    :
+                    ]
         # → Resize image for ViT input
         transform = Compose([ToTensor(), Resize((224, 224))])
-        image = transform(fov_image).unsqueeze(0)
+        image = transform(fov_image)
 
         return {
             "image": image,

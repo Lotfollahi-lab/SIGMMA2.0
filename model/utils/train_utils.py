@@ -10,9 +10,9 @@ def load_dataset(config):
     """
 
     dataset = SpatialPatchDataset(
-        image_file=Path(config.dataset.train_image_file),
-        spatial_file=Path(config.dataset.train_spatial_file),
-        indices_file=Path(config.dataset.train_indices_file),
+        image_file=Path(config.dataset.image_file),
+        spatial_file=Path(config.dataset.spatial_file),
+        indices_file=Path(config.dataset.indices_file),
         fov_size=config.dataset.fov_size,
     )
 
@@ -53,6 +53,7 @@ def train_one_epoch(
     """
     One epoch of training for the model.
     """
+    model =  model.to(device)
     model.train()
 
     for i, batch in enumerate(train_dataloader):
@@ -60,7 +61,8 @@ def train_one_epoch(
         spatial = batch["spatial"].to(device)
 
         # Forward pass
-        loss = model(images, spatial)
+        with torch.cuda.amp.autocast():
+            loss, image_embedding, spatial_embedding = model(images, spatial)
 
         # Backward pass
         optimizer.zero_grad()
@@ -68,7 +70,7 @@ def train_one_epoch(
         optimizer.step()
         lr_scheduler.step()
 
-        if (global_step + 1) % config.experiment.save_every == 0:
+        if (global_step + 1) % config.train.save_every == 0:
             save_checkpoint(
                 model,
                 config.experiment.output_dir,
@@ -77,7 +79,7 @@ def train_one_epoch(
 
         if (
             eval_dataloader is not None
-            and (global_step + 1) % config.experiment.eval_every == 0
+            and (global_step + 1) % config.train.eval_every == 0
         ):
             eval_loss = evaluate(model, eval_dataloader, device)
             print(f"Eval Loss: {eval_loss}")
@@ -116,7 +118,7 @@ def evaluate(model, eval_dataloader, device):
             images = batch["image"].to(device)
             spatial = batch["spatial"].to(device)
 
-            loss = model(images, spatial)
+            loss, image_embedding, spatial_embedding = model(images, spatial)
             total_loss += loss.item()
 
     avg_loss = total_loss / len(eval_dataloader)

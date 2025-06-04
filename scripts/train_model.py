@@ -1,4 +1,5 @@
 import os
+import argparse
 import torch
 from torch.utils.data import random_split, DataLoader
 
@@ -28,18 +29,22 @@ def main(args):
         os.makedirs(out_dir)
 
     dataset = load_dataset(config)
-
+    
+    total = len(dataset)
+    train_len = int(0.8 * total)
+    val_len = total - train_len  
+    
     train_dataset, eval_dataset = random_split(
-        dataset,
-        [int(len(dataset) * 0.8), int(len(dataset) * 0.2)],
+        dataset, [train_len, val_len],
         generator=torch.Generator().manual_seed(42),
     )
 
+    batch_size = config.get("train.batch_size")
     train_dataloader = DataLoader(
-        train_dataset, batch_size=config.get("train.batch_size"), shuffle=True
+        train_dataset, batch_size=batch_size, shuffle=True
     )
     eval_dataloader = DataLoader(
-        eval_dataset, batch_size=config.get("eval.batch_size"), shuffle=False
+        eval_dataset, batch_size=batch_size, shuffle=False
     )
 
     # Load pretrained UNI model (UNI checkpoints "pytorch_model.bin" should be downloaded in assets)
@@ -86,4 +91,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-config_file")
+    args = parser.parse_args()
+    main(args)

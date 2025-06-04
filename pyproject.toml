@@ -11,4 +11,8 @@ dependencies = ["novae (>=0.2.4,<0.3.0)",
                 "uni @ git+https://github.com/mahmoodlab/UNI.git",
                 "ipykernel (>=6.29.5,<7.0.0)",
                 "tifffile (>=2025.5.26,<2026.0.0)",
-                "pot (>=0.9.5,<0.10.0)"]
+                "pot (>=0.9.5,<0.10.0)",
+                "ml-collections (>=1.1.0,<2.0.0)",
+                "zarr (==2.15.0)",
+                "scanpy (>=1.11.2,<2.0.0)",
+                "numcodecs (==0.11.0)"]

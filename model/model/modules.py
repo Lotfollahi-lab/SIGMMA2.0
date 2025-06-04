@@ -5,20 +5,22 @@ from .losses import InfoNCE
 
 
 class base_contrastive(nn.Module):
-    def __init__(self, config, image_encoder, spatial_encoder):
+    def __init__(self, config, image_encoder):
         super(base_contrastive, self).__init__()
         self.config = config
 
         self.image_encoder = image_encoder
         self.image_projection = nn.Linear(
-            in_features=config.image_encoder.output_dim,
+            in_features=config.model.image_encoder_output_dim,
             out_features=config.model.projection_dim,
         )
 
         self.spatial_projection = nn.Linear(
-            in_features=config.spatial_encoder.output_dim,
+            in_features=config.model.spatial_encoder_output_dim,
             out_features=config.model.projection_dim,
         )
+
+        self.loss_fn = InfoNCE(temperature=0.07)
 
     def forward(self, x, y):
         """
@@ -33,7 +35,7 @@ class base_contrastive(nn.Module):
         spatial_embedding = self.spatial_projection(y)
 
         # constrastive loss
-        loss = InfoNCE(image_embedding, spatial_embedding)
+        loss = self.loss_fn(image_embedding, spatial_embedding)
         return loss, image_embedding, spatial_embedding
 
 
@@ -44,12 +46,12 @@ class cel_type_composition_predictor(nn.Module):
 
         self.image_encoder = image_encoder
         self.image_projection = nn.Linear(
-            in_features=config.image_encoder.output_dim,
+            in_features=config.model.image_encoder_output_dim,
             out_features=config.model.projection_dim,
         )
 
         self.spatial_projection = nn.Linear(
-            in_features=config.spatial_encoder.output_dim,
+            in_features=config.model.spatial_encoder_output_dim,
             out_features=config.model.projection_dim,
         )
         self.predictor = nn.Linear(

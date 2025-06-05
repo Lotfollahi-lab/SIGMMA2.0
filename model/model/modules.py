@@ -20,7 +20,7 @@ class base_contrastive(nn.Module):
             out_features=config.model.projection_dim,
         )
 
-        self.loss_fn = InfoNCE(temperature=0.07)
+        self.loss_fn = InfoNCE(temperature=config.model.infoNCE_temperature)
 
     def forward(self, x, y):
         """

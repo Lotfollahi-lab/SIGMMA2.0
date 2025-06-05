@@ -4,16 +4,16 @@ from model.datasets.dataset import SpatialPatchDataset
 from model.model import base_contrastive
 
 
-def load_dataset(config):
+def load_dataset(config_dataset):
     """
     Load the training and evaluation datasets based on the configuration.
     """
 
     dataset = SpatialPatchDataset(
-        image_file=Path(config.dataset.image_file),
-        spatial_file=Path(config.dataset.spatial_file),
-        indices_file=Path(config.dataset.indices_file),
-        fov_size=config.dataset.fov_size,
+        image_file=Path(config_dataset.image_file),
+        spatial_file=Path(config_dataset.spatial_file),
+        indices_file=Path(config_dataset.indices_file),
+        fov_size=config_dataset.fov_size,
     )
 
     return dataset

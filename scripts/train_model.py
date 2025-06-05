@@ -1,7 +1,7 @@
 import os
 import argparse
 import torch
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import random_split, DataLoader, ConcatDataset
 
 from ml_collections.config_dict import ConfigDict
 import yaml
@@ -28,7 +28,10 @@ def main(args):
     if os.path.exists(out_dir) == False:
         os.makedirs(out_dir)
 
-    dataset = load_dataset(config)
+    dataset1 = load_dataset(config.dataset1)
+    dataset2 = load_dataset(config.dataset2)
+
+    dataset = ConcatDataset([dataset1, dataset2])
     
     total = len(dataset)
     train_len = int(0.8 * total)

@@ -5,17 +5,25 @@ model:
   spatial_encoder_output_dim: 64
   projection_dim: 128
   num_cell_types: 20
+  infoNCE_temperature: 0.2
   
-dataset:
+dataset1:
   image_file: ../../data/Xenium_Prime_Human_Breast_Cancer_FFPE/images.zarr/
   spatial_file: ../../data/Xenium_Prime_Human_Breast_Cancer_FFPE/spatial_preprocessed_breast_cancer.h5
   indices_file: ../../data/Xenium_Prime_Human_Breast_Cancer_FFPE/indices.zarr/
   fov_size: 256
+
+dataset2:
+  image_file: ../../data/Xenium_Prime_Human_Lung_Cancer_FFPE/images.zarr/
+  spatial_file: ../../data/Xenium_Prime_Human_Lung_Cancer_FFPE/spatial_preprocessed_lung_cancer.h5
+  indices_file: ../../data/Xenium_Prime_Human_Lung_Cancer_FFPE/indices.zarr/
+  fov_size: 256
+  
 outdir: ./outputs/basic_contrastive
 train:
   batch_size: 16
   epochs: 100
-  learning_rate: 0.001
+  learning_rate: 0.01
   weight_decay: 0.0001
   lr_step_size: 10
   lr_gamma: 0.1

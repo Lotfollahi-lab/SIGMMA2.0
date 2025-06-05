@@ -42,7 +42,6 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         spatial_embedding = (
             torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask])
             .mean(dim=0)
-            .unsqueeze(0)
         )
 
         # 2. cropped image

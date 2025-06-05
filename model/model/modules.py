@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from .losses import InfoNCE
-
+from .layers import DINOHead
 
 class base_contrastive(nn.Module):
     def __init__(self, config, image_encoder):
@@ -10,14 +10,14 @@ class base_contrastive(nn.Module):
         self.config = config
 
         self.image_encoder = image_encoder
-        self.image_projection = nn.Linear(
-            in_features=config.model.image_encoder_output_dim,
-            out_features=config.model.projection_dim,
-        )
+        self.image_projection = DINOHead(
+            in_dim = config.model.image_encoder_output_dim,
+            out_dim = config.model.projection_dim,
+            )
 
-        self.spatial_projection = nn.Linear(
-            in_features=config.model.spatial_encoder_output_dim,
-            out_features=config.model.projection_dim,
+        self.spatial_projection = DINOHead(
+            in_dim = config.model.spatial_encoder_output_dim,
+            out_dim = config.model.projection_dim,
         )
 
         self.loss_fn = InfoNCE(temperature=config.model.infoNCE_temperature)

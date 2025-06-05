@@ -32,6 +32,7 @@ class base_contrastive(nn.Module):
         image_embedding = self.image_projection(image_embedding)
 
         # spatial embedding
+        y[torch.isnan(y)] = 0.0
         spatial_embedding = self.spatial_projection(y)
 
         # constrastive loss

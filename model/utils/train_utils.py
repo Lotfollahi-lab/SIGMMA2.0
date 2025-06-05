@@ -61,7 +61,7 @@ def train_one_epoch(
         spatial = batch["spatial"].to(device)
 
         # Forward pass
-        with torch.cuda.amp.autocast():
+        with torch.amp.autocast(device.type):
             loss, image_embedding, spatial_embedding = model(images, spatial)
 
         # Backward pass
@@ -73,9 +73,16 @@ def train_one_epoch(
         if (global_step + 1) % config.train.save_every == 0:
             save_checkpoint(
                 model,
-                config.output_dir,
+                optimizer,
+                lr_scheduler,
+                config.outdir,
                 global_step + 1,
             )
+            torch.save({
+                "step": global_step,
+                "image_embedding": image_embedding.detach().cpu(),
+                "spatial_embedding": spatial_embedding.detach().cpu(),
+            }, f"outputs/embedding_step_{global_step}.pt")
 
         if (
             eval_dataloader is not None

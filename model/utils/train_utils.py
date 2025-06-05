@@ -61,12 +61,13 @@ def train_one_epoch(
         spatial = batch["spatial"].to(device)
 
         # Forward pass
-        with torch.amp.autocast(device.type):
+        with torch.amp.autocast(device.type, enabled=False):
             loss, image_embedding, spatial_embedding = model(images, spatial)
 
         # Backward pass
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
         lr_scheduler.step()
 
@@ -82,13 +83,13 @@ def train_one_epoch(
                 "step": global_step,
                 "image_embedding": image_embedding.detach().cpu(),
                 "spatial_embedding": spatial_embedding.detach().cpu(),
-            }, f"outputs/embedding_step_{global_step}.pt")
+            }, f"{config.outdir}/embedding_step_{global_step}.pt")
 
         if (
             eval_dataloader is not None
             and (global_step + 1) % config.train.eval_every == 0
         ):
-            eval_loss = evaluate(model, eval_dataloader, device)
+            eval_loss, _, _ = evaluate(model, eval_dataloader, device)
             print(f"Eval Loss: {eval_loss}")
 
         global_step += 1
@@ -114,19 +115,39 @@ def save_checkpoint(
     return save_path
 
 
+def load_checkpoint(model, optimizer, lr_scheduler, checkpoint_path, device="cuda"):
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    lr_scheduler.load_state_dict(checkpoint["lr_scheduler_state_dict"])
+    global_step = checkpoint.get("global_step", 0)
+    
+    print(f"Loaded checkpoint from {checkpoint_path} at step {global_step}")
+    return global_step
+    
 def evaluate(model, eval_dataloader, device):
     """
     Evaluate the model on the validation dataset.
     """
     model.eval()
     total_loss = 0.0
+    all_image_embeddings = []
+    all_spatial_embeddings = []
+
     with torch.no_grad():
         for batch in eval_dataloader:
             images = batch["image"].to(device)
             spatial = batch["spatial"].to(device)
 
             loss, image_embedding, spatial_embedding = model(images, spatial)
+            all_image_embeddings.append(image_embedding.cpu())
+            all_spatial_embeddings.append(spatial_embedding.cpu())
+
             total_loss += loss.item()
 
     avg_loss = total_loss / len(eval_dataloader)
-    return avg_loss
+    all_image_embeddings = torch.cat(all_image_embeddings, dim=0)
+    all_spatial_embeddings = torch.cat(all_spatial_embeddings, dim=0)
+
+    return avg_loss, all_image_embeddings, all_spatial_embeddings

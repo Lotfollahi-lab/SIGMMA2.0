@@ -49,6 +49,7 @@ def train_one_epoch(
     lr_scheduler,
     global_step,
     device,
+    wandb_logger,
 ):
     """
     One epoch of training for the model.
@@ -91,6 +92,9 @@ def train_one_epoch(
         ):
             eval_loss, _, _ = evaluate(model, eval_dataloader, device)
             print(f"Eval Loss: {eval_loss}")
+
+        wandb_logger.update({"train_loss": loss})
+        wandb_logger.set_step()
 
         global_step += 1
 

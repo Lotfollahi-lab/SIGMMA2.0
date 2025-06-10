@@ -8,11 +8,7 @@ import yaml
 
 import timm
 
-from model.utils.train_utils import (
-    train_one_epoch,
-    load_dataset,
-    load_model,
-)
+from model.utils import train_one_epoch, load_dataset, load_model, WandbLogger
 
 
 def main(args):
@@ -38,17 +34,27 @@ def main(args):
     val_len = total - train_len  
     
     train_dataset, eval_dataset = random_split(
-        dataset, [train_len, val_len],
+        dataset,
+        [train_len, val_len],
         generator=torch.Generator().manual_seed(42),
     )
 
     batch_size = config.get("train.batch_size")
-    train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True
-    )
-    eval_dataloader = DataLoader(
-        eval_dataset, batch_size=batch_size, shuffle=False
-    )
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False)
+
+    # Add wandb logging
+    wandb_config = {
+        "entity": None,
+        "project": "img-spatial-alignment",
+        "group": None,
+        "name": None,
+        "tags": None,
+        "mode": "online",
+    }
+
+    wandb_logger = WandbLogger(**wandb_config)
+    wandb_logger.set_step(0)
 
     # Load pretrained UNI model (UNI checkpoints "pytorch_model.bin" should be downloaded in assets)
     pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
@@ -90,6 +96,7 @@ def main(args):
             lr_scheduler,
             global_step,
             device=device,
+            wandb_logger=wandb_logger,
         )
 
 

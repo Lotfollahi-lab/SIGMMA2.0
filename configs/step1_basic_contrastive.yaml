@@ -1,6 +1,6 @@
 model:
   name: basic_contrastive_model
-  pretrained_image_encoder_ckpt_path: /home/jupyter/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
+  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
   image_encoder_output_dim: 1024
   spatial_encoder_output_dim: 64
   projection_dim: 128
@@ -8,22 +8,23 @@ model:
   infoNCE_temperature: 0.2
   
 dataset1:
-  image_file: /home/jupyter/data/Xenium_Prime_Human_Breast_Cancer_FFPE/images.zarr/
-  spatial_file: /home/jupyter/data/Xenium_Prime_Human_Breast_Cancer_FFPE/spatial_preprocessed_breast_cancer.h5
-  indices_file: /home/jupyter/data/Xenium_Prime_Human_Breast_Cancer_FFPE/indices.zarr/
+  image_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Breast_Cancer_FFPE/image.zarr/
+  spatial_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Breast_Cancer_FFPE/spatial_preprocessed_breast_cancer.h5
+  indices_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Breast_Cancer_FFPE/indices.zarr/
   fov_size: 256
 
 dataset2:
-  image_file: /home/jupyter/data/Xenium_Prime_Human_Lung_Cancer_FFPE/images.zarr/
-  spatial_file: /home/jupyter/data/Xenium_Prime_Human_Lung_Cancer_FFPE/spatial_preprocessed_lung_cancer.h5
-  indices_file: /home/jupyter/data/Xenium_Prime_Human_Lung_Cancer_FFPE/indices.zarr/
+  image_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lung_Cancer_FFPE/image.zarr
+  spatial_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lung_Cancer_FFPE/spatial_preprocessed_lung_cancer.h5
+  indices_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lung_Cancer_FFPE/indices.zarr/
   fov_size: 256
   
-outdir: /home/jupyter/projects/img_spatial_alignment/outputs/basic_contrastive
+outdir: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/basic_contrastive
+
 train:
-  batch_size: 16
+  batch_size: 256
   epochs: 100
-  learning_rate: 0.001
+  learning_rate: 0.0001
   weight_decay: 0.0001
   lr_step_size: 10
   lr_gamma: 0.1

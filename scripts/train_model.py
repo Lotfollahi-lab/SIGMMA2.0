@@ -53,7 +53,7 @@ def main(args):
         "mode": "online",
     }
 
-    wandb_logger = WandbLogger(**wandb_config)
+    wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
     # Load pretrained UNI model (UNI checkpoints "pytorch_model.bin" should be downloaded in assets)

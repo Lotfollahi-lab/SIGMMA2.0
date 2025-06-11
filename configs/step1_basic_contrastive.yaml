@@ -5,7 +5,7 @@ model:
   spatial_encoder_output_dim: 64
   projection_dim: 128
   num_cell_types: 20
-  infoNCE_temperature: 0.2
+  infoNCE_temperature: 0.005
   
 dataset1:
   image_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Breast_Cancer_FFPE/image.zarr/
@@ -19,10 +19,10 @@ dataset2:
   indices_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lung_Cancer_FFPE/indices.zarr/
   fov_size: 256
   
-outdir: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/basic_contrastive
+outdir: /nfs/team361/dj16/img_spatial_alignment/outputs/basic_contrastive
 
 train:
-  batch_size: 256
+  batch_size: 128
   epochs: 100
   learning_rate: 0.0001
   weight_decay: 0.0001

@@ -54,7 +54,7 @@ def train_one_epoch(
     """
     One epoch of training for the model.
     """
-    model =  model.to(device)
+    model = model.to(device)
     model.train()
 
     for i, batch in enumerate(train_dataloader):
@@ -80,11 +80,14 @@ def train_one_epoch(
                 config.outdir,
                 global_step + 1,
             )
-            torch.save({
-                "step": global_step,
-                "image_embedding": image_embedding.detach().cpu(),
-                "spatial_embedding": spatial_embedding.detach().cpu(),
-            }, f"{config.outdir}/embedding_step_{global_step}.pt")
+            torch.save(
+                {
+                    "step": global_step,
+                    "image_embedding": image_embedding.detach().cpu(),
+                    "spatial_embedding": spatial_embedding.detach().cpu(),
+                },
+                f"{config.outdir}/embedding_step_{global_step}.pt",
+            )
 
         if (
             eval_dataloader is not None
@@ -126,10 +129,11 @@ def load_checkpoint(model, optimizer, lr_scheduler, checkpoint_path, device="cud
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     lr_scheduler.load_state_dict(checkpoint["lr_scheduler_state_dict"])
     global_step = checkpoint.get("global_step", 0)
-    
+
     print(f"Loaded checkpoint from {checkpoint_path} at step {global_step}")
     return global_step
-    
+
+
 def evaluate(model, eval_dataloader, device):
     """
     Evaluate the model on the validation dataset.

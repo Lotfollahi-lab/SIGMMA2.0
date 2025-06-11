@@ -19,10 +19,10 @@ def main(args):
 
     model_name = config.get("model.name")
     print(f"Training model: {model_name}")
-    out_dir = config.get("outdir")
+    config.outdir = config.get("outdir") if args.out_dir is None else args.out_dir
 
-    if os.path.exists(out_dir) == False:
-        os.makedirs(out_dir)
+    if os.path.exists(config.outdir) == False:
+        os.makedirs(config.outdir)
 
     dataset1 = load_dataset(config.dataset1)
     dataset2 = load_dataset(config.dataset2)
@@ -103,5 +103,6 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-config_file")
+    parser.add_argument("-out_dir", default=None, type=str, help="Output directory for model checkpoints and logs")
     args = parser.parse_args()
     main(args)

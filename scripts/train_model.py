@@ -28,11 +28,11 @@ def main(args):
     dataset2 = load_dataset(config.dataset2)
 
     dataset = ConcatDataset([dataset1, dataset2])
-    
+
     total = len(dataset)
     train_len = int(0.8 * total)
-    val_len = total - train_len  
-    
+    val_len = total - train_len
+
     train_dataset, eval_dataset = random_split(
         dataset,
         [train_len, val_len],

@@ -11,9 +11,6 @@ class InfoNCE(torch.nn.Module):
         z_i: image embeddings, shape (B, D)
         z_j: spatial embeddings, shape (B, D)
         """
-        # Normalize the embeddings
-        z_i = torch.nn.functional.normalize(z_i, dim=-1)
-        z_j = torch.nn.functional.normalize(z_j, dim=-1)
 
         print("z_i norm:", z_i.norm(dim=-1))  # Ideally ~1 after normalize
         print("z_j norm:", z_j.norm(dim=-1))

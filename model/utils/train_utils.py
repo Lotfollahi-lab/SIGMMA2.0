@@ -66,10 +66,12 @@ def train_one_epoch(
             loss, image_embedding, spatial_embedding = model(images, spatial)
 
         # Backward pass
-        optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
+
+        if (i+1) % config.get("train.gradient_accumulation_steps",1) == 0:
+            optimizer.zero_grad()
+            optimizer.step
+
         lr_scheduler.step()
 
         if (global_step + 1) % config.train.save_every == 0:
@@ -95,6 +97,7 @@ def train_one_epoch(
         ):
             eval_loss, _, _ = evaluate(model, eval_dataloader, device)
             print(f"Eval Loss: {eval_loss}")
+            wandb_logger.update({"eval_loss": eval_loss})
 
         wandb_logger.update({"train_loss": loss})
         wandb_logger.set_step()

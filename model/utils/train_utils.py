@@ -72,8 +72,8 @@ def train_one_epoch(
         loss.backward()
 
         if (i+1) % config.get("train.gradient_accumulation_steps",1) == 0:
+            optimizer.step()
             optimizer.zero_grad()
-            optimizer.step
             lr_scheduler.step()
 
         if (global_step + 1) % config.train.save_every == 0:

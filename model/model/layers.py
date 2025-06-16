@@ -20,7 +20,7 @@ class DINOHead(nn.Module):
         in_dim,
         out_dim,
         use_bn=False,
-        nlayers=3,
+        nlayers=10,
         hidden_dim=2048,
         bottleneck_dim=256,
         mlp_bias=True,

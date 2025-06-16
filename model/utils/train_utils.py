@@ -3,6 +3,7 @@ from pathlib import Path
 from model.datasets.dataset import SpatialPatchDataset
 from model.model import base_contrastive
 
+import wandb
 
 def load_dataset(config_dataset):
     """
@@ -57,6 +58,8 @@ def train_one_epoch(
     model = model.to(device)
     model.train()
 
+    wandb.watch(model, log="all", log_freq=10)
+
     for i, batch in enumerate(train_dataloader):
         images = batch["image"].to(device)
         spatial = batch["spatial"].to(device)
@@ -71,8 +74,7 @@ def train_one_epoch(
         if (i+1) % config.get("train.gradient_accumulation_steps",1) == 0:
             optimizer.zero_grad()
             optimizer.step
-
-        lr_scheduler.step()
+            lr_scheduler.step()
 
         if (global_step + 1) % config.train.save_every == 0:
             save_checkpoint(
@@ -99,7 +101,8 @@ def train_one_epoch(
             print(f"Eval Loss: {eval_loss}")
             wandb_logger.update({"eval_loss": eval_loss})
 
-        wandb_logger.update({"train_loss": loss})
+        wandb_logger.update({"train_loss": loss,
+                             "lr": lr_scheduler.get_last_lr()[0]})
         wandb_logger.set_step()
 
         global_step += 1

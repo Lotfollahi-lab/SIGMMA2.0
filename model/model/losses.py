@@ -27,7 +27,7 @@ class InfoNCE(torch.nn.Module):
 
         if len(z_i) == 0:
             print("No valid pairs found. Skipping loss computation.")
-            return torch.tensor(0.0, device=z_i.device, requires_grad=True)
+            return torch.tensor(0.0, device=z_i.device, requires_grad=False)
 
         # Compute cosine similarity
         logits = torch.mm(z_i, z_j.t()) / self.temperature

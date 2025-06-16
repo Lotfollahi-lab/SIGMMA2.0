@@ -33,7 +33,7 @@ class base_contrastive(nn.Module):
         image_embedding = self.image_projection(image_embedding)
 
         # spatial embedding
-        y[torch.isnan(y)] = 0.0
+        # y[torch.isnan(y)] = 0.0
         spatial_embedding = self.spatial_projection(y)
 
         image_embedding = torch.nn.functional.normalize(image_embedding, dim=-1)

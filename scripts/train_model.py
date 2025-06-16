@@ -35,8 +35,8 @@ def objective(trial):
         spatial = dataset[i]['spatial']
         if not torch.any(torch.isnan(spatial)):
             valid_indices.append(i)
-    with open("valid_indices.txt", "w") as f:
-        pickle.dump(f, valid_indices)
+    with open("valid_indices.txt", "wb") as f:
+        pickle.dump(valid_indices, f)
     with open("valid_indices.txt", "rb") as f:
         valid_indices = pickle.load(f)
     dataset = torch.utils.data.Subset(dataset, valid_indices)

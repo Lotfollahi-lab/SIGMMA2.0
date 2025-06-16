@@ -112,7 +112,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-config_file")
     parser.add_argument("-out_dir", default=None, type=str, help="Output directory for model checkpoints and logs")
-    args = parser.parse_args
+    args = parser.parse_args()
     study = optuna.create_study(direction="minimize")
     study.optimize(objective, n_trials=10)
     print("Best trial:", study.best_params)

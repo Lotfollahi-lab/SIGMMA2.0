@@ -8,10 +8,11 @@ import yaml
 
 import timm
 
-from model.utils import train_one_epoch, load_dataset, load_model, WandbLogger
+from model.utils import train_one_epoch, load_dataset, load_model, evaluate, WandbLogger
 
+import optuna
 
-def main(args):
+def objective(trial):
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
 
@@ -40,18 +41,23 @@ def main(args):
     )
 
     batch_size = config.get("train.batch_size")
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=16)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False, num_workers=16)
 
     # Add wandb logging
     wandb_config = {
         "entity": None,
         "project": "img-spatial-alignment",
         "group": None,
-        "name": None,
+        "name": f"trail_{trial.number}",
         "tags": None,
         "mode": "online",
     }
+
+    config.train.learning_rate = trial.suggest_loguniform("lr", 1e-5, 1e-2)
+    config.train.weight_decay = trial.suggest_loguniform("weight_decay", 1e-5, 1e-2)
+    config.model.temperature = trial.suggest_uniform("temperature", 0.05, 0.2)
+
 
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
@@ -99,10 +105,14 @@ def main(args):
             wandb_logger=wandb_logger,
         )
 
+    eval_loss, _, _ = evaluate(model, eval_dataloader, device)
+    return eval_loss
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-config_file")
     parser.add_argument("-out_dir", default=None, type=str, help="Output directory for model checkpoints and logs")
-    args = parser.parse_args()
-    main(args)
+    args = parser.parse_args
+    study = optuna.create_study(direction="minimize")
+    study.optimize(objective, n_trials=10)
+    print("Best trial:", study.best_params)

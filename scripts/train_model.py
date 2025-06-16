@@ -1,5 +1,6 @@
 import os
 import argparse
+import pickle
 import torch
 from torch.utils.data import random_split, DataLoader, ConcatDataset
 
@@ -29,6 +30,17 @@ def objective(trial):
     dataset2 = load_dataset(config.dataset2)
 
     dataset = ConcatDataset([dataset1, dataset2])
+    # valid_indices = []
+    # for i in range(len(dataset)):
+    #     spatial = dataset[i]['spatial']
+    #     if not torch.any(torch.isnan(spatial)):
+    #         valid_indices.append(i)
+    # with open("valid_indices.txt", "w") as f:
+    #     pickle.dump(valid_indices, f)
+    with open("valid_indices.txt", "rb") as f:
+        valid_indices = pickle.load(f)
+    dataset = torch.utils.data.Subset(dataset, valid_indices)
+    print(f"Total samples after filtering: {len(dataset)}")
 
     total = len(dataset)
     train_len = int(0.8 * total)

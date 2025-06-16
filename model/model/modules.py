@@ -28,7 +28,8 @@ class base_contrastive(nn.Module):
         y: spatial tensor, shape (B, D) where D is the number of spatial features
         """
         # image embedding
-        image_embedding = self.image_encoder(x)
+        with torch.no_grad():
+            image_embedding = self.image_encoder(x)
         image_embedding = self.image_projection(image_embedding)
 
         # spatial embedding

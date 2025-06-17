@@ -74,29 +74,7 @@ def objective(trial):
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
-    # Load pretrained UNI model (UNI checkpoints "pytorch_model.bin" should be downloaded in assets)
-    pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
-    os.makedirs(pretrained_ckpt_dir, exist_ok=True)
-    pretrained_image_encoder = timm.create_model(
-        "vit_large_patch16_224",
-        img_size=224,
-        patch_size=16,
-        init_values=1e-5,
-        num_classes=0,
-        dynamic_img_size=True,
-    )
-    pretrained_image_encoder.load_state_dict(
-        torch.load(
-            os.path.join(pretrained_ckpt_dir, "pytorch_model.bin"), map_location="cpu"
-        ),
-        strict=True,
-    )
-    pretrained_image_encoder.eval()
-
-    # # Load pretrained spatial encoder
-    # pretrained_spatial_encoder = Novae.from_pretrained("MICS-Lab/novae-human-0")
-
-    model, optimizer, lr_scheduler = load_model(config, pretrained_image_encoder)
+    model, optimizer, lr_scheduler = load_model(config, device)
 
     global_step, first_epoch, num_train_epochs = (
         0,

@@ -1,8 +1,11 @@
+import numpy as np
 import torch
 import torch.nn as nn
 
-from .losses import InfoNCE
+from .losses import InfoNCE, symmetric_InfoNCE
 from .layers import DINOHead
+
+import loki
 
 class base_contrastive(nn.Module):
     def __init__(self, config, image_encoder):
@@ -91,3 +94,59 @@ class cel_type_composition_predictor(nn.Module):
             image_embedding,
             spatial_embedding,
         )
+
+class openAI_CLIP(nn.Module):
+    def __init__(self, config, model, processor):
+        super(openAI_CLIP, self).__init__()
+        self.config = config
+        self.model = model
+        self.processor = processor
+
+    def forward(self, x, y):
+        """
+        x: PIL image
+        y: list of text descriptions
+        """
+        inputs = self.processor(text=y, images=x, return_tensors="pt", padding=True)
+        outputs = self.model(**inputs)
+        loss = outputs.loss
+        image_embeds = outputs.image_embeds
+        text_embeds = outputs.text_embeds
+        return loss, image_embeds, text_embeds
+
+class PLIP(nn.Module):
+    def __init__(self, config, model, processor):
+        super(PLIP, self).__init__()
+        self.config = config
+        self.model = model
+        self.processor = processor
+
+    def forward(self, x, y):
+        """
+        x: PIL image
+        y: list of text descriptions
+        """
+        inputs = self.processor(text=y, images=x, return_tensors="pt", padding=True)
+        outputs = self.model(**inputs)
+        loss = outputs.loss
+        image_embeds = outputs.image_embeds
+        text_embeds = outputs.text_embeds
+        return loss, image_embeds, text_embeds
+
+
+class OmiCLIP(nn.Module):
+    def __init__(self, config, model, preprocess, tokenizer):
+        super(OmiCLIP, self).__init__()
+        self.config = config
+        self.model = model
+        self.preprocess = preprocess
+        self.tokenizer = tokenizer
+
+        self.loss_fn = symmetric_InfoNCE(temperature=config.model.infoNCE_temperature)
+
+    def forward(self, image_path, text):
+        image_embeddings = loki.utils.encode_images(self.model, self.preprocess, image_path)
+        text_embeddings = loki.utils.encode_texts(self.model, self.tokenizer, text)
+
+        loss = self.loss_fn(image_embeddings, text_embeddings)
+        return loss, image_embeddings, text_embeddings

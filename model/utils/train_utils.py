@@ -1,7 +1,14 @@
+import os
 import torch
 from pathlib import Path
+from typing import Optional
+from ml_collections.config_dict import ConfigDict
+
+import timm
 from model.datasets.dataset import SpatialPatchDataset
-from model.model import base_contrastive
+from model.model import base_contrastive, openAI_CLIP, PLIP, OmiCLIP
+from transformers import CLIPProcessor, CLIPModel
+import loki
 
 import wandb
 
@@ -20,11 +27,49 @@ def load_dataset(config_dataset):
     return dataset
 
 
-def load_model(config, image_encoder):
+def load_model(config:ConfigDict, 
+               device:Optional[str]="cuda"):
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
-    model = base_contrastive(config, image_encoder)
+    if config.model.name == "basic_contrastive":
+        pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
+        assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
+        pretrained_image_encoder = timm.create_model(
+            "vit_large_patch16_224",
+            img_size=224,
+            patch_size=16,
+            init_values=1e-5,
+            num_classes=0,
+            dynamic_img_size=True,
+        )
+        pretrained_image_encoder.load_state_dict(
+            torch.load(
+                Path(pretrained_ckpt_dir, "pytorch_model.bin"), map_location="cpu"
+            ),
+            strict=True,
+        )
+        pretrained_image_encoder.eval()
+
+        model = base_contrastive(config, pretrained_image_encoder)
+
+    elif config.model.name == "openAI_CLIP":
+        model_raw = CLIPModel.from_pretrained("openai/clip-vit-base-patch16")
+        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16")
+        model = openAI_CLIP(config, model_raw, processor)
+
+    elif config.model.name == "PLIP":
+        model_raw = CLIPModel.from_pretrained("vinid/plip")
+        processor = CLIPProcessor.from_pretrained("vinid/plip")
+        model = PLIP(config, model_raw, processor)
+
+    elif config.model.name == "loki_omiclip":
+        assert config.model.pretrained_omiclip_ckpt_path is not None, "Pretrained Loki checkpoint path must be provided."
+        model_raw_path = Path(config.model.pretrained_loki_ckpt_path, "checkpoint.pt")
+        model_raw, preprocess, tokenizer = loki.utils.load_model(model_raw_path, device)
+        model = OmiCLIP(config, model_raw, preprocess, tokenizer)
+    else:
+        raise NotImplementedError(f"Model {config.model.name} is not implemented.")
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -37,6 +82,10 @@ def load_model(config, image_encoder):
         step_size=config.train.lr_step_size,
         gamma=config.train.lr_gamma,
     )
+
+    model = model.to(device)
+    optimizer = optimizer.to(device)
+    lr_scheduler = lr_scheduler.to(device)
 
     return model, optimizer, lr_scheduler
 

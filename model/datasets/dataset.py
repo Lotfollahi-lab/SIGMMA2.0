@@ -16,6 +16,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         spatial_file: Path | str,
         indices_file: Path | str,
         fov_size: int = 256,
+        number_of_genes: int = 50,
+        housekeeping_genes: Optional[Sequence[str]] = None,
     ):
         self.image_array = zarr.open(image_file, mode="r")
         self.index_array = zarr.open(indices_file, mode="r")
@@ -23,13 +25,15 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             spatial_file
         )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
         self.fov_size = fov_size
+        self.number_of_genes = number_of_genes
+        self.housekeeping_genes = housekeeping_genes
 
     def __getitem__(self, idx):
         slice_args = self.index_array[idx, :, :]
         y_start = slice_args[0, :].item()
         x_start = slice_args[1, :].item()
 
-        # 1. spatial embedding (cells inside this FOV)
+        # 1-1. spatial embedding (cells inside this FOV)
         points = self.spatial_anndata.obsm["spatial"]
 
         mask = (
@@ -44,6 +48,17 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             .mean(dim=0)
         )
 
+        # 1-2. spatial text (top K raneked genes in this FOV): same logic as loki preprocessing "https://github.com/GuangyuWangLab2021/Loki/blob/main/src/loki/preprocess.py"
+        # exclude housekeeping genes
+        if self.housekeeping_genes is not None:
+            filtered_spatial_anndata = self.spatial_anndata[:, ~self.spatial_anndata.var.index.isin(self.housekeeping_genes)]
+        else:
+            filtered_spatial_anndata = self.spatial_anndata
+
+        mean_exp = np.asarray(filtered_spatial_anndata.X[mask].mean(axis=0)).ravel()
+        K = self.number_of_genes
+        spatial_text = " ".join(filtered_spatial_anndata.var.index[np.argsort(mean_exp)[-K:][::-1]])
+
         # 2. cropped image
         fov_image = self.image_array[
                     y_start : y_start + self.fov_size, 
@@ -57,6 +72,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         return {
             "image": image,
             "spatial": spatial_embedding,
+            "spatial_text": spatial_text,
         }
 
     def __len__(self) -> int:

@@ -9,13 +9,17 @@ prediction, etc.
 INSTALLATION
 ------------
 
-You can install the requirements with poetry
-
-`poetry install`
-
-Other environments needed for data analsyis can be installed like so:
+Environments needed for data analsyis can be installed like so:
 
 `find envs -name "*yaml" -exec conda env create -f {} ;\`
+
+Install the project
+
+* You can install the requirements with
+[poetry](https://github.com/python-poetry/poetry) `poetry install`
+
+* You can also use [uv](https://github.com/astral-sh/uv)
+`uv pip install -r pyproject.toml`
 
 MAINTAINERS
 -----------

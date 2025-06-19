@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 import numpy as np
+from collections import Counter
+
 import scanpy
 import zarr
 import torch
@@ -59,7 +61,12 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         K = self.number_of_genes
         spatial_text = " ".join(filtered_spatial_anndata.var.index[np.argsort(mean_exp)[-K:][::-1]])
 
-        # 2. cropped image
+        # 2. cell type composition
+        counter = Counter(self.spatial_anndata.obs["cell_types"][mask])
+        value_vector = np.array([counter[key] for key in sorted(counter.keys())])
+        cell_type_composition = torch.Tensor(value_vector / value_vector.sum())
+
+        # 3. cropped image
         fov_image = self.image_array[
                     y_start : y_start + self.fov_size, 
                     x_start : x_start + self.fov_size, 
@@ -73,6 +80,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             "image": image,
             "spatial": spatial_embedding,
             "spatial_text": spatial_text,
+            "cell_type_composition": cell_type_composition 
         }
 
     def __len__(self) -> int:

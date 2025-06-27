@@ -61,3 +61,36 @@ def _build_mlp(nlayers, in_dim, bottleneck_dim, hidden_dim=None, use_bn=False, b
             layers.append(nn.GELU())
         layers.append(nn.Linear(hidden_dim, bottleneck_dim, bias=bias))
         return nn.Sequential(*layers)
+
+class CrossAttention(nn.Module):
+    def __init__(self,
+                 input_dim: int,
+                 output_dim: int,
+                 num_heads: int = 4,
+                 bias: bool = False):
+        super(CrossAttention, self).__init__()
+        self.num_heads = num_heads
+
+        self.Q = nn.Linear(input_dim, output_dim, bias=bias)
+        self.K = nn.Linear(input_dim, output_dim, bias=bias)
+        self.V = nn.Linear(input_dim, output_dim, bias=bias)
+
+    def forward(self, x1, x2):
+        """
+        x1: (B, N, D) - query
+        x2: (B, M, D) - key/value
+        """
+        B, N, D = x1.shape
+        _, M, _ = x2.shape
+
+        Q = self.Q(x1).view(B, N, self.num_heads, -1).transpose(1, 2)
+        K = self.K(x2).view(B, M, self.num_heads, -1).transpose(1, 2)
+        V = self.V(x2).view(B, M, self.num_heads, -1).transpose(1, 2)
+
+        # Scaled dot-product attention
+        scores = torch.matmul(Q, K.transpose(-2, -1)) / (D ** 0.5)
+        attn_weights = torch.nn.functional.softmax(scores, dim=-1)
+        output = torch.matmul(attn_weights, V)
+
+        output = output.transpose(1, 2).contiguous().view(B, N, -1)
+        return output

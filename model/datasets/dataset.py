@@ -1,14 +1,27 @@
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 
+import copy
 import numpy as np
-from collections import Counter
+import collections
+from itertools import product
 
 import scanpy
+import squidpy as sq
 import zarr
 import torch
 from torchvision.transforms import ToTensor, Resize, Compose
+import dgl
+from torch.utils.data._utils.collate import collate, collate_tensor_fn, collate_float_fn, collate_int_fn, collate_str_fn
+
+collate_fn_map: dict[Union[type, tuple[type, ...]], Callable] = {
+    torch.Tensor: collate_tensor_fn
+}
+collate_fn_map[float] = collate_float_fn
+collate_fn_map[int] = collate_int_fn
+collate_fn_map[str] = collate_str_fn
+collate_fn_map[bytes] = collate_str_fn
 
 
 class SpatialPatchDataset(torch.utils.data.Dataset):
@@ -20,6 +33,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         fov_size: int = 256,
         number_of_genes: int = 50,
         housekeeping_genes: Optional[Sequence[str]] = None,
+        hierarchical_graph: bool = False,
     ):
         self.image_array = zarr.open(image_file, mode="r")
         self.index_array = zarr.open(indices_file, mode="r")
@@ -29,6 +43,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.fov_size = fov_size
         self.number_of_genes = number_of_genes
         self.housekeeping_genes = housekeeping_genes
+        self.hierarchical_graph = hierarchical_graph
 
     def __getitem__(self, idx):
         slice_args = self.index_array[idx, :, :]
@@ -45,12 +60,48 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             & (points[:, 1] < y_start + self.fov_size)
         )
 
-        spatial_embedding = (
-            torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask])
-            .mean(dim=0)
-        )
+        # spatial_embedding = (
+        #     torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask])
+        #     .mean(dim=0)
+        # )
+        spatial_embedding = None
 
-        # 1-2. spatial text (top K raneked genes in this FOV): same logic as loki preprocessing "https://github.com/GuangyuWangLab2021/Loki/blob/main/src/loki/preprocess.py"
+        # 1-2. spatial graph
+        sq.gr.spatial_neighbors(self.spatial_anndata, n_neighs=10, coord_type="generic")
+        sparse_maxtrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
+
+        spatial_graph = dgl.from_scipy(sparse_maxtrix)
+
+        node_features = torch.Tensor(self.spatial_anndata[mask,:].X.toarray())
+        spatial_graph.ndata['feat'] = node_features
+        spatial_graph.edata['edge_weight'] = torch.ones(len(spatial_graph.edges()[0]))
+
+        if self.hierarchical_graph == True:
+            grid_size = self.fov_size // 2**self.num_resolutions
+
+            subgraphs = []
+
+            for x_start_grid, y_start_grid in product(range(0, self.fov_size, grid_size), range(0, self.fov_size, grid_size)):
+
+                mask_grid = (
+                    (x_start + x_start_grid <= points[:, 0])
+                    & (points[:, 0] < x_start + x_start_grid + grid_size)
+                    & (y_start + y_start_grid <= points[:, 1])
+                    & (points[:, 1] < y_start + y_start_grid + grid_size)
+                    )
+
+                sparse_maxtrix_grid = self.spatial_anndata[mask_grid,:].obsp["spatial_connectivities"]
+
+                subgraph_grid = dgl.from_scipy(sparse_maxtrix_grid)
+
+                node_features_grid = torch.Tensor(self.spatial_anndata[mask_grid,:].X.toarray())
+                subgraph_grid.ndata['feat'] = node_features_grid
+
+                subgraphs.append(subgraph_grid)
+
+            spatial_graph.edata['edge_mask'] = torch.ones(len(spatial_graph.edges()[0]))
+
+        # 1-3. spatial text (top K ranked genes in this FOV): same logic as loki preprocessing "https://github.com/GuangyuWangLab2021/Loki/blob/main/src/loki/preprocess.py"
         # exclude housekeeping genes
         if self.housekeeping_genes is not None:
             filtered_spatial_anndata = self.spatial_anndata[:, ~self.spatial_anndata.var.index.isin(self.housekeeping_genes)]
@@ -78,10 +129,21 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         return {
             "image": image,
-            "spatial": spatial_embedding,
-            "spatial_text": spatial_text,
+            # "spatial": spatial_embedding,
+            "spatial_graph": spatial_graph,
+            # "spatial_text": spatial_text,
             "cell_type_composition": cell_type_composition 
         }
 
     def __len__(self) -> int:
         return self.index_array.shape[0]
+
+def multimodal_collate(batch: collections.abc.MutableMapping):
+    elem = batch[0]
+    clone = copy.copy(elem)
+    for key in elem:
+        if type(elem[key]) in collate_fn_map.keys():
+            clone.update({key: collate([d[key] for d in batch], collate_fn_map=collate_fn_map)})
+        elif isinstance(elem[key], dgl.DGLGraph):
+            clone.update({key: dgl.batch([d[key] for d in batch])})
+    return clone

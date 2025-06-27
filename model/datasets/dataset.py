@@ -129,9 +129,9 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         return {
             "image": image,
-            # "spatial": spatial_embedding,
+            "spatial": spatial_embedding,
             "spatial_graph": spatial_graph,
-            # "spatial_text": spatial_text,
+            "spatial_text": spatial_text,
             "cell_type_composition": cell_type_composition 
         }
 

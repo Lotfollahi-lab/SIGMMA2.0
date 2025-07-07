@@ -10,6 +10,7 @@ import yaml
 import timm
 
 from model.utils import train_one_epoch, load_dataset, load_model, evaluate, WandbLogger
+from model.datasets import multimodal_collate
 
 import optuna
 
@@ -53,8 +54,8 @@ def objective(trial):
     )
 
     batch_size = config.get("train.batch_size")
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=16)
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False, num_workers=16)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, collate_fn=multimodal_collate, shuffle=True, num_workers=config.train.num_workers)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=multimodal_collate, shuffle=False, num_workers=config.train.num_workers)
 
     # Add wandb logging
     wandb_config = {

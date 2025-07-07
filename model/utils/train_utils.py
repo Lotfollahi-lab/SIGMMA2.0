@@ -33,7 +33,10 @@ def load_model(config:ConfigDict,
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
-    if config.model.name == "basic_contrastive":
+    if config.model.name == "hierarchical_img_cellgraph":
+        model = hierarchical_img_cellgraph(config.model)
+
+    elif config.model.name == "basic_contrastive":
         pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
         assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
         pretrained_image_encoder = timm.create_model(
@@ -72,6 +75,8 @@ def load_model(config:ConfigDict,
     else:
         raise NotImplementedError(f"Model {config.model.name} is not implemented.")
 
+    model = model.to(device)
+
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config.train.learning_rate,
@@ -83,10 +88,6 @@ def load_model(config:ConfigDict,
         step_size=config.train.lr_step_size,
         gamma=config.train.lr_gamma,
     )
-
-    model = model.to(device)
-    optimizer = optimizer.to(device)
-    lr_scheduler = lr_scheduler.to(device)
 
     return model, optimizer, lr_scheduler
 

@@ -77,20 +77,20 @@ class CrossAttention(nn.Module):
 
     def forward(self, x1, x2):
         """
-        x1: (B, N, D) - query
-        x2: (B, M, D) - key/value
+        x1: (B, D) - query
+        x2: (B, D) - key/value
         """
-        B, N, D = x1.shape
-        _, M, _ = x2.shape
+        
+        B, D = x1.shape
 
-        Q = self.Q(x1).view(B, N, self.num_heads, -1).transpose(1, 2)
-        K = self.K(x2).view(B, M, self.num_heads, -1).transpose(1, 2)
-        V = self.V(x2).view(B, M, self.num_heads, -1).transpose(1, 2)
+        Q = self.Q(x1).view(B, self.num_heads, -1).transpose(1, 2)
+        K = self.K(x2).view(B, self.num_heads, -1).transpose(1, 2)
+        V = self.V(x2).view(B, self.num_heads, -1).transpose(1, 2)
 
         # Scaled dot-product attention
         scores = torch.matmul(Q, K.transpose(-2, -1)) / (D ** 0.5)
-        attn_weights = torch.nn.functional.softmax(scores, dim=-1)
+        attn_weights = nn.functional.softmax(scores, dim=-1)
         output = torch.matmul(attn_weights, V)
 
-        output = output.transpose(1, 2).contiguous().view(B, N, -1)
+        output = output.transpose(1, 2).contiguous().view(B, -1)
         return output

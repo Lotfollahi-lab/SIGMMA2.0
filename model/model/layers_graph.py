@@ -38,17 +38,16 @@ class StructureLearning(torch.nn.Module):
         self.threshold = threshold
         self.temperature = temperature
 
-    
     def edge_attention(self, edges):
-        h_src = edges.src['h']   # [E, D]
-        h_dst = edges.dst['h']   # [E, D]
-        h_cat = torch.cat([h_src, h_dst], dim=1)  # [E, 2D]
-        att_score = (h_cat * self.att).sum(dim=1)  # [E]
-        att_score = torch.nn.functinoal.leaky_relu(att_score)
-        att_score = att_score + edges.data['weight'] 
-        return {'attn_score': att_score}
+        src, tgt = edges.src['learned_node_feat'], edges.dst['learned_node_feat']
+        edge_weights = (torch.cat([src, tgt], 1) * self.att).sum(-1) 
+        edge_weights = self.activation(edge_weights)
+        return {'learned_edge_weight': edge_weights}
 
-    def forward(self, g, x, pos_enc, layer):
+    def forward(self,
+                g: dgl.graph,
+                x: torch.Tensor,
+                layer):
         """
         g: DGLGraph
         x: Node features (e.g., cell embeddings)
@@ -211,7 +210,6 @@ class READOUTLayer(torch.nn.Module):
                  dropout: float = 0,
                  ):
         super(READOUTLayer, self).__init__()
-        self.dropout = dropout
         if activation == 'relu':
             self.activation = torch.nn.ReLU()
         elif activation == 'sigmoid':

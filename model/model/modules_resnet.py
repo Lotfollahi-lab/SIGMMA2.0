@@ -4,10 +4,10 @@ import torch.nn as nn
 class ResNet(nn.Module):
     def __init__(self,
                  block: nn.Module,
-                 layers: list):
+                 num_blocks: list,
+                 output_dim: int = 512):
         
         super(ResNet, self).__init__()
-        self.inplanes = 64
         
         self.conv1 = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False),
@@ -16,24 +16,26 @@ class ResNet(nn.Module):
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         )
 
-        self.layer1 = self._make_layer(block, 64, layers[0], stride=1)
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer1 = self._make_layer(block, 64, 128, output_dim, num_blocks[0], stride=1)
+        self.layer2 = self._make_layer(block, output_dim, 256, output_dim, num_blocks[1], stride=2)
+        self.layer3 = self._make_layer(block, output_dim, 128, output_dim, num_blocks[2], stride=2)
 
-
-    def _make_layer(self, block, planes, blocks, stride=1):
+    def _make_layer(self, block, in_planes, planes, output_dim, blocks, stride=1):
         downsample = None
-        if stride != 1 or self.inplanes != planes:
-
+        if stride != 1 or in_planes != planes:
             downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=stride),
+                nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride),
                 nn.BatchNorm2d(planes),
             )
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample))
-        self.inplanes = planes
+        layers.append(block(in_planes, planes, stride, downsample))
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
+            layers.append(block(planes, planes))
+
+        # Add a final convolutional layer to match the output dimension
+        layers.append(nn.Conv2d(planes, output_dim, kernel_size=1, stride=1, bias=False))
+        layers.append(nn.BatchNorm2d(output_dim))
+        layers.append(nn.ReLU(inplace=True))
 
         return nn.Sequential(*layers)
 
@@ -49,13 +51,13 @@ class ResNet(nn.Module):
         x_3 = self.layer3(x_2)
         return self._pool_and_flatten(x_1), self._pool_and_flatten(x_2), self._pool_and_flatten(x_3) 
 
-class ResidualBlock(nn.Module):
+class BasicBlock(nn.Module):
     def __init__(self, 
                  in_channels: int, 
                  out_channels: int, 
                  stride = 1, 
                  downsample = None):
-        super(ResidualBlock, self).__init__()
+        super(BasicBlock, self).__init__()
         self.conv1 = nn.Sequential(
                         nn.Conv2d(in_channels, out_channels, kernel_size = 3, stride = stride, padding = 1),
                         nn.BatchNorm2d(out_channels),
@@ -64,7 +66,7 @@ class ResidualBlock(nn.Module):
                         nn.Conv2d(out_channels, out_channels, kernel_size = 3, stride = 1, padding = 1),
                         nn.BatchNorm2d(out_channels))
         self.downsample = downsample
-        self.relu = nn.ReLU()
+        self.activation = nn.LeakyReLU()
         self.out_channels = out_channels
 
     def forward(self, x):
@@ -74,5 +76,38 @@ class ResidualBlock(nn.Module):
         if self.downsample:
             residual = self.downsample(x)
         out += residual
-        out = self.relu(out)
+        out = self.activation(out)
+        return out
+
+class BottleneckBlock(nn.Module):
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 stride = 1,
+                 downsample = None):
+        super(BottleneckBlock, self).__init__()
+        self.conv1 = nn.Sequential(
+                        nn.Conv2d(in_channels, out_channels // 2, kernel_size = 1),
+                        nn.BatchNorm2d(out_channels // 2),
+                        nn.ReLU())
+        self.conv2 = nn.Sequential(
+                        nn.Conv2d(out_channels // 2, out_channels // 2, kernel_size = 3, stride = stride, padding = 1),
+                        nn.BatchNorm2d(out_channels // 2),
+                        nn.ReLU())
+        self.conv3 = nn.Sequential(
+                        nn.Conv2d(out_channels // 2, out_channels * 2, kernel_size = 1),
+                        nn.BatchNorm2d(out_channels * 2))
+        self.downsample = downsample
+        self.activation = nn.LeakyReLU()
+        self.out_channels = out_channels * 2
+
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.conv2(out)
+        out = self.conv3(out)
+        if self.downsample:
+            residual = self.downsample(x)
+        out += residual
+        out = self.activation(out)
         return out

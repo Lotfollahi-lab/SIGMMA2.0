@@ -1,16 +1,29 @@
 model:
   name: loki_OmiCLIP
   pretrained_omiclip_ckpt_path: /nfs/team361/dj16/img_spatial_alignment/assets/ckpts/loki/
+
 dataset1:
-  image_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Breast_Cancer_FFPE/image.zarr/
-  spatial_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Breast_Cancer_FFPE/spatial_preprocessed_breast_cancer.h5
-  indices_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Breast_Cancer_FFPE/indices.zarr/
+  image_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/image.zarr/
+  spatial_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/spatial_preprocessed_lymph_node.h5
+  indices_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/indices.zarr/
   fov_size: 256
 
 dataset2:
-  image_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lung_Cancer_FFPE/image.zarr
-  spatial_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lung_Cancer_FFPE/spatial_preprocessed_lung_cancer.h5
-  indices_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lung_Cancer_FFPE/indices.zarr/
+  image_file: /nfs/team361/dj16/data/Xenium_Prime_Ovarian_Cancer_FFPE_XRrun/image.zarr
+  spatial_file: /nfs/team361/dj16/data/Xenium_Prime_Ovarian_Cancer_FFPE_XRrun/spatial_preprocessed_ovarian_cancer.h5
+  indices_file: /nfs/team361/dj16/data/Xenium_Prime_Ovarian_Cancer_FFPE_XRrun/indices.zarr/
   fov_size: 256
   
 outdir: /nfs/team361/dj16/img_spatial_alignment/outputs/benchmark
+
+train:
+  batch_size: 2
+  epochs: 100
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  lr_step_size: 10
+  lr_gamma: 0.1
+  save_every: 5000
+  eval_every: 5000
+  gradient_accumulation_steps: 40
+  num_workers: 8

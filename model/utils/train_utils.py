@@ -6,7 +6,8 @@ from ml_collections.config_dict import ConfigDict
 
 import timm
 from model.datasets.dataset import SpatialPatchDataset
-from model.model import base_contrastive, openAI_CLIP, PLIP, OmiCLIP
+from model.model import hierarchical_img_cellgraph, base_contrastive, openAI_CLIP, PLIP, OmiCLIP
+
 from transformers import CLIPProcessor, CLIPModel
 import loki
 
@@ -54,13 +55,13 @@ def load_model(config:ConfigDict,
         model = base_contrastive(config, pretrained_image_encoder)
 
     elif config.model.name == "openAI_CLIP":
-        model_raw = CLIPModel.from_pretrained("openai/clip-vit-base-patch16")
-        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16")
+        model_raw = CLIPModel.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
+        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
         model = openAI_CLIP(config, model_raw, processor)
 
     elif config.model.name == "PLIP":
-        model_raw = CLIPModel.from_pretrained("vinid/plip")
-        processor = CLIPProcessor.from_pretrained("vinid/plip")
+        model_raw = CLIPModel.from_pretrained("vinid/plip", use_safetensors=True)
+        processor = CLIPProcessor.from_pretrained("vinid/plip", use_safetensors=True)
         model = PLIP(config, model_raw, processor)
 
     elif config.model.name == "loki_omiclip":
@@ -111,11 +112,19 @@ def train_one_epoch(
 
     for i, batch in enumerate(train_dataloader):
         images = batch["image"].to(device)
-        spatial = batch["spatial"].to(device)
+        if config.model.name == "hierarchical_img_cellgraph":
+            spatial = batch['spatial_graph'].to(device)
+        elif config.model.name in ["openAI_CLIP", "PLIP", "loki_omiclip"]:
+            spatial = batch['spatial_text'].to(device)
+        elif config.model.name == "basic_contrastive":
+            spatial = batch["spatial"].to(device)
+        else:
+            raise NotImplementedError(f"Model {model.name} is not implemented for training.")
+        cell_type_composition = batch['cell_type_composition'].to(device)
 
         # Forward pass
         with torch.amp.autocast(device.type, enabled=False):
-            loss, image_embedding, spatial_embedding = model(images, spatial)
+            loss = model(images, spatial, cell_type_composition)
 
         # Backward pass
         loss.backward()

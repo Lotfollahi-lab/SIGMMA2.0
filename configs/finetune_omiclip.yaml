@@ -1,0 +1,16 @@
+model:
+  name: loki_OmiCLIP
+  pretrained_omiclip_ckpt_path: /nfs/team361/dj16/img_spatial_alignment/assets/ckpts/loki/
+dataset1:
+  image_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Breast_Cancer_FFPE/image.zarr/
+  spatial_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Breast_Cancer_FFPE/spatial_preprocessed_breast_cancer.h5
+  indices_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Breast_Cancer_FFPE/indices.zarr/
+  fov_size: 256
+
+dataset2:
+  image_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lung_Cancer_FFPE/image.zarr
+  spatial_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lung_Cancer_FFPE/spatial_preprocessed_lung_cancer.h5
+  indices_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lung_Cancer_FFPE/indices.zarr/
+  fov_size: 256
+  
+outdir: /nfs/team361/dj16/img_spatial_alignment/outputs/benchmark

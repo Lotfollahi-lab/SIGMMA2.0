@@ -1,4 +1,3 @@
-from re import I
 import torch
 import torch.nn as nn
 
@@ -62,7 +61,7 @@ class hierarchical_img_cellgraph(nn.Module):
             )
             self.predictors.append(y_per_layer)
 
-        self.contrastive_loss = InfoNCE(temperature=config.infoNCE_temperature)
+        self.contrastive_loss = InfoNCE(temperature=config.temperature)
 
     def _cell_type_composition_predictor(self,
                             input_dim: int,
@@ -97,10 +96,14 @@ class hierarchical_img_cellgraph(nn.Module):
         img_embeddings = self.image_encoder(x1)
         # Spatial embeddings
         g, h_x2 = x2, x2.ndata['feat']
-        print(g.num_nodes(),g.num_edges(), h_x2.shape)
+        print('======================')
+        print('batch_size', g.batch_size)
+        print(f'graph num_nodes: {g.num_nodes()}, num_edges: {g.num_edges()}, node_feat_shape: {h_x2.shape}')
+        self_loops = (g.edges()[0] == g.edges()[1])
+        print(f"Number of self-loops: {self_loops.sum().item()}")
         loss_kl = []
         for i in range(self.num_resolutions):
-
+            print(f"Processing resolution {i}")
             # spatial encoder
             ## (1) graph layer
             h_x2 = self.spatial_encoder[i*2](g, h_x2)
@@ -120,12 +123,13 @@ class hierarchical_img_cellgraph(nn.Module):
 
             # cell type composition predictor
             y_hat = self.predictors[i](h_x1)
-            loss_mse = nn.functional.cross_entropy(y_hat, y)
-
+            loss_ce = nn.functional.cross_entropy(y_hat, y)
+        print('======================')
         loss_kl = torch.stack(loss_kl).mean()
 
         # loss: mean of KL divergence
-        loss = loss_kl + loss_contrastive + loss_mse
+        loss = loss_kl + loss_contrastive + loss_ce
 
         # embedding_pairs = [(u1, v1), (u2, v2), ...] where u is image embedding and v is spatial embedding
-        return loss
+        image_embeddings, spatial_embeddings = embedding_pairs[-1]
+        return loss_kl, loss_contrastive, loss_ce, loss, image_embeddings, spatial_embeddings

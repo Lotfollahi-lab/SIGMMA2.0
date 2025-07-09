@@ -20,6 +20,7 @@ class StructureLearning(torch.nn.Module):
                  temperature:float=0.5):
         super(StructureLearning, self).__init__()
         self.att = Parameter(torch.Tensor(1, input_dim*2))
+        torch.nn.init.xavier_uniform_(self.att)
 
         self.emb_layer = emb_layer
         if emb_layer > 0:
@@ -55,18 +56,20 @@ class StructureLearning(torch.nn.Module):
         layer: Current layer index (for edge mask updates)
         """
 
-        # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges) 
-        # Edge mask: -1 (intra-subgraph edges) or 0 (inter-subgraph edges)
+        # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges) or 1 (inter-subgraph edges rescued in this layer)
+        # Edge mask: -1 (intra-subgraph edges) or 0 (inter-subgraph edges) or layer+1 (inter-subgraph edges rescued in this layer)
         with g.local_scope():
+            print("the number of nodes/edges before adding self-loops:")
+            print(g.num_nodes(), g.num_edges())
             # Add self-loops
             g = dgl.remove_self_loop(g)
             g = dgl.add_self_loop(g, edge_feat_names=['mask'], fill_data=-1)
             g = dgl.add_self_loop(g, edge_feat_names=['weight'], fill_data=0)
-
+            print(g.num_nodes(), g.num_edges())
             # GGN on intra-subgraph edges only
             if self.emb_layer > 0:
                 for i in range(self.emb_layer):
-                    # Message passing within intra-subgraph edges only
+                    # Message passing within intra-subgraph edges + learned edges only
                     edge_mask = g.edata['mask'] != 0
                     edge_ids = edge_mask.nonzero(as_tuple=True)[0]
                     g_intra = dgl.edge_subgraph(g, edge_ids, store_ids=True)
@@ -90,23 +93,24 @@ class StructureLearning(torch.nn.Module):
             edges_soft = dist.rsample()
             edges_hard = (edges_soft > self.threshold).float()
             y = (edges_hard - edges_soft).detach() + edges_soft  # Straight-through
-
-            print('the number of rescued edges', sum(y > self.threshold), sum(y <= self.threshold))
+            print('------------')
 
             # TODO: confine edge addition to neighboring subgraphs only
             # Update inter-subgraph edges
             inter_mask = (g.edata['weight'] == 0)
             g.edata['weight'][inter_mask] = y[inter_mask]
-
+            print(f"the number of {layer}th-step rescued edges: {g.edata['weight'].sum()} / {g.num_edges()}")
             # Update edge mask
             edge_mask = g.edata['mask']
             g.edata['mask'][(edge_mask == 0) & (y > self.threshold)] = layer + 1
+            print(f"the number of {layer}th-step rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
  
             updated_weight = g.edata['weight'].clone()
             updated_mask = g.edata['mask'].clone()
 
         g.edata['weight'] = updated_weight
         g.edata['mask'] = updated_mask
+        print(f"the number of cumulative rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
         return g
     
 class GRAPHLayer(torch.nn.Module):

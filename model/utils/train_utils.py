@@ -6,8 +6,7 @@ from ml_collections.config_dict import ConfigDict
 
 import timm
 from model.datasets.dataset import SpatialPatchDataset
-from model.model import base_contrastive, openAI_CLIP, PLIP, OmiCLIP
-
+from model.model import hierarchical_img_cellgraph, base_contrastive, openAI_CLIP, PLIP, OmiCLIP
 from transformers import CLIPProcessor, CLIPModel
 import loki.utils
 

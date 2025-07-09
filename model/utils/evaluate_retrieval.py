@@ -1,5 +1,5 @@
 import torch
-from scipy.stats import pearsonr, kentalltau
+from scipy.stats import pearsonr
 
 
 def compute_pcc(retrieved: torch.Tensor, ground_truth: torch.Tensor) -> float:

@@ -57,7 +57,7 @@ def load_model(config:ConfigDict,
         )
         pretrained_image_encoder.eval()
 
-        model = base_contrastive(config, pretrained_image_encoder)
+        model = base_contrastive(config.model, pretrained_image_encoder)
 
     elif config.model.name == "openAI_CLIP":
         model_raw = CLIPModel.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)

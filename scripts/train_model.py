@@ -32,14 +32,14 @@ def objective(args):
     dataset2 = load_dataset(config.dataset2)
 
     dataset = ConcatDataset([dataset1, dataset2])
-    valid_indices = []
-    for i in range(len(dataset)):
-        spatial = dataset[i]['spatial']
-        if not torch.any(torch.isnan(spatial)):
-            valid_indices.append(i)
-    with open("valid_indices.txt", "wb") as f:
-        pickle.dump(valid_indices, f)
-    with open("valid_indices.txt", "rb") as f:
+    # valid_indices = []
+    # for i in range(len(dataset)):
+    #     spatial = dataset[i]['spatial']
+    #     if not torch.any(torch.isnan(spatial)):
+    #         valid_indices.append(i)
+    # with open("valid_indices.txt", "wb") as f:
+    #     pickle.dump(valid_indices, f)
+    with open("valid_indices_lymph_node.txt", "rb") as f:
         valid_indices = pickle.load(f)
     dataset = torch.utils.data.Subset(dataset, valid_indices)
     print(f"Total samples after filtering: {len(dataset)}")

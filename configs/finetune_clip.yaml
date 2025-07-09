@@ -1,5 +1,6 @@
 model:
   name: openAI_CLIP
+  temperature: 0.01
 
 dataset1:
   image_file: /nfs/team361/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/image.zarr/
@@ -16,13 +17,13 @@ dataset2:
 outdir: /nfs/team361/dj16/img_spatial_alignment/outputs/benchmark
 
 train:
-  batch_size: 2
+  batch_size: 128
   epochs: 100
   learning_rate: 0.0001
   weight_decay: 0.01
   lr_step_size: 10
   lr_gamma: 0.1
-  save_every: 5000
-  eval_every: 5000
+  save_every: 500
+  eval_every: 500
   gradient_accumulation_steps: 40
   num_workers: 8

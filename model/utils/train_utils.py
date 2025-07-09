@@ -36,7 +36,10 @@ def load_model(config:ConfigDict,
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
-    if config.model.name == "basic_contrastive":
+    if config.model.name == "hierarchical_img_cellgraph":
+        model = hierarchical_img_cellgraph(config.model)
+
+    elif config.model.name == "basic_contrastive":
         pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
         assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
         pretrained_image_encoder = timm.create_model(
@@ -145,8 +148,10 @@ def train_one_epoch(
 
         # Forward pass
         with torch.amp.autocast(device.type, enabled=False):
-            loss, image_embedding, spatial_embedding = model(*inputs)
-
+            if config.model.name == "hierarchical_img_cellgraph":
+                loss_kl, loss_contrastive, loss_ce, loss, image_embeddings, spatial_embeddings = model(*inputs) # TODO: multi-resolution embeddings
+            else:
+                loss, image_embedding, spatial_embedding = model(*inputs)
         # Backward pass
         loss.backward()
 

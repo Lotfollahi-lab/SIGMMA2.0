@@ -19,7 +19,15 @@ dependencies = ["novae (>=0.2.4,<0.3.0)",
                 "wandb (>=0.20.1,<0.21.0)",
                 "optuna (>=4.3.0,<5.0.0)",
                 "loki @ file:///nfs/team361/dj16/projects/img_spatial_alignment_baselines/Loki/src",
+<<<<<<< HEAD
                 "gseapy (>=1.1.9,<2.0.0)"]
+=======
+                "gseapy (>=1.1.9,<2.0.0)",
+                "squidpy (>=1.6.5,<2.0.0)",
+                "xarray-dataclasses (>=1.9.1,<2.0.0)",
+                "torch (==2.3.1)",
+                "dgl @ https://data.dgl.ai/wheels-test/torch-2.3/cu121/dgl-2.5a241214%2Bcu121-cp312-cp312-manylinux1_x86_64.whl"]
+>>>>>>> main
 
 [tool.poetry.dependencies]
 loki = {develop = true}

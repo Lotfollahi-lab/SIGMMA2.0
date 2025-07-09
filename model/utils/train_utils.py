@@ -6,7 +6,7 @@ from ml_collections.config_dict import ConfigDict
 
 import timm
 from model.datasets.dataset import SpatialPatchDataset
-from model.model import hierarchical_img_cellgraph, base_contrastive, openAI_CLIP, PLIP, OmiCLIP
+from model.model import base_contrastive, openAI_CLIP, PLIP, OmiCLIP
 
 from transformers import CLIPProcessor, CLIPModel
 import loki.utils
@@ -131,18 +131,18 @@ def train_one_epoch(
     wandb.watch(model, log="all", log_freq=10)
 
     for i, batch in enumerate(train_dataloader):
-        images = batch["image"].to(device)
+        image = batch["image"].to(device)
         cell_type_composition = batch["cell_type_composition"].to(device)
 
         if config.model.name == "hierarchical_img_cellgraph":
             spatial = batch['spatial_graph'].to(device)
-            inputs = [images, spatial, cell_type_composition]
+            inputs = [image, spatial, cell_type_composition]
         elif config.model.name == "basic_contrastive":
             spatial = batch["spatial"].to(device)
-            inputs = [images, spatial, cell_type_composition]
+            inputs = [image, spatial, cell_type_composition]
         elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
             spatial = batch['spatial_text']
-            inputs = [images, spatial]
+            inputs = [image, spatial]
         else:
             raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
@@ -151,7 +151,7 @@ def train_one_epoch(
             if config.model.name == "hierarchical_img_cellgraph":
                 loss_kl, loss_contrastive, loss_ce, loss, image_embeddings, spatial_embeddings = model(*inputs) # TODO: multi-resolution embeddings
             else:
-                loss, image_embeddings, spatial_embeddings = model(*inputs)
+                loss, image_embedding, spatial_embedding = model(*inputs)
         # Backward pass
         loss.backward()
 
@@ -234,17 +234,17 @@ def evaluate(config, model, eval_dataloader, device):
 
     with torch.no_grad():
         for batch in eval_dataloader:
-            images = batch["image"].to(device)
+            image = batch["image"].to(device)
             cell_type_composition = batch["cell_type_composition"].to(device)
             if config.model.name == "hierarchical_img_cellgraph":
                 spatial = batch['spatial_graph'].to(device)
-                inputs = [images, spatial, cell_type_composition]
+                inputs = [image, spatial, cell_type_composition]
             elif config.model.name == "basic_contrastive":
                 spatial = batch["spatial"].to(device)
-                inputs = [images, spatial, cell_type_composition]
+                inputs = [image, spatial, cell_type_composition]
             elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
                 spatial = batch['spatial_text']
-                inputs = [images, spatial]
+                inputs = [image, spatial]
             else:
                 raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 

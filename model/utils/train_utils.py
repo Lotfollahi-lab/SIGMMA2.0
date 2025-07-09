@@ -8,7 +8,10 @@ import timm
 from model.datasets.dataset import SpatialPatchDataset
 from model.model import hierarchical_img_cellgraph, base_contrastive, openAI_CLIP, PLIP, OmiCLIP
 from transformers import CLIPProcessor, CLIPModel
-import loki
+import loki.utils
+
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
 
 import wandb
 
@@ -57,18 +60,19 @@ def load_model(config:ConfigDict,
         model = base_contrastive(config, pretrained_image_encoder)
 
     elif config.model.name == "openAI_CLIP":
-        model_raw = CLIPModel.from_pretrained("openai/clip-vit-base-patch16")
-        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16")
+        model_raw = CLIPModel.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
+        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
         model = openAI_CLIP(config, model_raw, processor)
 
     elif config.model.name == "PLIP":
-        model_raw = CLIPModel.from_pretrained("vinid/plip")
-        processor = CLIPProcessor.from_pretrained("vinid/plip")
+        model_raw = CLIPModel.from_pretrained("vinid/plip", use_safetensors=True)
+        processor = CLIPProcessor.from_pretrained("vinid/plip", use_safetensors=True)
         model = PLIP(config, model_raw, processor)
 
-    elif config.model.name == "loki_omiclip":
+    elif config.model.name == "loki_OmiCLIP":
         assert config.model.pretrained_omiclip_ckpt_path is not None, "Pretrained Loki checkpoint path must be provided."
-        model_raw_path = Path(config.model.pretrained_loki_ckpt_path, "checkpoint.pt")
+        assert Path(config.model.pretrained_omiclip_ckpt_path).exists(), f"Pretrained OmiCLIP checkpoint path {config.model.pretrained_omiclip_ckpt_path} does not exist."
+        model_raw_path = config.model.pretrained_omiclip_ckpt_path + "/checkpoint.pt"
         model_raw, preprocess, tokenizer = loki.utils.load_model(model_raw_path, device)
         model = OmiCLIP(config, model_raw, preprocess, tokenizer)
     else:
@@ -126,13 +130,27 @@ def train_one_epoch(
     wandb.watch(model, log="all", log_freq=10)
 
     for i, batch in enumerate(train_dataloader):
-        images = batch["image"].to(device)
-        spatial = batch["spatial"].to(device)
+        image = batch["image"].to(device)
+        cell_type_composition = batch["cell_type_composition"].to(device)
+
+        if config.model.name == "hierarchical_img_cellgraph":
+            spatial = batch['spatial_graph'].to(device)
+            inputs = [image, spatial, cell_type_composition]
+        elif config.model.name == "basic_contrastive":
+            spatial = batch["spatial"].to(device)
+            inputs = [image, spatial, cell_type_composition]
+        elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
+            spatial = batch['spatial_text']
+            inputs = [image, spatial]
+        else:
+            raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
         # Forward pass
         with torch.amp.autocast(device.type, enabled=False):
-            loss, image_embedding, spatial_embedding = model(images, spatial)
-
+            if config.model.name == "hierarchical_img_cellgraph":
+                loss_kl, loss_contrastive, loss_ce, loss, image_embeddings, spatial_embeddings = model(*inputs) # TODO: multi-resolution embeddings
+            else:
+                loss, image_embedding, spatial_embedding = model(*inputs)
         # Backward pass
         loss.backward()
 
@@ -149,25 +167,24 @@ def train_one_epoch(
                 config.outdir,
                 global_step + 1,
             )
-            torch.save(
-                {
-                    "step": global_step,
-                    "image_embedding": image_embedding.detach().cpu(),
-                    "spatial_embedding": spatial_embedding.detach().cpu(),
-                },
-                f"{config.outdir}/embedding_step_{global_step}.pt",
-            )
-
         if (
             eval_dataloader is not None
             and (global_step + 1) % config.train.eval_every == 0
         ):
-            eval_loss, _, _ = evaluate(model, eval_dataloader, device)
-            print(f"Eval Loss: {eval_loss}")
-            wandb_logger.update({"eval_loss": eval_loss})
+            eval_loss, eval_image_embeddings, eval_spatial_embeddings = evaluate(config, model, eval_dataloader, device)
+            fig = PCA_embeddings(eval_image_embeddings, eval_spatial_embeddings)
 
-        wandb_logger.update({"train_loss": loss,
-                             "lr": lr_scheduler.get_last_lr()[0]})
+            wandb_logger.update({"(eval)loss": eval_loss,
+                                 "(eval)PCA_embeddings": wandb.Image(fig)})
+
+        if config.model.name == "hierarchical_img_cellgraph":
+            wandb_logger.update({"(train)loss": loss,
+                                 "(train)loss_kl": loss_kl,
+                                 "(train)loss_contrastive": loss_contrastive,
+                                 "(train)loss_ce": loss_ce})
+        else:
+            wandb_logger.update({"(train)loss": loss,
+                                 "lr": lr_scheduler.get_last_lr()[0]})
         wandb_logger.set_step()
 
         global_step += 1
@@ -205,7 +222,7 @@ def load_checkpoint(model, optimizer, lr_scheduler, checkpoint_path, device="cud
     return global_step
 
 
-def evaluate(model, eval_dataloader, device):
+def evaluate(config, model, eval_dataloader, device):
     """
     Evaluate the model on the validation dataset.
     """
@@ -216,10 +233,21 @@ def evaluate(model, eval_dataloader, device):
 
     with torch.no_grad():
         for batch in eval_dataloader:
-            images = batch["image"].to(device)
-            spatial = batch["spatial"].to(device)
+            image = batch["image"].to(device)
+            cell_type_composition = batch["cell_type_composition"].to(device)
+            if config.model.name == "hierarchical_img_cellgraph":
+                spatial = batch['spatial_graph'].to(device)
+                inputs = [image, spatial, cell_type_composition]
+            elif config.model.name == "basic_contrastive":
+                spatial = batch["spatial"].to(device)
+                inputs = [image, spatial, cell_type_composition]
+            elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
+                spatial = batch['spatial_text']
+                inputs = [image, spatial]
+            else:
+                raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
-            loss, image_embedding, spatial_embedding = model(images, spatial)
+            loss, image_embedding, spatial_embedding = model(*inputs)
             all_image_embeddings.append(image_embedding.cpu())
             all_spatial_embeddings.append(spatial_embedding.cpu())
 
@@ -230,3 +258,19 @@ def evaluate(model, eval_dataloader, device):
     all_spatial_embeddings = torch.cat(all_spatial_embeddings, dim=0)
 
     return avg_loss, all_image_embeddings, all_spatial_embeddings
+
+def PCA_embeddings(image_embeddings, spatial_embeddings, num_samples=1000):
+    """
+    Plot the image and spatial embeddings using PCA.
+    """
+    pca = PCA(n_components=2)
+    image_embeddings_pca = pca.fit_transform(image_embeddings[:num_samples])
+    spatial_embeddings_pca = pca.fit_transform(spatial_embeddings[:num_samples])
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.scatter(image_embeddings_pca[:, 0], image_embeddings_pca[:, 1], label="Image", alpha=0.5, color='blue')
+    ax.scatter(spatial_embeddings_pca[:, 0], spatial_embeddings_pca[:, 1], label="Spatial", alpha=0.5, color='red')
+    ax.set_title("PCA of Image vs Spatial Embeddings")
+    ax.legend()
+
+    return fig

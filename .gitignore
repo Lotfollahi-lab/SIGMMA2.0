@@ -1,1 +1,7 @@
 poetry.lock
+*.err
+*.out
+assets/*
+wandb/*
+.vscode/*
+.ipynb_checkpoints/*

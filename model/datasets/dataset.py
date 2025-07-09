@@ -41,6 +41,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
         )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
+        sq.gr.spatial_neighbors(self.spatial_anndata, n_neighs=10, coord_type="generic")
         self.fov_size = fov_size
         self.number_of_genes = number_of_genes
         self.num_resolutions = num_resolutions
@@ -69,7 +70,6 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         )
 
         # 1-2. spatial graph
-        sq.gr.spatial_neighbors(self.spatial_anndata, n_neighs=10, coord_type="generic")
         sparse_maxtrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
 
         spatial_graph = dgl.from_scipy(sparse_maxtrix)
@@ -118,7 +118,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                     edge_mask[spatial_edge_map[edge]] = -1
 
             spatial_graph.edata['mask'] = edge_mask
-            spatial_graph.edata['weight'] = torch.where(edge_mask == -1, torch.tnsor(1.0), torch.tensor(0.0))
+            spatial_graph.edata['weight'] = torch.where(edge_mask == -1, torch.tensor(1.0), torch.tensor(0.0))
 
             print("Disjoint spatial graph:")
             print(disjoint_spatial_graph.num_nodes(), disjoint_spatial_graph.num_edges())

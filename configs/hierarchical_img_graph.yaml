@@ -7,7 +7,7 @@ model:
   spatial_encoder_output_dim: 512
   num_resolutions: 3
   num_cell_types: 28
-  infoNCE_temperature: 0.01
+  temperature: 0.01
   dropout: 0.1
   activation: 'relu'
   aggregate: 'max'
@@ -27,13 +27,13 @@ dataset2:
 outdir: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/hierarchical_img_graph
 
 train:
-  batch_size: 128
+  batch_size: 25
   epochs: 100
-  learning_rate: 0.0001
-  weight_decay: 0.01
+  learning_rate: 0.000001
+  weight_decay: 0.000001
   lr_step_size: 10
   lr_gamma: 0.1
-  save_every: 5000
-  eval_every: 5000
-  gradient_accumulation_steps: 1
-  num_workers: 8
+  save_every: 500
+  eval_every: 500
+  gradient_accumulation_steps: 2
+  num_workers: 0

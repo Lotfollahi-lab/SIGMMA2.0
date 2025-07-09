@@ -247,7 +247,10 @@ def evaluate(config, model, eval_dataloader, device):
             else:
                 raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
-            loss, image_embedding, spatial_embedding = model(*inputs)
+            if config.model.name == "hierarchical_img_cellgraph":
+                _, _, _, loss, image_embedding, spatial_embedding = model(*inputs)
+            else:
+                loss, image_embedding, spatial_embedding = model(*inputs)
             all_image_embeddings.append(image_embedding.cpu())
             all_spatial_embeddings.append(spatial_embedding.cpu())
 

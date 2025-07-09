@@ -11,6 +11,15 @@ class InfoNCE(torch.nn.Module):
         z_i: image embeddings, shape (B, D)
         z_j: spatial embeddings, shape (B, D)
         """
+
+        print("z_i norm:", z_i.norm(dim=-1))  # Ideally ~1 after normalize
+        print("z_j norm:", z_j.norm(dim=-1))
+        print("z_i mean/std:", z_i.mean().item(), z_i.std().item())
+        print("z_j mean/std:", z_j.mean().item(), z_j.std().item())
+
+        print("z_i requires_grad:", z_i.requires_grad)
+        print("z_j requires_grad:", z_j.requires_grad)
+
         # Filter: Only valid (non-zero) pairs
         valid_mask = z_j.norm(dim=-1) > 0.0 
         z_i = z_i[valid_mask]

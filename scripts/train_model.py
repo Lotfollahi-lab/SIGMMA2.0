@@ -53,15 +53,16 @@ def objective(trial):
     )
 
     batch_size = config.get("train.batch_size")
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=16)
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False, num_workers=16)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, collate_fn=multimodal_collate, shuffle=True, num_workers=config.train.num_workers)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=multimodal_collate, shuffle=False, num_workers=config.train.num_workers)
 
     # Add wandb logging
     wandb_config = {
         "entity": None,
         "project": "img-spatial-alignment",
         "group": None,
-        "name": f"trail_{trial.number}",
+        # "name": f"{model_name}_trail_{trial.number}",
+        "name": f"{model_name}_trial_test",
         "tags": None,
         "mode": "online",
     }

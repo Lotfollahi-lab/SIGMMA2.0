@@ -127,20 +127,23 @@ def train_one_epoch(
     wandb.watch(model, log="all", log_freq=10)
 
     for i, batch in enumerate(train_dataloader):
-        images = batch["image"].to(device)
+        image = batch["image"].to(device)
+        cell_type_composition = batch['cell_type_composition'].to(device)
         if config.model.name == "hierarchical_img_cellgraph":
             spatial = batch['spatial_graph'].to(device)
+            inputs = [image, spatial, cell_type_composition]
         elif config.model.name in ["openAI_CLIP", "PLIP", "loki_omiclip"]:
-            spatial = batch['spatial_text'].to(device)
+            spatial = batch['spatial_text']
+            inputs = [image, spatial]
         elif config.model.name == "basic_contrastive":
             spatial = batch["spatial"].to(device)
+            inputs = [image, spatial, cell_type_composition]
         else:
             raise NotImplementedError(f"Model {model.name} is not implemented for training.")
-        cell_type_composition = batch['cell_type_composition'].to(device)
 
         # Forward pass
         with torch.amp.autocast(device.type, enabled=False):
-            loss = model(images, spatial, cell_type_composition)
+            loss, image_embedding, spatial_embedding = model(*inputs)
 
         # Backward pass
         loss.backward()

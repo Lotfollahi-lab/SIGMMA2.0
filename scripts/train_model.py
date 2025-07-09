@@ -10,10 +10,12 @@ import yaml
 import timm
 
 from model.utils import train_one_epoch, load_dataset, load_model, evaluate, WandbLogger
+from model.datasets import multimodal_collate
 
 import optuna
 
-def objective(trial):
+# def objective(trial):
+def objective(args):
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
 
@@ -67,9 +69,9 @@ def objective(trial):
         "mode": "online",
     }
 
-    config.train.learning_rate = trial.suggest_loguniform("lr", 1e-5, 1e-2)
-    config.train.weight_decay = trial.suggest_loguniform("weight_decay", 1e-5, 1e-2)
-    config.model.temperature = trial.suggest_uniform("temperature", 0.05, 0.2)
+    # config.train.learning_rate = trial.suggest_loguniform("lr", 1e-5, 1e-2)
+    # config.train.weight_decay = trial.suggest_loguniform("weight_decay", 1e-5, 1e-2)
+    # config.model.temperature = trial.suggest_uniform("temperature", 0.05, 0.2)
 
 
     wandb_logger = WandbLogger(config=config, **wandb_config)
@@ -96,14 +98,17 @@ def objective(trial):
             wandb_logger=wandb_logger,
         )
 
-    eval_loss, _, _ = evaluate(model, eval_dataloader, device)
+    eval_loss, _, _ = evaluate(config, model, eval_dataloader, device)
     return eval_loss
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-config_file")
     parser.add_argument("-out_dir", default=None, type=str, help="Output directory for model checkpoints and logs")
+    parser.add_argument("-stage", type=int, default=1, help="Stage of the training process (1 or 2)")
     args = parser.parse_args()
-    study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=10)
-    print("Best trial:", study.best_params)
+    #study = optuna.create_study(direction="minimize")
+    #study.optimize(objective, n_trials=10)
+    #print("Best trial:", study.best_params)
+
+    objective(args)

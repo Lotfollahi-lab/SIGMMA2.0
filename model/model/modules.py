@@ -14,13 +14,13 @@ class base_contrastive(nn.Module):
 
         self.image_encoder = image_encoder
         self.image_projection = DINOHead(
-            in_dim = config.model.image_encoder_output_dim,
-            out_dim = config.model.projection_dim,
+            in_dim = config.image_encoder_output_dim,
+            out_dim = config.projection_dim,
             )
 
         self.spatial_projection = DINOHead(
-            in_dim = config.model.spatial_encoder_output_dim,
-            out_dim = config.model.projection_dim,
+            in_dim = config.spatial_encoder_output_dim,
+            out_dim = config.projection_dim,
         )
 
         self.loss_fn = InfoNCE(temperature=config.model.temperature)

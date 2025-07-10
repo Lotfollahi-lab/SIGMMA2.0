@@ -64,7 +64,7 @@ def main(args):
             elif model_name == "base_contrastive":
                 spatial = batch["spatial"].to(device)
                 inputs = [image, spatial]
-            elif model_name == ["openAI_CLIP", "PLIP", "OmiCLIP"]:
+            elif model_name in ["openAI_CLIP", "PLIP", "OmiCLIP"]:
                 spatial = batch["spatial_text"]
                 inputs = [image, spatial]
             else:

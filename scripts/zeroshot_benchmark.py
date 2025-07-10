@@ -8,6 +8,7 @@ from ml_collections.config_dict import ConfigDict
 import yaml
 
 from model.utils import load_dataset, load_model, compute_pcc, recall_at_K, WandbLogger
+from model.datasets import multimodal_collate
 
 def main(args):
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
@@ -27,8 +28,8 @@ def main(args):
     test_dataset = torch.utils.data.Subset(dataset, valid_indices)
     print(f"Total samples after filtering: {len(dataset)}")
 
-    batch_size = config.get("train.batch_size")
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=16)
+    batch_size = config.get("test.batch_size", 1)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, collate_fn=multimodal_collate, shuffle=True, num_workers=0)
 
     # Add wandb logging
     wandb_config = {

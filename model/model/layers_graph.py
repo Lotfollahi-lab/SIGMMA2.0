@@ -195,7 +195,7 @@ class GRAPHLayer(torch.nn.Module):
         # 3. q (sampled soft edge weight)
         intra_soft_edge = g.edata['weight'][intra_mask]
 
-        # 4. KL(p‖q) = sum p * (log p - log q)
+        # 4. KL(p‖q)
         log_p = torch.log(raw_edge_intra_weight + 1e-12)
         log_q = torch.log(intra_soft_edge + 1e-12)
         kl = torch.mean(raw_edge_intra_weight * (log_p - log_q))

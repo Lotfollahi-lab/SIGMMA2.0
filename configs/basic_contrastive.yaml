@@ -25,7 +25,7 @@ dataset2:
 outdir: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/basic_contrastive
 
 train:
-  batch_size: 2
+  batch_size: 512
   epochs: 100
   learning_rate: 0.000001
   weight_decay: 0.00001

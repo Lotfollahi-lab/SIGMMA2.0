@@ -1,13 +1,11 @@
-import os
 import argparse
 import pickle
+import copy
 import torch
-from torch.utils.data import random_split, DataLoader, ConcatDataset
+from torch.utils.data import DataLoader
 
 from ml_collections.config_dict import ConfigDict
 import yaml
-
-import timm
 
 from model.utils import load_dataset, load_model, compute_pcc, recall_at_K, WandbLogger
 
@@ -47,9 +45,8 @@ def main(args):
 
     models = []
     for i in [3]:#range(5):
-        model_id = config.get(f"model_{i}")
-        model_config = config.get(model_id)
-        model, _, _ = load_model(model_config, device)
+        config.model = copy.deepcopy(config.get(f"model_{i}"))
+        model, _, _ = load_model(config, device)
         model.eval()
         models.append((model_name, model))
     

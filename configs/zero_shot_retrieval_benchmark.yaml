@@ -44,3 +44,7 @@ dataset:
   spatial_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/spatial_preprocessed_lymph_node.h5
   indices_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/indices.zarr/
   fov_size: 256
+
+test:
+  batch_size: 10
+  num_samples: 100

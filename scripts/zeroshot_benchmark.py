@@ -2,7 +2,7 @@ import argparse
 import pickle
 import copy
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 
 from ml_collections.config_dict import ConfigDict
 import yaml
@@ -29,7 +29,9 @@ def main(args):
     print(f"Total samples after filtering: {len(dataset)}")
 
     batch_size = config.get("test.batch_size", 1)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, collate_fn=multimodal_collate, shuffle=True, num_workers=0)
+    num_samples = config.get("test.num_samples", len(test_dataset))
+    random_sampler = RandomSampler(test_dataset, num_samples=num_samples, replacement=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, sampler=random_sampler, num_workers=0, collate_fn=multimodal_collate)
 
     # Add wandb logging
     wandb_config = {

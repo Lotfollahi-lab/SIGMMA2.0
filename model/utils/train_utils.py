@@ -31,7 +31,8 @@ def load_dataset(config_dataset):
 
 
 def load_model(config:ConfigDict, 
-               device:Optional[str]="cuda"):
+               device:Optional[str]="cuda",
+               train: Optional[bool]=True):
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
@@ -80,13 +81,14 @@ def load_model(config:ConfigDict,
 
     model = model.to(device)
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=config.train.learning_rate,
-        weight_decay=config.train.weight_decay,
-    )
+    if train:
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=config.train.learning_rate,
+            weight_decay=config.train.weight_decay,
+        )
 
-    lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1, total_iters=config.train.epochs * config.train.batch_size)
+        lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1, total_iters=config.train.epochs * config.train.batch_size)
 
     # lr_scheduler = torch.optim.lr_scheduler.StepLR(
     #     optimizer,
@@ -107,7 +109,9 @@ def load_model(config:ConfigDict,
     ## + Restart ---
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6, last_epoch=-1)
 
-    return model, optimizer, lr_scheduler
+        return model, optimizer, lr_scheduler
+    else:
+        return model
 
 
 def train_one_epoch(

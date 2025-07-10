@@ -46,7 +46,7 @@ def main(args):
     models = []
     for i in [3]:#range(5):
         config.model = copy.deepcopy(config.get(f"model_{i}"))
-        model, _, _ = load_model(config, device)
+        model = load_model(config, device, train=False)
         model.eval()
         models.append((model_name, model))
     

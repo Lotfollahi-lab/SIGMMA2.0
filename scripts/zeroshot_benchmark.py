@@ -96,12 +96,12 @@ def main(args):
         # Compute PCC
         pcc = compute_pcc(image_query_tensor, image_retrieved_tensor)
         print(f"{model_name} PCC: {pcc:.4f}")
-        wandb_logger.log({"pcc": pcc}, step=0)
+        wandb_logger.log({f"{(model_name)} pcc": pcc}, step=0)
         # Compute Recall@K
         for k in [10, 50, 100]:
             recall = recall_at_K(image_query_tensor, image_retrieved_tensor, k=k)
             print(f"{model_name} Recall@{k}: {recall:.4f}")
-            wandb_logger.log({f"recall@{k}": recall}, step=0)
+            wandb_logger.log({f"{model_name} recall@{k}": recall}, step=0)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

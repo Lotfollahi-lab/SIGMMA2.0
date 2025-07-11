@@ -2,6 +2,32 @@ import torch
 from scipy.stats import pearsonr
 
 
+def cross_modal_retrieval(query_embedding: torch.Tensor,
+                          reference_embeddings: torch.Tensor,
+                          reference_ids: dict,
+                          k: int = 5):
+    """
+    Computes the similarity between query embeddings and reference embeddings.
+    Args:
+        query_embedding (N X D): D-dim embeddings of N queries.
+        reference_embeddings (M X D): D-dim embeddings of M references.
+    Returns:
+        torch.Tensor: Similarity scores of shape (N, M).
+    """
+    # Compute cosine similairy between query and reference embeddings
+    similarity = query_embedding @ reference_embeddings.T
+
+    # Normalize the similarity scores
+    similarity = similarity / (similarity.norm(dim=-1, keepdim=True) * reference_embeddings.norm(dim=-1, keepdim=True))
+
+    # Retrieve the top-k indices based on similarity scores
+    values, indices = torch.topk(similarity.squeeze(0), k)
+
+    # Retrieve the corresponding reference IDs
+    retrieved = [reference_ids[idx] for idx in indices]
+
+    return # TODO
+
 def compute_pcc(retrieved: torch.Tensor, ground_truth: torch.Tensor) -> float:
     """
     Computes the Pearson Correlation Coefficient (PCC) between retrieved and ground truth lists.

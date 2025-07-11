@@ -39,7 +39,13 @@ model_4:
   pretrained_omiclip_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/loki/
   temperature: 0.01
 
-dataset:
+reference_dataset:
+  image_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/image.zarr/
+  spatial_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/spatial_preprocessed_lymph_node.h5
+  indices_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/indices.zarr/
+  fov_size: 256
+
+query_dataset:
   image_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/image.zarr/
   spatial_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/spatial_preprocessed_lymph_node.h5
   indices_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/indices.zarr/

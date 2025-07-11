@@ -2,7 +2,7 @@ import argparse
 import pickle
 import copy
 import torch
-from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 
 from ml_collections.config_dict import ConfigDict
 import yaml
@@ -14,20 +14,20 @@ def main(args):
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset = load_dataset(config.dataset)
 
     # == Query dataset preparation ==
+    query_dataset = load_dataset(config.query_dataset)
     # valid_indices = []
-    # for i in range(len(dataset)):
-    #     spatial = dataset[i]['spatial']
+    # for i in range(len(query_dataset)):
+    #     spatial = query_dataset[i]['spatial']
     #     if not torch.any(torch.isnan(spatial)):
     #         valid_indices.append(i)
     # with open("valid_indices_test.txt", "wb") as f:
     #     pickle.dump(valid_indices, f)
     with open("valid_indices_test.txt", "rb") as f:
         valid_indices = pickle.load(f)
-    test_dataset = torch.utils.data.Subset(dataset, valid_indices)
-    print(f"Total samples after filtering: {len(dataset)}")
+    test_dataset = torch.utils.data.Subset(query_dataset, valid_indices)
+    print(f"Total samples after filtering: {len(query_dataset)}")
 
     batch_size = config.get("test.batch_size", 1)
     num_samples = config.get("test.num_samples", len(test_dataset))

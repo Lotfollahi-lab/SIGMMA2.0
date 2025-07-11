@@ -36,6 +36,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         housekeeping_genes: Optional[Sequence[str]] = None,
         hierarchical_graph: bool = True,
     ):
+        self.image_file = str(image_file)
+        self.indices_file = str(indices_file)
+        self.spatial_file = str(spatial_file)
+
         self.image_array = zarr.open(image_file, mode="r")
         self.index_array = zarr.open(indices_file, mode="r")
         self.spatial_anndata = scanpy.read_h5ad(
@@ -157,7 +161,12 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             "spatial": spatial_embedding,
             "spatial_graph": spatial_graph,
             "spatial_text": spatial_text,
-            "cell_type_composition": cell_type_composition
+            "cell_type_composition": cell_type_composition,
+            "image_file": self.image_file,
+            "indices_file": self.indices_file,
+            "spatial_file": self.spatial_file,
+            "fov_size": self.fov_size,
+            "index": idx,
         }
 
     def __len__(self) -> int:

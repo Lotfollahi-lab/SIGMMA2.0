@@ -1,0 +1,50 @@
+model_0:
+  name: hierarchical_img_cellgraph
+  checkpoint_path: TODO
+  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
+  image_encoder_input_dim: 1024
+  image_encoder_output_dim: 512
+  spatial_encoder_input_dim: 4624 # cell vector dimension from pretrained model (novae: 64) or raw cell vector dimension (e.g. 4624)
+  spatial_encoder_output_dim: 512
+  num_resolutions: 3
+  num_cell_types: 28
+  temperature: 0.01
+  dropout: 0.1
+  activation: 'leaky_relu'
+  aggregate: 'max'
+
+model_1:
+  name: basic_contrastive
+  checkpoint_path: TODO
+  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
+  image_encoder_output_dim: 1024
+  spatial_encoder_output_dim: 64
+  projection_dim: 128
+  num_cell_types: 20
+  temperature: 0.01
+
+model_2:
+  name: openAI_CLIP
+  checkpoint_path: TODO
+  temperature: 0.01
+
+model_3:
+  name: PLIP
+  checkpoint_path: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/finetune_plip401329/checkpoint-5000.pth
+  temperature: 0.01
+
+model_4:
+  name: loki_OmiCLIP
+  checkpoint_path: TODO
+  pretrained_omiclip_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/loki/
+  temperature: 0.01
+
+dataset:
+  image_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/image.zarr/
+  spatial_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/spatial_preprocessed_lymph_node.h5
+  indices_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/indices.zarr/
+  fov_size: 256
+
+test:
+  batch_size: 10
+  num_samples: 100

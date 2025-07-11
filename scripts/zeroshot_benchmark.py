@@ -2,31 +2,32 @@ import argparse
 import pickle
 import copy
 import torch
-from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 
 from ml_collections.config_dict import ConfigDict
 import yaml
 
-from model.utils import load_dataset, load_model, compute_pcc, recall_at_K, WandbLogger
+from model.utils import load_dataset, load_model, cross_modal_retrieval, compute_pcc, recall_at_K, WandbLogger
 from model.datasets import multimodal_collate
 
 def main(args):
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset = load_dataset(config.dataset)
 
+    # == Query dataset preparation ==
+    query_dataset = load_dataset(config.query_dataset)
     # valid_indices = []
-    # for i in range(len(dataset)):
-    #     spatial = dataset[i]['spatial']
+    # for i in range(len(query_dataset)):
+    #     spatial = query_dataset[i]['spatial']
     #     if not torch.any(torch.isnan(spatial)):
     #         valid_indices.append(i)
     # with open("valid_indices_test.txt", "wb") as f:
     #     pickle.dump(valid_indices, f)
     with open("valid_indices_test.txt", "rb") as f:
         valid_indices = pickle.load(f)
-    test_dataset = torch.utils.data.Subset(dataset, valid_indices)
-    print(f"Total samples after filtering: {len(dataset)}")
+    test_dataset = torch.utils.data.Subset(query_dataset, valid_indices)
+    print(f"Total samples after filtering: {len(query_dataset)}")
 
     batch_size = config.get("test.batch_size", 1)
     num_samples = config.get("test.num_samples", len(test_dataset))
@@ -56,6 +57,12 @@ def main(args):
     
     # Retrieval
     for model_name, model in models:
+
+        # -- Reference dataset preparation --
+        reference_images = torch.load(f"{model_name}_image_embeddings.pt")
+        reference_spatial = torch.load(f"{model_name}_spatial_embeddings.pt")
+        reference_ids = torch.load(f"{model_name}_reference_ids.csv")
+
         image_query_list, image_retrieved_list = [], []
         spatial_query_list, spatial_retrieved_list = [], []
         for batch in test_dataloader:
@@ -81,25 +88,20 @@ def main(args):
             image_query_list.append(image_embeds.cpu())
             spatial_query_list.append(spatial_embeds.cpu())
 
-            # Retrieve embeddings given the query
-            image_retrieved = None
-            spatial_retrieved = None
-            image_retrieved_list.append(image_retrieved)
+            # Cross-modal retrieval (Given image query, retrieve spatial embeddings) 
+            spatial_retrieved = cross_modal_retrieval(image_embeds, reference_spatial, reference_ids, k=10)
             spatial_retrieved_list.append(spatial_retrieved)
 
-        image_query_tensor = torch.cat(image_query_list, dim=0)
         spatial_query_tensor = torch.cat(spatial_query_list, dim=0)
-
-        image_retrieved_tensor = torch.cat(image_retrieved_list, dim=0)
         spatial_retrieved_tensor = torch.cat(spatial_retrieved_list, dim=0)
 
         # Compute PCC
-        pcc = compute_pcc(image_query_tensor, image_retrieved_tensor)
+        pcc = compute_pcc(spatial_query_tensor, spatial_retrieved_tensor)
         print(f"{model_name} PCC: {pcc:.4f}")
         wandb_logger.log({f"{(model_name)} pcc": pcc}, step=0)
         # Compute Recall@K
         for k in [10, 50, 100]:
-            recall = recall_at_K(image_query_tensor, image_retrieved_tensor, k=k)
+            recall = recall_at_K(spatial_query_tensor, spatial_retrieved_tensor, k=k)
             print(f"{model_name} Recall@{k}: {recall:.4f}")
             wandb_logger.log({f"{model_name} recall@{k}": recall}, step=0)
 

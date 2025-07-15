@@ -80,6 +80,8 @@ def load_model(config:ConfigDict,
 
     model = model.to(device)
 
+    print(f"Total parameters in the {config.model.name} model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+
     if train:
         optimizer = torch.optim.AdamW(
             model.parameters(),
@@ -151,7 +153,7 @@ def train_one_epoch(
         # Forward pass
         with torch.amp.autocast(device.type, enabled=False):
             if config.model.name == "hierarchical_img_cellgraph":
-                loss_kl, loss_contrastive, loss_ce, loss, image_embeddings, spatial_embeddings = model(*inputs) # TODO: multi-resolution embeddings
+                loss_kl, loss_contrastive, loss_ce, loss, image_embedding, spatial_embedding = model(*inputs) # TODO: multi-resolution embeddings
             else:
                 loss, image_embedding, spatial_embedding = model(*inputs)
         # Backward pass

@@ -26,5 +26,5 @@ train:
   save_every: 500
   eval_every: 500
   gradient_accumulation_steps: 20
-  num_workers: 0
+  num_workers: 8
   max_num_samples_per_epoch: 5000 # Limit the number of samples for training

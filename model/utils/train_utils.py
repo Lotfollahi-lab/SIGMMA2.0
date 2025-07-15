@@ -279,7 +279,7 @@ def PCA_embeddings(image_embeddings, spatial_embeddings, num_samples=1000):
     image_embeddings_pca = pca.fit_transform(image_embeddings[:num_samples])
     spatial_embeddings_pca = pca.fit_transform(spatial_embeddings[:num_samples])
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8, 8))
     ax.scatter(image_embeddings_pca[:, 0], image_embeddings_pca[:, 1], label="Image", alpha=0.5, color='blue')
     ax.scatter(spatial_embeddings_pca[:, 0], spatial_embeddings_pca[:, 1], label="Spatial", alpha=0.5, color='red')
     ax.set_title("PCA of Image vs Spatial Embeddings")

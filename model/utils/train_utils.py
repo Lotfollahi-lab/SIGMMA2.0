@@ -123,6 +123,7 @@ def train_one_epoch(
     optimizer,
     lr_scheduler,
     global_step,
+    epoch_index,
     device,
     wandb_logger,
 ):
@@ -186,10 +187,13 @@ def train_one_epoch(
             wandb_logger.update({"(train)loss": loss,
                                  "(train)loss_kl": loss_kl,
                                  "(train)loss_contrastive": loss_contrastive,
-                                 "(train)loss_ce": loss_ce})
+                                 "(train)loss_ce": loss_ce,
+                                 "(train) lr": lr_scheduler.get_last_lr()[0],
+                                 "(train) epoch": epoch_index})
         else:
             wandb_logger.update({"(train)loss": loss,
-                                 "lr": lr_scheduler.get_last_lr()[0]})
+                                 "(train) lr": lr_scheduler.get_last_lr()[0],
+                                 "(train) epoch": epoch_index})
         wandb_logger.set_step()
 
         global_step += 1

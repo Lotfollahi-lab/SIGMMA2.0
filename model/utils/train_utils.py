@@ -177,11 +177,16 @@ def train_one_epoch(
             eval_dataloader is not None
             and (global_step + 1) % config.train.eval_every == 0
         ):
-            eval_loss, eval_image_embeddings, eval_spatial_embeddings = evaluate(config, model, eval_dataloader, device)
-            fig = PCA_embeddings(eval_image_embeddings, eval_spatial_embeddings)
+            eval_loss, eval_image_embedding, eval_spatial_embedding = evaluate(config, model, eval_dataloader, device)
+            fig = PCA_embeddings(eval_image_embedding, eval_spatial_embedding)
 
             wandb_logger.update({"(eval)loss": eval_loss,
                                  "(eval)PCA_embeddings": wandb.Image(fig)})
+            torch.save({"train_image_embeddings": image_embedding,
+                        "train_spatial_embeddings": spatial_embedding,
+                        "eval_image_embeddings": eval_image_embedding,
+                        "eval_spatial_embeddings": eval_spatial_embedding},
+                       f"{config.outdir}/embeddings_{global_step + 1}.pt")
 
         if config.model.name == "hierarchical_img_cellgraph":
             wandb_logger.update({"(train)loss": loss,

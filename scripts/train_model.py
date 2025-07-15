@@ -55,8 +55,10 @@ def objective(args):
     )
 
     batch_size = config.get("train.batch_size")
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, collate_fn=multimodal_collate, shuffle=True, num_workers=config.train.num_workers)
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=multimodal_collate, shuffle=False, num_workers=config.train.num_workers)
+    random_sampler = torch.utils.data.RandomSampler(train_dataset, num_samples=config.get("train.max_num_samples_per_epoch", len(train_dataset)), replacement=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=random_sampler, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
+    sequential_sampler = torch.utils.data.SequentialSampler(eval_dataset)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, sampler=sequential_sampler, collate_fn=multimodal_collate, num_workers=config.train.num_workers)
 
     # Add wandb logging
     wandb_config = {

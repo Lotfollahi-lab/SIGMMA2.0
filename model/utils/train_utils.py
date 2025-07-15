@@ -180,7 +180,7 @@ def train_one_epoch(
             and (global_step + 1) % config.train.eval_every == 0
         ):
             eval_loss, eval_image_embedding, eval_spatial_embedding = evaluate(config, model, eval_dataloader, device)
-            fig = PCA_embeddings(eval_image_embedding, eval_spatial_embedding)
+            fig = PCA_embeddings(eval_image_embedding.cpu(), eval_spatial_embedding.cpu())
 
             wandb_logger.update({"(eval)loss": eval_loss,
                                  "(eval)PCA_embeddings": wandb.Image(fig)})

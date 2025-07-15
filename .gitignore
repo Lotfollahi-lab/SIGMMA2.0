@@ -1,4 +1,90 @@
+# Inspired from
+# github.com/github/gitignore
+# R, Python, macOS
+# Re-ordered by ChatGPT-4o
+
+# 🧪 Runtime & Execution History
+# These files log command history and runtime sessions.
+.Rhistory
+.Rapp.history
+.history
+**logs/
+**log
+**out
+**archive/
+**ipynb.py
+
+# ⚙️ Environment & Configuration
+# These define local or project-specific environment settings.
+.Renviron
+.Rprofile
+renv/
 poetry.lock
+# OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
+.httr-oauth
+
+# 👤 User-Specific & Temporary Metadata
+# User/session specific files that should not be shared or tracked.
+.Ruserdata
+.Rproj.user/
+*.Rproj
+
+# 🧼 Build, Check & Intermediate Files
+# Artifacts from R CMD build/check, workflow managers, and R Markdown compilation.
+.snakemake
+.ipynb_checkpoints
+# Output files from R CMD build
+/*.tar.gz
+# Output files from R CMD check
+/*.Rcheck/
+# Temporary files created by R markdown
+*.utf8.md
+*.knit.md
+# Example code in package build process
+*-Ex.R
+vignettes/*.html
+vignettes/*.pdf
+
+# 🧠 Caches and Compiled Output
+# Auto-generated or cached files during code execution or markdown rendering.
+*_cache/
+/cache/
+__pycache__/
+
+# 📁 Data, Output & Project Assets
+# Larger or static project-related assets
+# Data files
+*.h5ad
+*.RData
+*.RDataTmp
+# Folders
+bin
+data
+docs
+figures
+img
+literature/
+manuscript/
+meetings/
+misc
+outreach/
+results
+share/
+src
+tables
+R/
+
+# 🖥️ Operating System Files
+# System-generated metadata and indexing files (mostly macOS).
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon*
+._*
+.TemporaryItems
+__MACOSX
+
+# Logging Files
 *.err
 *.out
 assets/*

@@ -159,8 +159,6 @@ def train_one_epoch(
                 loss, image_embedding, spatial_embedding = model(*inputs)
         # Backward pass
         loss.backward()
-        fig = PCA_embeddings(image_embedding, spatial_embedding)
-        wandb_logger.update({"(train)PCA_embeddings": wandb.Image(fig)})
 
         if (i+1) % config.get("train.gradient_accumulation_steps",1) == 0:
             optimizer.step()
@@ -180,10 +178,12 @@ def train_one_epoch(
             and (global_step + 1) % config.train.eval_every == 0
         ):
             eval_loss, eval_image_embedding, eval_spatial_embedding = evaluate(config, model, eval_dataloader, device)
-            fig = PCA_embeddings(eval_image_embedding.cpu(), eval_spatial_embedding.cpu())
+            fig_eval = PCA_embeddings(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu())
 
-            wandb_logger.update({"(eval)loss": eval_loss,
-                                 "(eval)PCA_embeddings": wandb.Image(fig)})
+            fig_train = PCA_embeddings(image_embedding.detach().cpu(), spatial_embedding.detach().cpu())
+            wandb_logger.update({"(train)PCA_embeddings": wandb.Image(fig_train),
+                                 "(eval)loss": eval_loss,
+                                 "(eval)PCA_embeddings": wandb.Image(fig_eval)})
             torch.save({"eval_image_embeddings": eval_image_embedding,
                         "eval_spatial_embeddings": eval_spatial_embedding},
                        f"{config.outdir}/embeddings_{global_step + 1}.pt")

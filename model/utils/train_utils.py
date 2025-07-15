@@ -187,7 +187,7 @@ def train_one_epoch(
             torch.save({"eval_image_embeddings": eval_image_embedding,
                         "eval_spatial_embeddings": eval_spatial_embedding},
                        f"{config.outdir}/embeddings_{global_step + 1}.pt")
-        
+
         if config.model.name == "hierarchical_img_cellgraph":
             wandb_logger.update({"(train)loss": loss,
                                  "(train)loss_kl": loss_kl,

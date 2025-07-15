@@ -19,7 +19,7 @@ outdir: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/benchmark
 train:
   batch_size: 128
   epochs: 100
-  learning_rate: 0.0001
+  learning_rate: 0.00001
   weight_decay: 0.00001
   lr_step_size: 10
   lr_gamma: 0.1

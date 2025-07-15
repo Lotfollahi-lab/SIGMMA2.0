@@ -83,3 +83,11 @@ Icon*
 ._*
 .TemporaryItems
 __MACOSX
+
+# Logging Files
+*.err
+*.out
+assets/*
+wandb/*
+.vscode/*
+.ipynb_checkpoints/*

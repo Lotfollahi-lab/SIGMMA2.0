@@ -1,0 +1,21 @@
+model:
+  name: PLIP
+  temperature: 0.01
+
+dataset1:
+  image_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/image.zarr/
+  spatial_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/spatial_preprocessed_lymph_node.h5
+  indices_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/indices.zarr/
+  fov_size: 256
+
+dataset2:
+  image_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Ovarian_Cancer_FFPE_XRrun/image.zarr
+  spatial_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Ovarian_Cancer_FFPE_XRrun/spatial_preprocessed_ovarian_cancer.h5
+  indices_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Ovarian_Cancer_FFPE_XRrun/indices.zarr/
+  fov_size: 256
+  
+outdir: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/benchmark
+
+test:
+  batch_size: 128
+  num_workers: 8

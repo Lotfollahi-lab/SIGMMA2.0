@@ -123,6 +123,7 @@ def train_one_epoch(
     optimizer,
     lr_scheduler,
     global_step,
+    epoch_index,
     device,
     wandb_logger,
 ):
@@ -158,6 +159,8 @@ def train_one_epoch(
                 loss, image_embedding, spatial_embedding = model(*inputs)
         # Backward pass
         loss.backward()
+        fig = PCA_embeddings(image_embedding, spatial_embedding)
+        wandb_logger.update({"(train)PCA_embeddings": wandb.Image(fig)})
 
         if (i+1) % config.get("train.gradient_accumulation_steps",1) == 0:
             optimizer.step()
@@ -176,20 +179,26 @@ def train_one_epoch(
             eval_dataloader is not None
             and (global_step + 1) % config.train.eval_every == 0
         ):
-            eval_loss, eval_image_embeddings, eval_spatial_embeddings = evaluate(config, model, eval_dataloader, device)
-            fig = PCA_embeddings(eval_image_embeddings, eval_spatial_embeddings)
+            eval_loss, eval_image_embedding, eval_spatial_embedding = evaluate(config, model, eval_dataloader, device)
+            fig = PCA_embeddings(eval_image_embedding, eval_spatial_embedding)
 
             wandb_logger.update({"(eval)loss": eval_loss,
                                  "(eval)PCA_embeddings": wandb.Image(fig)})
+            torch.save({"eval_image_embeddings": eval_image_embedding,
+                        "eval_spatial_embeddings": eval_spatial_embedding},
+                       f"{config.outdir}/embeddings_{global_step + 1}.pt")
 
         if config.model.name == "hierarchical_img_cellgraph":
             wandb_logger.update({"(train)loss": loss,
                                  "(train)loss_kl": loss_kl,
                                  "(train)loss_contrastive": loss_contrastive,
-                                 "(train)loss_ce": loss_ce})
+                                 "(train)loss_ce": loss_ce,
+                                 "(train)lr": lr_scheduler.get_last_lr()[0],
+                                 "(train)epoch": epoch_index})
         else:
             wandb_logger.update({"(train)loss": loss,
-                                 "lr": lr_scheduler.get_last_lr()[0]})
+                                 "(train)lr": lr_scheduler.get_last_lr()[0],
+                                 "(train)epoch": epoch_index})
         wandb_logger.set_step()
 
         global_step += 1
@@ -275,7 +284,7 @@ def PCA_embeddings(image_embeddings, spatial_embeddings, num_samples=1000):
     image_embeddings_pca = pca.fit_transform(image_embeddings[:num_samples])
     spatial_embeddings_pca = pca.fit_transform(spatial_embeddings[:num_samples])
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8, 8))
     ax.scatter(image_embeddings_pca[:, 0], image_embeddings_pca[:, 1], label="Image", alpha=0.5, color='blue')
     ax.scatter(spatial_embeddings_pca[:, 0], spatial_embeddings_pca[:, 1], label="Spatial", alpha=0.5, color='red')
     ax.set_title("PCA of Image vs Spatial Embeddings")

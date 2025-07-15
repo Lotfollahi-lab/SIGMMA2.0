@@ -76,7 +76,7 @@ def objective(args):
     # config.model.temperature = trial.suggest_uniform("temperature", 0.05, 0.2)
 
 
-    wandb_logger = WandbLogger(config=config, **wandb_config)
+    wandb_logger = WandbLogger(config=dict(config.model)|dict(config.train), **wandb_config)
     wandb_logger.set_step(0)
 
     model, optimizer, lr_scheduler = load_model(config, device)
@@ -87,7 +87,7 @@ def objective(args):
         config.get("train.epochs"),
     )
 
-    for current_epoch in range(first_epoch, num_train_epochs):
+    for epoch_index in range(first_epoch, num_train_epochs):
         global_step = train_one_epoch(
             config,
             model,
@@ -96,6 +96,7 @@ def objective(args):
             optimizer,
             lr_scheduler,
             global_step,
+            epoch_index,
             device=device,
             wandb_logger=wandb_logger,
         )

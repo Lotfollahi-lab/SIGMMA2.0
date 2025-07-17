@@ -172,6 +172,7 @@ def train_one_epoch(
                 lr_scheduler,
                 config.outdir,
                 global_step + 1,
+                epoch_index + 1,
             )
         if (
             eval_dataloader is not None
@@ -186,7 +187,7 @@ def train_one_epoch(
                                  "(eval)PCA_embeddings": wandb.Image(fig_eval)})
             torch.save({"eval_image_embeddings": eval_image_embedding,
                         "eval_spatial_embeddings": eval_spatial_embedding},
-                       f"{config.outdir}/embeddings_{global_step + 1}.pt")
+                       f"{config.outdir}/embeddings-{global_step + 1}.pt")
 
         if config.model.name == "hierarchical_img_cellgraph":
             wandb_logger.update({"(train)loss": loss,
@@ -207,9 +208,9 @@ def train_one_epoch(
 
 
 def save_checkpoint(
-    model, optimizer, lr_scheduler, output_dir, global_step, logger=None
+    model, optimizer, lr_scheduler, output_dir, global_step, epoch_index, logger=None
 ):
-    save_path = Path(output_dir) / f"checkpoint-{global_step}.pth"
+    save_path = Path(output_dir) / f"checkpoint-epoch{epoch_index}.pth"
     checkpoint = {
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),

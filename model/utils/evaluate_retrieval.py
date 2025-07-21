@@ -1,10 +1,15 @@
 import torch
+import zarr
+import scanpy
+import numpy as np
+import pandas as pd
 from scipy.stats import pearsonr
 
 
 def cross_modal_retrieval(query_embedding: torch.Tensor,
                           reference_embeddings: torch.Tensor,
-                          reference_ids: dict,
+                          reference_ids: pd.DataFrame,
+                          fov_size: int = 256,
                           k: int = 5):
     """
     Computes the similarity between query embeddings and reference embeddings.

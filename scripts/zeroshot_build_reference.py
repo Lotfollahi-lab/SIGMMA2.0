@@ -18,8 +18,9 @@ def main(args):
     config = ConfigDict(config_file)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    config.outdir = config.get("outdir") if args.outdir is None else args.outdir
-
+    config.outdir = config.get("outdir") if args.out_dir is None else args.out_dir
+    if os.path.exists(config.outdir) == False:
+        os.makedirs(config.outdir)
     # == Reference dataset preparation ==
     dataset1 = load_dataset(config.dataset1)
     dataset2 = load_dataset(config.dataset2)
@@ -105,6 +106,6 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-config_file", type=str, required=True, help="Path to the config file")
-    parser.add_argument('-outdir', type=str, default=None, help='Output directory path')
+    parser.add_argument('-out_dir', type=str, default=None, help='Output directory path')
     args = parser.parse_args()
     main(args)

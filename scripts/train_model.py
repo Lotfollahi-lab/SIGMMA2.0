@@ -23,7 +23,7 @@ def objective(args):
 
     model_name = config.get("model.name")
     print(f"Training model: {model_name}")
-    config.outdir = config.get("outdir") if args.out_dir is None else args.out_dir
+    config.outdir = config.get("out_dir") if args.out_dir is None else args.out_dir
 
     if os.path.exists(config.outdir) == False:
         os.makedirs(config.outdir)

@@ -61,7 +61,7 @@ def main(args):
     model_name = config.model.get("name")
     model.eval()
 
-    for batch in reference_dataloader:
+    for batch_idx, batch in enumerate(reference_dataloader):
         image = batch["image"].to(device)
         cell_type_composition = batch["cell_type_composition"].to(device)
         if model_name == "hierarchical_img_cellgraph":
@@ -76,23 +76,29 @@ def main(args):
         else:
             raise ValueError(f"Unknown model name: {model_name}")
     
-        with torch.amp.autocast(device.type, enabled=False):
+        with torch.no_grad():
             if config.model.name == "hierarchical_img_cellgraph":
                 loss_kl, loss_contrastive, loss_ce, loss, image_embeds, spatial_embeds = model(*inputs) # TODO: multi-resolution embeddings
             else:
                 loss, image_embeds, spatial_embeds = model(*inputs)
     
         # Normalize embeddings
+        image_embeds = image_embeds.detach().cpu()
+        spatial_embeds = spatial_embeds.detach().cpu()
         image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
         spatial_embeds = spatial_embeds / spatial_embeds.norm(dim=-1, keepdim=True)
     
+        torch.save(image_embeds, Path(config.outdir, f"{model_name}_image_embeddings_batch{batch_idx}.pt"))
+        torch.save(spatial_embeds, Path(config.outdir, f"{model_name}_spatial_embeddings_batch{batch_idx}.pt"))
+
         # Store reference embeddings
         if 'reference_image_embeddings' not in locals():
             assert 'reference_spatial_embeddings' not in locals(), "Both reference embeddings should be initialized together."
             reference_image_embeddings = image_embeds.cpu()
             reference_spatial_embeddings = spatial_embeds.cpu()
             df_metadata = pd.DataFrame(zip( batch["image_file"], batch["spatial_file"], batch["indices_file"], np.array(batch["index"])), 
-                                       columns=['image_file', 'spatial_file', 'index_array_file', 'data_index'])
+                                        columns=['image_file', 'spatial_file', 'index_array_file', 'data_index'])
+            df_metadata.to_csv(Path(config.outdir, f"{model_name}_metadata_batch{batch_idx}.csv"), index=False)
         else:
             reference_image_embeddings = torch.cat((reference_image_embeddings, image_embeds.cpu()), dim=0)
             reference_spatial_embeddings = torch.cat((reference_spatial_embeddings, spatial_embeds.cpu()), dim=0)

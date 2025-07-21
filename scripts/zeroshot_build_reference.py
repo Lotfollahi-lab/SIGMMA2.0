@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 import pickle
 import pandas as pd
 import numpy as np
@@ -16,7 +17,9 @@ def main(args):
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+
+    config.outdir = config.get("outdir") if args.outdir is None else args.outdir
+
     # == Reference dataset preparation ==
     dataset1 = load_dataset(config.dataset1)
     dataset2 = load_dataset(config.dataset2)
@@ -52,26 +55,30 @@ def main(args):
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
-    model = load_model(config, device, train=False)
+    model = load_model(config, device, pretrained_ckpt_path=config.model.pretrained_checkpoint_path, train=False)
     model_name = config.model.get("name")
     model.eval()
 
     for batch in reference_dataloader:
         image = batch["image"].to(device)
+        cell_type_composition = batch["cell_type_composition"].to(device)
         if model_name == "hierarchical_img_cellgraph":
             spatial = batch["spatial_graph"].to(device)
-            inputs = [image, spatial]
+            inputs = [image, spatial, cell_type_composition]
         elif model_name == "base_contrastive":
             spatial = batch["spatial"].to(device)
-            inputs = [image, spatial]
+            inputs = [image, spatial, cell_type_composition]
         elif model_name in ["openAI_CLIP", "PLIP", "OmiCLIP"]:
             spatial = batch["spatial_text"]
             inputs = [image, spatial]
         else:
             raise ValueError(f"Unknown model name: {model_name}")
     
-        with torch.no_grad():
-            _, image_embeds, spatial_embeds = model(*inputs)
+        with torch.amp.autocast(device.type, enabled=False):
+            if config.model.name == "hierarchical_img_cellgraph":
+                loss_kl, loss_contrastive, loss_ce, loss, image_embeds, spatial_embeds = model(*inputs) # TODO: multi-resolution embeddings
+            else:
+                loss, image_embeds, spatial_embeds = model(*inputs)
     
         # Normalize embeddings
         image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
@@ -91,12 +98,13 @@ def main(args):
                                           columns=['image_file', 'spatial_file', 'index_array_file', 'data_index'])
             df_metadata = pd.concat([df_metadata, df_metadata_tmp])
 
-    torch.save(reference_image_embeddings, f"{model_name}_image_embeddings.pt")
-    torch.save(reference_spatial_embeddings, f"{model_name}_spatial_embeddings.pt")
-    df_metadata.to_csv(f"{model_name}_reference_metadata.csv", index=False)
+    torch.save(reference_image_embeddings, Path(config.outdir, f"{model_name}_image_embeddings.pt"))
+    torch.save(reference_spatial_embeddings, Path(config.outdir, f"{model_name}_spatial_embeddings.pt"))
+    df_metadata.to_csv(Path(config.outdir, f"{model_name}_reference_metadata.csv", index=False))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-config_file")
+    parser.add_argument("-config_file", type=str, required=True, help="Path to the config file")
+    parser.add_argument('-outdir', type=str, default=None, help='Output directory path')
     args = parser.parse_args()
     main(args)

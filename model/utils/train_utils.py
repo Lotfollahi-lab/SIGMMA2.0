@@ -31,6 +31,7 @@ def load_dataset(config_dataset):
 
 def load_model(config:ConfigDict, 
                device:Optional[str]="cuda",
+               pretrained_ckpt_path:Optional[str]=None,
                train: Optional[bool]=True):
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
@@ -111,6 +112,10 @@ def load_model(config:ConfigDict,
         # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6, last_epoch=-1)
 
         return model, optimizer, lr_scheduler
+    elif pretrained_ckpt_path is not None:
+        assert Path(pretrained_ckpt_path).exists(), f"Pretrained checkpoint path {pretrained_ckpt_path} does not exist."
+        load_checkpoint(model, None, None, Path(pretrained_ckpt_path), device)
+        return model
     else:
         return model
 
@@ -229,8 +234,10 @@ def load_checkpoint(model, optimizer, lr_scheduler, checkpoint_path, device="cud
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
     model.load_state_dict(checkpoint["model_state_dict"])
-    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-    lr_scheduler.load_state_dict(checkpoint["lr_scheduler_state_dict"])
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    if lr_scheduler is not None:
+        lr_scheduler.load_state_dict(checkpoint["lr_scheduler_state_dict"])
     global_step = checkpoint.get("global_step", 0)
 
     print(f"Loaded checkpoint from {checkpoint_path} at step {global_step}")

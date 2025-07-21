@@ -23,15 +23,43 @@ def cross_modal_retrieval(query_embedding: torch.Tensor,
     similarity = query_embedding @ reference_embeddings.T
 
     # Normalize the similarity scores
-    similarity = similarity / (similarity.norm(dim=-1, keepdim=True) * reference_embeddings.norm(dim=-1, keepdim=True))
+    query_norm = query_embedding.norm(dim=-1, keepdim=True)
+    reference_norm = reference_embeddings.norm(dim=-1, keepdim=True).T
+    similarity = similarity / (query_norm * reference_norm)
 
     # Retrieve the top-k indices based on similarity scores
     values, indices = torch.topk(similarity.squeeze(0), k)
 
+    retrieved_embeddings = reference_embeddings[indices].detach()
     # Retrieve the corresponding reference IDs
-    retrieved = [reference_ids[idx] for idx in indices]
+    retrieved_instances = reference_ids.loc[lambda x:np.isin(x.data_index, indices.flatten().tolist()),:].apply(retrieve_raw_data_pair, axis=1, fov_size=fov_size).tolist()
 
-    return # TODO
+    return values, indices, retrieved_embeddings, retrieved_instances
+
+def retrieve_raw_data_pair(row, fov_size: int = 256):
+    """
+    Retrieves the raw data pair from the row of the DataFrame.
+    Args:
+        row (pd.Series): A row from the DataFrame containing image and spatial file paths.
+    Returns:
+        tuple: A tuple containing the spatial embedding and image array.
+    """
+    image_array = zarr.open(str(row.image_file), mode='r')
+    spatial_array = scanpy.read_h5ad(row.spatial_file)
+    index_array = zarr.open(str(row.index_array_file), mode='r')
+
+    slice_args = index_array[row.data_index, :, :]
+    y_start = slice_args[0, :].item()
+    x_start = slice_args[1, :].item()
+
+    points = spatial_array.obsm["spatial"]
+    mask = ((x_start <= points[:, 0]) & (points[:, 0] < x_start + fov_size) & (y_start <= points[:, 1]) & (points[:, 1] < y_start + fov_size))
+
+    spatial_exp = spatial_array[mask, :]
+    fov_image = image_array[y_start : y_start + fov_size, x_start : x_start + fov_size, :]
+
+    return spatial_exp, fov_image
+
 
 def compute_pcc(retrieved: torch.Tensor, ground_truth: torch.Tensor) -> float:
     """

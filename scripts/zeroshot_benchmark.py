@@ -1,4 +1,7 @@
+import os
 import argparse
+from pathlib import Path
+import pandas as pd
 import pickle
 import copy
 import torch
@@ -50,63 +53,66 @@ def main(args):
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
-    models = []
-    for i in [3]:#range(5):
-        config.model = copy.deepcopy(config.get(f"model_{i}"))
-        model = load_model(config, device, train=False)
-        model_name = config.model.get("name")
-        model.eval()
-        models.append((model_name, model))
+    model = load_model(config, device, train=False)
+    model_name = config.model.get("name")
+    model.eval()
+    reference_path = config.model.get("reference_path", None)
+    assert reference_path is not None, f"Reference path for {model_name} is not set."
     
     # Retrieval
-    for model_name, model in models:
+    # -- Reference dataset preparation --
+    reference_images = torch.load(Path(reference_path, f"{model_name}_image_embeddings.pt"))
+    reference_spatial = torch.load(Path(reference_path, f"{model_name}_spatial_embeddings.pt"))
+    reference_metadata = pd.read_csv(Path(reference_path, f"{model_name}_reference_metadata.csv"))
 
-        # -- Reference dataset preparation --
-        reference_images = torch.load(f"{model_name}_image_embeddings.pt")
-        reference_spatial = torch.load(f"{model_name}_spatial_embeddings.pt")
-        reference_ids = torch.load(f"{model_name}_reference_ids.csv")
+    image_query_list, image_retrieved_list = [], []
+    spatial_query_list, spatial_retrieved_list = [], []
+    for batch in test_dataloader:
+        image = batch["image"].to(device)
+        cell_type_composition = batch["cell_type_composition"].to(device)
+        if  model_name == "hierarchical_img_cellgraph":
+            spatial = batch["spatial_graph"].to(device)
+            inputs = [image, spatial, cell_type_composition]
+        elif model_name == "base_contrastive":
+            spatial = batch["spatial"].to(device)
+            inputs = [image, spatial, cell_type_composition]
+        elif model_name in ["openAI_CLIP", "PLIP", "OmiCLIP"]:
+            spatial = batch["spatial_text"]
+            inputs = [image, spatial]
+        else:
+            raise ValueError(f"Unknown model name: {model_name}")
 
-        image_query_list, image_retrieved_list = [], []
-        spatial_query_list, spatial_retrieved_list = [], []
-        for batch in test_dataloader:
-            image = batch["image"].to(device)
-            if  model_name == "hierarchical_img_cellgraph":
-                spatial = batch["spatial_graph"].to(device)
-                inputs = [image, spatial]
-            elif model_name == "base_contrastive":
-                spatial = batch["spatial"].to(device)
-                inputs = [image, spatial]
-            elif model_name in ["openAI_CLIP", "PLIP", "OmiCLIP"]:
-                spatial = batch["spatial_text"]
-                inputs = [image, spatial]
+        with torch.no_grad():
+            if config.model.name == "hierarchical_img_cellgraph":
+                loss_kl, loss_contrastive, loss_ce, loss, image_embeds, spatial_embeds = model(*inputs) # TODO: multi-resolution embeddings
             else:
-                raise ValueError(f"Unknown model name: {model_name}")
+                loss, image_embeds, spatial_embeds = model(*inputs)
 
-            with torch.no_grad():
-                _, image_embeds, spatial_embeds = model(*inputs)
+        # Normalize embeddings
+        image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
+        spatial_embeds = spatial_embeds / spatial_embeds.norm(dim=-1, keepdim=True)
+        image_embeds = image_embeds.detach().cpu()
+        spatial_embeds = spatial_embeds.detach().cpu()
 
-            # Query embeddings
-            image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
-            spatial_embeds = spatial_embeds / spatial_embeds.norm(dim=-1, keepdim=True)
-            image_query_list.append(image_embeds.cpu())
-            spatial_query_list.append(spatial_embeds.cpu())
+        # Cross-modal retrieval (Given image query, retrieve spatial embeddings)
+        retrieved_embeddings, retrieved_indices, spatial_retrieved, raw_data_pair = cross_modal_retrieval(image_embeds, reference_spatial, reference_metadata, k=5)
 
-            # Cross-modal retrieval (Given image query, retrieve spatial embeddings) 
-            spatial_retrieved = cross_modal_retrieval(image_embeds, reference_spatial, reference_ids, k=10)
-            spatial_retrieved_list.append(spatial_retrieved)
+        image_query_list.append(image_embeds.detach().cpu())
+        spatial_query_list.append(spatial_embeds.detach().cpu())
+        spatial_retrieved_list.append(spatial_retrieved)
 
-        spatial_query_tensor = torch.cat(spatial_query_list, dim=0)
-        spatial_retrieved_tensor = torch.cat(spatial_retrieved_list, dim=0)
+    spatial_query_tensor = torch.cat(spatial_query_list, dim=0)
+    spatial_retrieved_tensor = torch.cat(spatial_retrieved_list, dim=0)
 
-        # Compute PCC
-        pcc = compute_pcc(spatial_query_tensor, spatial_retrieved_tensor)
-        print(f"{model_name} PCC: {pcc:.4f}")
-        wandb_logger.log({f"{(model_name)} pcc": pcc}, step=0)
-        # Compute Recall@K
-        for k in [10, 50, 100]:
-            recall = recall_at_K(spatial_query_tensor, spatial_retrieved_tensor, k=k)
-            print(f"{model_name} Recall@{k}: {recall:.4f}")
-            wandb_logger.log({f"{model_name} recall@{k}": recall}, step=0)
+    # Compute PCC
+    pcc = compute_pcc(spatial_query_tensor, spatial_retrieved_tensor)
+    print(f"{model_name} PCC: {pcc:.4f}")
+    wandb_logger.log({f"{(model_name)} pcc": pcc}, step=0)
+    # Compute Recall@K
+    for k in [10, 50, 100]:
+        recall = recall_at_K(spatial_query_tensor, spatial_retrieved_tensor, k=k)
+        print(f"{model_name} Recall@{k}: {recall:.4f}")
+        wandb_logger.log({f"{model_name} recall@{k}": recall}, step=0)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

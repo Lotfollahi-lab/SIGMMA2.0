@@ -105,9 +105,9 @@ def main(args):
     spatial_retrieved_tensor = torch.cat(spatial_retrieved_list, dim=0)
 
     # Compute PCC
-    pcc = compute_pcc(spatial_query_tensor, spatial_retrieved_tensor)
-    print(f"{model_name} PCC: {pcc:.4f}")
-    wandb_logger.log({f"{(model_name)} pcc": pcc}, step=0)
+    pcc, pcc_val = compute_pcc(spatial_query_tensor, spatial_retrieved_tensor[:,0,:]) # compute pcc between query and first retrieved spatial embedding
+    print(f"{model_name} PCC: {pcc.mean():.4f}")
+    wandb_logger.log({f"{(model_name)} pcc": pcc.mean()}, step=0)
     # Compute Recall@K
     for k in [10, 50, 100]:
         recall = recall_at_K(spatial_query_tensor, spatial_retrieved_tensor, k=k)

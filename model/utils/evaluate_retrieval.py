@@ -17,24 +17,37 @@ def cross_modal_retrieval(query_embedding: torch.Tensor,
         query_embedding (N X D): D-dim embeddings of N queries.
         reference_embeddings (M X D): D-dim embeddings of M references.
     Returns:
-        torch.Tensor: Similarity scores of shape (N, M).
+        topk_similarity_score (N X K): Top-k similarity scores.
+        topk_indices (N X K): Indices of the top-k retrieved references.
+        retrieved_embeddings (N X K X D): Retrieved embeddings corresponding to the top-k indices.
+        retrieved_instances (list of (image_tile, spatial_tile)): List of tuples containing spatial embedding and image array for each retrieved instance.
     """
-    # Compute cosine similairy between query and reference embeddings
-    similarity = query_embedding @ reference_embeddings.T
-
-    # Normalize the similarity scores
-    query_norm = query_embedding.norm(dim=-1, keepdim=True)
-    reference_norm = reference_embeddings.norm(dim=-1, keepdim=True).T
-    similarity = similarity / (query_norm * reference_norm)
+    # Compute cosine similarity between query and reference embeddings
+    similarity = cosine_similarity(query_embedding, reference_embeddings)
 
     # Retrieve the top-k indices based on similarity scores
-    values, indices = torch.topk(similarity.squeeze(0), k)
+    topk_similarity_score, topk_indices = torch.topk(similarity, k)
 
-    retrieved_embeddings = reference_embeddings[indices].detach()
+    retrieved_embeddings = reference_embeddings[topk_indices].detach()
     # Retrieve the corresponding reference IDs
-    retrieved_instances = reference_ids.loc[lambda x:np.isin(x.data_index, indices.flatten().tolist()),:].apply(retrieve_raw_data_pair, axis=1, fov_size=fov_size).tolist()
+    retrieved_instances = reference_ids.loc[lambda x:np.isin(x.data_index, topk_indices.flatten().tolist()),:].apply(retrieve_raw_data_pair, axis=1, fov_size=fov_size).tolist()
 
-    return values, indices, retrieved_embeddings, retrieved_instances
+    return retrieved_embeddings, topk_indices, retrieved_instances
+
+def cosine_similarity(query_embedding: torch.Tensor, reference_embeddings: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the cosine similarity between query and reference embeddings.
+    Args:
+        query_embedding (N X D): D-dim embeddings of N queries.
+        reference_embeddings (M X D): D-dim embeddings of M references.
+    Returns:
+        similarity (N X M): Cosine similarity scores between queries and references.
+    """
+    query_norm = query_embedding.norm(dim=-1, keepdim=True)
+    reference_norm = reference_embeddings.norm(dim=-1, keepdim=True).T
+    similarity = (query_embedding @ reference_embeddings.T) / (query_norm * reference_norm)
+
+    return similarity
 
 def retrieve_raw_data_pair(row, fov_size: int = 256):
     """
@@ -61,24 +74,45 @@ def retrieve_raw_data_pair(row, fov_size: int = 256):
     return spatial_exp, fov_image
 
 
-def compute_pcc(retrieved: torch.Tensor, ground_truth: torch.Tensor) -> float:
+def compute_pcc(query: torch.Tensor,
+                reference: torch.Tensor,
+                reference_ids: pd.DataFrame,
+                fov_size: int = 256,
+                k: int=10) -> float:
     """
     Computes the Pearson Correlation Coefficient (PCC) between retrieved and ground truth lists.
     Args:
-        retrieved (N X D): D-dim embeddings of N retrieved samples.
-        ground_truth (N X D): D-dim dembeddings of N ground truth samples.
+        query (N x D): D-dim embeddings of N queries.
+        reference (M x D): D-dim embeddings of M ground truth samples.
     Returns:
-        float: Mean PCC of N samples.
+        float: Mean PCC of K samples for each query.
     """
-    assert retrieved.shape == ground_truth.shape, (
-        "Shapes of retrieved and ground truth must match."
-    )
+    assert query.shape[-1] == reference.shape[-1], "Dimension of query and reference embeddings must match."
+    assert k > 0, "k must be a positive integer."
 
-    stats, p_val = pearsonr(retrieved.numpy(), ground_truth.numpy(), axis=1)
+    retrieved_embeddings, topk_indices, retrieved_pairs = cross_modal_retrieval(query, reference, reference_ids, fov_size, k)  # N X K
 
-    return stats, p_val
+    li_stats = []
+    for i in range(retrieved_embeddings.shape[0]):
+        li_stats_per_query = []
+        for j in range(retrieved_embeddings.shape[1]):
+            # Compute PCC for each retrieved sample against the ground truth
+            retrieved_sample = retrieved_embeddings[i, j, :]
+            ground_truth_sample = query[i, :]
 
-def recall_at_K(retrieved: torch.Tensor, ground_truth: torch.Tensor, k: int) -> float:
+            # pearsonr returns a tuple (correlation coefficient, p-value)
+            stats, p_val = pearsonr(retrieved_sample.numpy(), ground_truth_sample.numpy())
+            li_stats_per_query.append(stats)
+        # Store the mean PCC for each query
+        li_stats.append(np.mean(li_stats_per_query, axis=0))
+
+    return torch.tensor(li_stats, dtype=torch.float32)
+
+def recall_at_K(query: torch.Tensor,
+                reference: torch.Tensor,
+                reference_ids: pd.DataFrame,
+                fov_size: int = 256,
+                k: int=50) -> float:
     """
     Computes the Recall@K metric.
     Args:

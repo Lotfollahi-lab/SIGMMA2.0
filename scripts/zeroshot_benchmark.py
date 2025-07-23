@@ -65,8 +65,7 @@ def main(args):
     reference_spatial = torch.load(Path(reference_path, f"{model_name}_spatial_embeddings.pt"))
     reference_metadata = pd.read_csv(Path(reference_path, f"{model_name}_reference_metadata.csv"))
 
-    image_query_list, image_retrieved_list = [], []
-    spatial_query_list, spatial_retrieved_list = [], []
+    image_query_list, spatial_query_list = [], []
     for batch in test_dataloader:
         image = batch["image"].to(device)
         cell_type_composition = batch["cell_type_composition"].to(device)
@@ -88,31 +87,24 @@ def main(args):
             else:
                 loss, image_embeds, spatial_embeds = model(*inputs)
 
-        # Normalize embeddings
-        image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
-        spatial_embeds = spatial_embeds / spatial_embeds.norm(dim=-1, keepdim=True)
         image_embeds = image_embeds.detach().cpu()
         spatial_embeds = spatial_embeds.detach().cpu()
 
-        # Cross-modal retrieval (Given image query, retrieve spatial embeddings)
-        retrieved_embeddings, retrieved_indices, spatial_retrieved, raw_data_pair = cross_modal_retrieval(image_embeds, reference_spatial, reference_metadata, k=5)
-
         image_query_list.append(image_embeds.detach().cpu())
         spatial_query_list.append(spatial_embeds.detach().cpu())
-        spatial_retrieved_list.append(spatial_retrieved)
 
-    spatial_query_tensor = torch.cat(spatial_query_list, dim=0)
-    spatial_retrieved_tensor = torch.cat(spatial_retrieved_list, dim=0)
+    image_query_tensor = torch.cat(image_query_list, dim=0)  # num_batches X N X D
+    spatial_query_tensor = torch.cat(spatial_query_list, dim=0) # num_batches X N X D
 
     # Compute PCC
-    pcc, pcc_val = compute_pcc(spatial_query_tensor, spatial_retrieved_tensor[:,0,:]) # compute pcc between query and first retrieved spatial embedding
+    pcc = compute_pcc(spatial_query_tensor, reference_spatial, reference_metadata, k=10) # compute mean pcc between query and k-retrieved spatial embedding
     print(f"{model_name} PCC: {pcc.mean():.4f}")
-    wandb_logger.log({f"{(model_name)} pcc": pcc.mean()}, step=0)
+    wandb_logger.update({f"{(model_name)} pcc": pcc.mean()})
     # Compute Recall@K
     for k in [10, 50, 100]:
-        recall = recall_at_K(spatial_query_tensor, spatial_retrieved_tensor, k=k)
+        recall = recall_at_K(spatial_query_tensor, reference_spatial, reference_metadata, k=k)
         print(f"{model_name} Recall@{k}: {recall:.4f}")
-        wandb_logger.log({f"{model_name} recall@{k}": recall}, step=0)
+        wandb_logger.update({f"{model_name} recall@{k}": recall})
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

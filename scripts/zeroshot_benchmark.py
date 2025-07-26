@@ -1,3 +1,5 @@
+# Retrieval evaluation logic adapted from BLIP (https://github.com/salesforce/BLIP/blob/main/eval_retrieval_video.py)
+
 import os
 import argparse
 from pathlib import Path
@@ -10,7 +12,7 @@ from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 from ml_collections.config_dict import ConfigDict
 import yaml
 
-from model.utils import load_dataset, load_model, cross_modal_retrieval, compute_pcc, recall_at_K, WandbLogger
+from model.utils import load_dataset, load_model, retrieval_score, eval_retrieval, WandbLogger
 from model.datasets import multimodal_collate
 
 def main(args):
@@ -37,8 +39,8 @@ def main(args):
 
     batch_size = config.get("test.batch_size", 1)
     num_samples = config.get("test.num_samples", len(test_dataset))
-    random_sampler = RandomSampler(test_dataset, num_samples=num_samples, replacement=False)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, sampler=random_sampler, num_workers=0, collate_fn=multimodal_collate)
+    sequential_sampler = SequentialSampler(test_dataset)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, sampler=sequential_sampler, num_workers=0, collate_fn=multimodal_collate)
 
     # Add wandb logging
     wandb_config = {
@@ -60,51 +62,18 @@ def main(args):
     assert reference_path is not None, f"Reference path for {model_name} is not set."
     
     # Retrieval
-    # -- Reference dataset preparation --
-    reference_images = torch.load(Path(reference_path, f"{model_name}_image_embeddings.pt"))
-    reference_spatial = torch.load(Path(reference_path, f"{model_name}_spatial_embeddings.pt"))
-    reference_metadata = pd.read_csv(Path(reference_path, f"{model_name}_reference_metadata.csv"))
-
-    image_query_list, spatial_query_list = [], []
-    for batch in test_dataloader:
-        image = batch["image"].to(device)
-        cell_type_composition = batch["cell_type_composition"].to(device)
-        if  model_name == "hierarchical_img_cellgraph":
-            spatial = batch["spatial_graph"].to(device)
-            inputs = [image, spatial, cell_type_composition]
-        elif model_name == "base_contrastive":
-            spatial = batch["spatial"].to(device)
-            inputs = [image, spatial, cell_type_composition]
-        elif model_name in ["openAI_CLIP", "PLIP", "OmiCLIP"]:
-            spatial = batch["spatial_text"]
-            inputs = [image, spatial]
-        else:
-            raise ValueError(f"Unknown model name: {model_name}")
-
-        with torch.no_grad():
-            if config.model.name == "hierarchical_img_cellgraph":
-                loss_kl, loss_contrastive, loss_ce, loss, image_embeds, spatial_embeds = model(*inputs) # TODO: multi-resolution embeddings
-            else:
-                loss, image_embeds, spatial_embeds = model(*inputs)
-
-        image_embeds = image_embeds.detach().cpu()
-        spatial_embeds = spatial_embeds.detach().cpu()
-
-        image_query_list.append(image_embeds.detach().cpu())
-        spatial_query_list.append(spatial_embeds.detach().cpu())
-
-    image_query_tensor = torch.cat(image_query_list, dim=0)  # num_batches X N X D
-    spatial_query_tensor = torch.cat(spatial_query_list, dim=0) # num_batches X N X D
-
+    scores_img2spatial, scores_spatial2img = retrieval_score(model, test_dataloader, device, config)
+    # Compute recall@K
+    result = eval_retrieval(scores_img2spatial, scores_spatial2img, test_dataloader.dataset)
+    wandb_logger.update(
+        {f"{model_name} image_recall_10": result["image_recall_10"],
+         f"{model_name} image_recall_50": result["image_recall_50"],
+         f"{model_name} image_recall_100": result["image_recall_100"],
+         f"{model_name} spatial_recall_10": result["spatial_recall_10"],
+         f"{model_name} spatial_recall_50": result["spatial_recall_50"],
+         f"{model_name} spatial_recall_100": result["spatial_recall_100"]}
+    )
     # Compute PCC
-    pcc = compute_pcc(spatial_query_tensor, reference_spatial, reference_metadata, k=10) # compute mean pcc between query and k-retrieved spatial embedding
-    print(f"{model_name} PCC: {pcc.mean():.4f}")
-    wandb_logger.update({f"{(model_name)} pcc": pcc.mean()})
-    # Compute Recall@K
-    for k in [10, 50, 100]:
-        recall = recall_at_K(spatial_query_tensor, reference_spatial, reference_metadata, k=k)
-        print(f"{model_name} Recall@{k}: {recall:.4f}")
-        wandb_logger.update({f"{model_name} recall@{k}": recall})
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

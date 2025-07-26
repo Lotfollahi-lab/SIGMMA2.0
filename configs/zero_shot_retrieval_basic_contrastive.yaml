@@ -1,0 +1,20 @@
+model:
+  name: basic_contrastive
+  checkpoint_path: TODO
+  reference_path: TODO
+  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
+  image_encoder_output_dim: 1024
+  spatial_encoder_output_dim: 64
+  projection_dim: 128
+  num_cell_types: 20
+  temperature: 0.01
+
+query_dataset:
+  image_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/image.zarr/
+  spatial_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/spatial_preprocessed_lymph_node.h5
+  indices_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/indices.zarr/
+  fov_size: 256
+
+test:
+  batch_size: 10
+  num_samples: 100

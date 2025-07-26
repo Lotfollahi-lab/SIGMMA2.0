@@ -4,6 +4,7 @@ from typing import Any, Callable, Optional, Union
 
 import copy
 import numpy as np
+import pandas as pd
 import collections
 from itertools import product
 
@@ -23,6 +24,31 @@ collate_fn_map[int] = collate_int_fn
 collate_fn_map[str] = collate_str_fn
 collate_fn_map[bytes] = collate_str_fn
 
+
+class MultimodalDataset(torch.utils.data.Dataset):
+    def __init__(self,
+                 manifest_file: Path | str):
+        manifest = pd.read_csv(manifest_file)
+        slides = manifest['sample_name']
+
+        modality_datasets = {}
+        for slide in slides:
+            image_file = Path(manifest.loc[manifest['sample_name'] == slide, 'hematoxylin_eosin_image'].values[0])
+            spatial_file = Path(manifest.loc[manifest['sample_name'] == slide, 'spatial_preprocessed'].values[0])
+            indices_file = Path(manifest.loc[manifest['sample_name'] == slide, 'index'].values[0])
+            modality_datasets[slide] = SpatialPatchDataset(
+                image_file=image_file,
+                spatial_file=spatial_file,
+                indices_file=indices_file
+            )
+        self.modality_datasets = modality_datasets
+
+    def __len__(self) -> int:
+        return sum(len(dataset) for dataset in self.modality_datasets.values())
+
+    def __getitem__(self, idx: int) -> Any:
+       sample_dict ={modality: dataset[idx] for modality, dataset in self.modality_datasets.items()}
+       return sample_dict
 
 class SpatialPatchDataset(torch.utils.data.Dataset):
     def __init__(
@@ -45,7 +71,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
         )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
-        sq.gr.spatial_neighbors(self.spatial_anndata, n_neighs=10, coord_type="generic")
+        sq.gr.spatial_neighbors(self.spatial_anndata, n_neighs=10, coord_type="generic") # TODO moved this to preprocessing step
         self.fov_size = fov_size
         self.number_of_genes = number_of_genes
         self.num_resolutions = num_resolutions
@@ -69,16 +95,17 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         )
 
         spatial_embedding = (
-            torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask])
-            .mean(dim=0)
+            torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask]).mean(dim=0)
+            # torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
         )
 
         # 1-2. spatial graph
-        sparse_maxtrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
+        sparse_matrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
 
-        spatial_graph = dgl.from_scipy(sparse_maxtrix)
+        spatial_graph = dgl.from_scipy(sparse_matrix)
         node_features = torch.Tensor(self.spatial_anndata[mask,:].X.toarray())
         # node_features = torch.Tensor(self.spatial_anndata.obsm['novae_latent'][mask])
+        # node_features = torch.Tensor(self.spatial_anndata.obsm['nemo_latent'][mask])
         spatial_graph.ndata['feat'] = node_features
 
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges)
@@ -124,10 +151,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             spatial_graph.edata['mask'] = edge_mask
             spatial_graph.edata['weight'] = torch.where(edge_mask == -1, torch.tensor(1.0), torch.tensor(0.0))
 
-            print("Disjoint spatial graph:")
-            print(disjoint_spatial_graph.num_nodes(), disjoint_spatial_graph.num_edges())
-            print("Spatial graph:")
-            print(spatial_graph.num_nodes(), spatial_graph.num_edges())
+            # print("Disjoint spatial graph:")
+            # print(disjoint_spatial_graph.num_nodes(), disjoint_spatial_graph.num_edges())
+            # print("Spatial graph:")
+            # print(spatial_graph.num_nodes(), spatial_graph.num_edges())
         # 1-3. spatial text (top K ranked genes in this FOV): same logic as loki preprocessing "https://github.com/GuangyuWangLab2021/Loki/blob/main/src/loki/preprocess.py"
         # exclude housekeeping genes
         if self.housekeeping_genes is not None:
@@ -142,6 +169,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         # 2. cell type composition
         cell_type_dict = collections.Counter(dict.fromkeys(self.spatial_anndata.obs["cell_types"].unique(),0))
         cell_type_counter = collections.Counter(self.spatial_anndata.obs["cell_types"][mask].dropna())
+        # cell_type_dict = collections.Counter(dict.fromkeys(self.spatial_anndata.obs["Annotation"].unique(),0))
+        # cell_type_counter = collections.Counter(self.spatial_anndata.obs["Annotation"][mask].dropna())
         cell_type_dict.update(cell_type_counter)
         cell_type_composition = torch.tensor([cell_type_dict[k] for k in sorted(cell_type_dict)])
         cell_type_composition = cell_type_composition.float() / cell_type_composition.sum() if cell_type_composition.sum() > 0 else cell_type_composition

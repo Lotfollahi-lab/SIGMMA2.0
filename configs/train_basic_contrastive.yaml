@@ -22,8 +22,6 @@ dataset2:
   indices_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Ovarian_Cancer_FFPE_XRrun/indices.zarr/
   fov_size: 256
   
-outdir: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/basic_contrastive
-
 train:
   batch_size: 512
   epochs: 100
@@ -31,7 +29,8 @@ train:
   weight_decay: 0.00001
   lr_step_size: 10
   lr_gamma: 0.1
-  save_every: 5000
-  eval_every: 5000
-  gradient_accumulation_steps: 40
-  num_workers: 0
+  save_every: 500
+  eval_every: 500
+  gradient_accumulation_steps: 20
+  num_workers: 16
+  max_num_samples_per_epoch: 5000 # Limit the number of samples for training

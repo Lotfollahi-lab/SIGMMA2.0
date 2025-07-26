@@ -1,5 +1,6 @@
 model:
   name: openAI_CLIP
+  pretrained_checkpoint_path: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/finetune_clip_402091/checkpoint-2500.pth
   temperature: 0.01
 
 dataset1:
@@ -14,8 +15,6 @@ dataset2:
   indices_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/Xenium_Prime_Ovarian_Cancer_FFPE_XRrun/indices.zarr/
   fov_size: 256
   
-outdir: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/benchmark
-
 test:
   batch_size: 128
   num_workers: 8

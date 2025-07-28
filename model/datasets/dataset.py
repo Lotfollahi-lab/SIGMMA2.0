@@ -4,6 +4,7 @@ from typing import Any, Callable, Optional, Union
 
 import copy
 import numpy as np
+import pandas as pd
 import collections
 from itertools import product
 
@@ -23,6 +24,29 @@ collate_fn_map[int] = collate_int_fn
 collate_fn_map[str] = collate_str_fn
 collate_fn_map[bytes] = collate_str_fn
 
+
+class MultiSectionDataset(torch.utils.data.Dataset):
+    def __init__(self,
+                 manifest_path: Path | str):
+        manifest =  pd.read_csv(manifest_path)
+        slides = manifest['sample_name']
+        li_datsets = []
+        for slide in slides:
+            image_file = manifest.loc[manifest['sample_name'] == slide, 'hematoxylin_eosin_image'].values[0]
+            spatial_file = manifest.loc[manifest['sample_name'] == slide, 'spatial_preprocessed'].values[0]
+            index_file = manifest.loc[manifest['sample_name'] == slide, 'index'].values[0]
+            dataset = SpatialPatchDataset(
+                image_file=Path(image_file),
+                spatial_file=Path(spatial_file),
+                indices_file=Path(index_file))
+            li_datsets.append(dataset)
+        self.modality_datasets = torch.utils.data.ConcatDataset(li_datsets)
+
+    def __getitem__(self, idx: int):
+        return self.modality_datasets[idx]
+
+    def __len__(self):
+        return len(self.modality_datasets)
 
 class SpatialPatchDataset(torch.utils.data.Dataset):
     def __init__(
@@ -55,8 +79,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         slice_args = self.index_array[idx, :, :]
-        y_start = slice_args[0, :].item()
-        x_start = slice_args[1, :].item()
+        y_start = slice_args[0, 0]
+        x_start = slice_args[1, 0]
 
         # 1-1. spatial embedding (cells inside this FOV)
         points = self.spatial_anndata.obsm["spatial"]

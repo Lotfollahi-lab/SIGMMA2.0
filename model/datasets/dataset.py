@@ -164,17 +164,17 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         spatial_text = " ".join(filtered_spatial_anndata.var.index[np.argsort(mean_exp)[-K:][::-1]]) # TODO: exclude empty strings
 
         # 2. cell type composition
-        cell_type_dict = collections.Counter(dict.fromkeys(self.spatial_anndata.obs["cell_types"].unique(),0))
-        cell_type_counter = collections.Counter(self.spatial_anndata.obs["cell_types"][mask].dropna())
+        cell_type_dict = collections.Counter(dict.fromkeys(self.spatial_anndata.obs["Annotation"].unique(),0))
+        cell_type_counter = collections.Counter(self.spatial_anndata.obs["Annotation"][mask].dropna())
         cell_type_dict.update(cell_type_counter)
         cell_type_composition = torch.tensor([cell_type_dict[k] for k in sorted(cell_type_dict)])
         cell_type_composition = cell_type_composition.float() / cell_type_composition.sum() if cell_type_composition.sum() > 0 else cell_type_composition
 
         # 3. cropped image
         fov_image = self.image_array[
+                    :,
                     y_start : y_start + self.fov_size, 
                     x_start : x_start + self.fov_size, 
-                    :
                     ]
         # → Resize image for ViT input
         transform = Compose([ToTensor(), Resize((224, 224))])

@@ -175,7 +175,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                     x_start : x_start + self.fov_size, 
                     ]
         # → Resize image for ViT input
-        transform = Compose([ToTensor(), Resize((224, 224))])
+        fov_image = torch.tensor(fov_image)
+        transform = Resize((224, 224))
         image = transform(fov_image)
 
         return {

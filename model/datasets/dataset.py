@@ -59,6 +59,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         num_resolutions: int = 3,
         housekeeping_genes: Optional[Sequence[str]] = None,
         hierarchical_graph: bool = True,
+        tissue_filtering_threshold: float = 10000,
     ):
         self.image_file = str(image_file)
         self.indices_file = str(indices_file)
@@ -66,6 +67,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         self.image_array = zarr.open(image_file, mode="r")
         self.index_array = zarr.open(indices_file, mode="r")
+        if tissue_filtering_threshold is not None:
+            mask = self.index_array[:, -1] >= tissue_filtering_threshold
+            valid_indices = np.where(mask)[0]
+            self.index_array = self.index_array[valid_indices]
         self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
         )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
@@ -78,10 +83,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
 
     def __getitem__(self, idx):
-        slice_args = self.index_array[idx, :, :]
-        y_start = slice_args[0, 0]
-        x_start = slice_args[1, 0]
-
+        slice_args = self.index_array[idx]
+        x_start, y_start, _ = np.uint32(slice_args)
         # 1-1. spatial embedding (cells inside this FOV)
         points = self.spatial_anndata.obsm["spatial"]
 

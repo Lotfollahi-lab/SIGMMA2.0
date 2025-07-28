@@ -93,16 +93,14 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         )
 
         spatial_embedding = (
-            torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask])
-            .mean(dim=0)
+            torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
         )
 
         # 1-2. spatial graph
         sparse_maxtrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
 
         spatial_graph = dgl.from_scipy(sparse_maxtrix)
-        node_features = torch.Tensor(self.spatial_anndata[mask,:].X.toarray())
-        # node_features = torch.Tensor(self.spatial_anndata.obsm['novae_latent'][mask])
+        node_features = torch.Tensor(self.spatial_anndata.obsm['nemo_latent'][mask])
         spatial_graph.ndata['feat'] = node_features
 
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges)

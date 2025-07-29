@@ -18,7 +18,9 @@ def load_dataset(config_dataset):
     """
     Load the training and evaluation datasets based on the configuration.
     """
-    dataset = MultiSectionDataset(manifest_path=Path(config_dataset.manifest_path))
+    dataset = MultiSectionDataset(manifest_path=Path(config_dataset.manifest_path),
+                                  cell_type_id_file=Path(config_dataset.celltype_id_file),
+                                  num_cell_types=config_dataset.num_cell_types)
     return dataset
 
 

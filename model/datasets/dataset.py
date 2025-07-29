@@ -26,7 +26,9 @@ collate_fn_map[bytes] = collate_str_fn
 
 class MultiSectionDataset(torch.utils.data.Dataset):
     def __init__(self,
-                 manifest_path: Path | str):
+                 manifest_path: Path | str,
+                 cell_type_id_file: Path | str,
+                 num_cell_types: int = 84):
         manifest =  pd.read_csv(manifest_path)
         slides = manifest['sample_name']
         li_datsets = []
@@ -37,7 +39,10 @@ class MultiSectionDataset(torch.utils.data.Dataset):
             dataset = SpatialPatchDataset(
                 image_file=Path(image_file),
                 spatial_file=Path(spatial_file),
-                indices_file=Path(index_file))
+                indices_file=Path(index_file),
+                cell_type_id_file=Path(cell_type_id_file),
+                num_cell_types=num_cell_types
+            )
             li_datsets.append(dataset)
         self.modality_datasets = torch.utils.data.ConcatDataset(li_datsets)
 
@@ -53,12 +58,14 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         image_file: Path | str,
         spatial_file: Path | str,
         indices_file: Path | str,
+        cell_type_id_file: Path | str,
         fov_size: int = 256,
         number_of_genes: int = 50,
         num_resolutions: int = 3,
+        num_cell_types: int = 84,
         housekeeping_genes: Optional[Sequence[str]] = None,
         hierarchical_graph: bool = True,
-        tissue_filtering_threshold: float = 10000,
+        tissue_filtering_threshold: float = 500,
     ):
         self.image_file = str(image_file)
         self.indices_file = str(indices_file)
@@ -73,9 +80,12 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
         )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
+        self.cell_type_id = pd.read_csv(cell_type_id_file, index_col=0).to_dict()['cell_type']
+
         self.fov_size = fov_size
         self.number_of_genes = number_of_genes
         self.num_resolutions = num_resolutions
+        self.num_cell_types = num_cell_types
         self.housekeeping_genes = housekeeping_genes
         self.hierarchical_graph = hierarchical_graph
 
@@ -163,11 +173,13 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         spatial_text = " ".join(filtered_spatial_anndata.var.index[np.argsort(mean_exp)[-K:][::-1]]) # TODO: exclude empty strings
 
         # 2. cell type composition
-        cell_type_dict = collections.Counter(dict.fromkeys(self.spatial_anndata.obs["Annotation"].unique(),0))
-        cell_type_counter = collections.Counter(self.spatial_anndata.obs["Annotation"][mask].dropna())
-        cell_type_dict.update(cell_type_counter)
-        cell_type_composition = torch.tensor([cell_type_dict[k] for k in sorted(cell_type_dict)])
-        cell_type_composition = cell_type_composition.float() / cell_type_composition.sum() if cell_type_composition.sum() > 0 else cell_type_composition
+        cell_type_ids = self.spatial_anndata.obs["Annotation"][mask].apply(lambda x:self.cell_type_id[x])
+        cell_type_ids_tensor = torch.tensor(cell_type_ids.tolist())
+        if len(cell_type_ids_tensor) != 0:
+            cell_type_composition = torch.bincount(cell_type_ids_tensor, minlength=self.num_cell_types)
+        else:
+            cell_type_composition = torch.zeros(self.num_cell_types)
+        cell_type_composition = cell_type_composition.float() / cell_type_composition.sum()
 
         # 3. cropped image
         fov_image = self.image_array[

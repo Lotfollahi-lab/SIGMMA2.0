@@ -84,7 +84,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         slice_args = self.index_array[idx]
-        x_start, y_start, _ = np.uint32(slice_args)
+        y_start, x_start, _ = np.uint32(slice_args)
         # 1-1. spatial embedding (cells inside this FOV)
         points = self.spatial_anndata.obsm["spatial"]
 
@@ -174,8 +174,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         # 3. cropped image
         fov_image = self.image_array[
                     :,
-                    y_start : y_start + self.fov_size, 
-                    x_start : x_start + self.fov_size, 
+                    y_start : y_start + self.fov_size,
+                    x_start : x_start + self.fov_size,
                     ]
         # → Resize image for ViT input
         fov_image = torch.tensor(fov_image)

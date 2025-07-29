@@ -9,7 +9,6 @@ import collections
 from itertools import product
 
 import scanpy
-import squidpy as sq
 import zarr
 import torch
 from torchvision.transforms import ToTensor, Resize, Compose
@@ -74,7 +73,6 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
         )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
-        sq.gr.spatial_neighbors(self.spatial_anndata, n_neighs=10, coord_type="generic")
         self.fov_size = fov_size
         self.number_of_genes = number_of_genes
         self.num_resolutions = num_resolutions

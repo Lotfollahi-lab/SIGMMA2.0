@@ -26,6 +26,7 @@ def load_dataset(config_dataset):
 
 def load_model(config:ConfigDict, 
                device:Optional[str]="cuda",
+               pretrained_ckpt_path:Optional[str]=None,
                train: Optional[bool]=True):
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
@@ -106,6 +107,10 @@ def load_model(config:ConfigDict,
         # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6, last_epoch=-1)
 
         return model, optimizer, lr_scheduler
+    elif pretrained_ckpt_path is not None:
+        assert Path(pretrained_ckpt_path).exists(), f"Pretrained checkpoint path {pretrained_ckpt_path} does not exist."
+        load_checkpoint(model, None, None, Path(pretrained_ckpt_path), device)
+        return model
     else:
         return model
 
@@ -167,6 +172,7 @@ def train_one_epoch(
                 lr_scheduler,
                 config.outdir,
                 global_step + 1,
+                epoch_index + 1,
             )
         if (
             eval_dataloader is not None
@@ -181,7 +187,7 @@ def train_one_epoch(
                                  "(eval)PCA_embeddings": wandb.Image(fig_eval)})
             torch.save({"eval_image_embeddings": eval_image_embedding,
                         "eval_spatial_embeddings": eval_spatial_embedding},
-                       f"{config.outdir}/embeddings_{global_step + 1}.pt")
+                       f"{config.outdir}/embeddings-{global_step + 1}.pt")
 
         if config.model.name == "hierarchical_img_cellgraph":
             wandb_logger.update({"(train)loss": loss,
@@ -202,9 +208,9 @@ def train_one_epoch(
 
 
 def save_checkpoint(
-    model, optimizer, lr_scheduler, output_dir, global_step, logger=None
+    model, optimizer, lr_scheduler, output_dir, global_step, epoch_index, logger=None
 ):
-    save_path = Path(output_dir) / f"checkpoint-{global_step}.pth"
+    save_path = Path(output_dir) / f"checkpoint-epoch{epoch_index}.pth"
     checkpoint = {
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
@@ -223,8 +229,10 @@ def load_checkpoint(model, optimizer, lr_scheduler, checkpoint_path, device="cud
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
     model.load_state_dict(checkpoint["model_state_dict"])
-    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-    lr_scheduler.load_state_dict(checkpoint["lr_scheduler_state_dict"])
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    if lr_scheduler is not None:
+        lr_scheduler.load_state_dict(checkpoint["lr_scheduler_state_dict"])
     global_step = checkpoint.get("global_step", 0)
 
     print(f"Loaded checkpoint from {checkpoint_path} at step {global_step}")

@@ -6,8 +6,6 @@ dataset:
   manifest_path: /nfs/team361/dj16/data/sanger_in_house_xenium/MANIFEST.csv
   fov_size: 256
   
-outdir: /nfs/team361/dj16/projects/img_spatial_alignment/outputs/benchmark
-
 train:
   batch_size: 128
   epochs: 100

@@ -52,6 +52,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.modality_datasets)
 
+
 class SpatialPatchDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -104,14 +105,18 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         )
 
         spatial_embedding = (
-            torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
-        )
+                            torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
+                            # torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
+                            )
 
         # 1-2. spatial graph
-        sparse_maxtrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
-
-        spatial_graph = dgl.from_scipy(sparse_maxtrix)
+        sparse_matrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
+        spatial_graph = dgl.from_scipy(sparse_matrix)
         node_features = torch.Tensor(self.spatial_anndata.obsm['nemo_latent'][mask])
+        # node_features = torch.Tensor(self.spatial_anndata[mask,:].X.toarray())
+        # node_features = torch.Tensor(self.spatial_anndata.obsm['novae_latent'][mask])
+
+        
         spatial_graph.ndata['feat'] = node_features
 
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges)
@@ -157,10 +162,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             spatial_graph.edata['mask'] = edge_mask
             spatial_graph.edata['weight'] = torch.where(edge_mask == -1, torch.tensor(1.0), torch.tensor(0.0))
 
-            print("Disjoint spatial graph:")
-            print(disjoint_spatial_graph.num_nodes(), disjoint_spatial_graph.num_edges())
-            print("Spatial graph:")
-            print(spatial_graph.num_nodes(), spatial_graph.num_edges())
+            # print("Disjoint spatial graph:")
+            # print(disjoint_spatial_graph.num_nodes(), disjoint_spatial_graph.num_edges())
+            # print("Spatial graph:")
+            # print(spatial_graph.num_nodes(), spatial_graph.num_edges())
         # 1-3. spatial text (top K ranked genes in this FOV): same logic as loki preprocessing "https://github.com/GuangyuWangLab2021/Loki/blob/main/src/loki/preprocess.py"
         # exclude housekeeping genes
         if self.housekeeping_genes is not None:
@@ -173,6 +178,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         spatial_text = " ".join(filtered_spatial_anndata.var.index[np.argsort(mean_exp)[-K:][::-1]]) # TODO: exclude empty strings
 
         # 2. cell type composition
+
         cell_type_ids = self.spatial_anndata.obs["Annotation"][mask].apply(lambda x:self.cell_type_id[x])
         cell_type_ids_tensor = torch.tensor(cell_type_ids.tolist())
         if len(cell_type_ids_tensor) != 0:

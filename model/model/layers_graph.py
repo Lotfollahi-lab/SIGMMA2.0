@@ -20,7 +20,6 @@ class StructureLearning(torch.nn.Module):
                  temperature:float=0.5):
         super(StructureLearning, self).__init__()
         self.att = Parameter(torch.Tensor(1, input_dim*2))
-        torch.nn.init.xavier_uniform_(self.att)
 
         self.emb_layer = emb_layer
         if emb_layer > 0:
@@ -38,6 +37,11 @@ class StructureLearning(torch.nn.Module):
         self.sparse = sparse
         self.threshold = threshold
         self.temperature = temperature
+
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        torch.nn.init.xavier_uniform_(self.att)
 
     def edge_attention(self, edges):
         src, tgt = edges.src['learned_node_feat'], edges.dst['learned_node_feat']
@@ -144,16 +148,7 @@ class GRAPHLayer(torch.nn.Module):
             self.sls.append(StructureLearning(output_dim, sparse='hard', emb_layer=1, threshold=threshold, temperature=temperature))
         self.threshold = threshold
         self.temperature = temperature
-        self.weight = Parameter(torch.Tensor(output_dim, output_dim))
-        if bias:
-            self.bias = Parameter(torch.Tensor(output_dim))
-        else:
-            self.register_parameter('bias', None)
 
-    def reset_parameters(self):
-        # TODO
-        return
-        
     def forward(self, 
                 g: dgl.graph, 
                 h: torch.Tensor,

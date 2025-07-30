@@ -9,7 +9,6 @@ import collections
 from itertools import product
 
 import scanpy
-import squidpy as sq
 import zarr
 import torch
 from torchvision.transforms import ToTensor, Resize, Compose
@@ -25,30 +24,34 @@ collate_fn_map[str] = collate_str_fn
 collate_fn_map[bytes] = collate_str_fn
 
 
-class MultimodalDataset(torch.utils.data.Dataset):
+class MultiSectionDataset(torch.utils.data.Dataset):
     def __init__(self,
-                 manifest_file: Path | str):
-        manifest = pd.read_csv(manifest_file)
+                 manifest_path: Path | str,
+                 cell_type_id_file: Path | str,
+                 num_cell_types: int = 84):
+        manifest =  pd.read_csv(manifest_path)
         slides = manifest['sample_name']
-
-        modality_datasets = {}
+        li_datsets = []
         for slide in slides:
-            image_file = Path(manifest.loc[manifest['sample_name'] == slide, 'hematoxylin_eosin_image'].values[0])
-            spatial_file = Path(manifest.loc[manifest['sample_name'] == slide, 'spatial_preprocessed'].values[0])
-            indices_file = Path(manifest.loc[manifest['sample_name'] == slide, 'index'].values[0])
-            modality_datasets[slide] = SpatialPatchDataset(
-                image_file=image_file,
-                spatial_file=spatial_file,
-                indices_file=indices_file
+            image_file = manifest.loc[manifest['sample_name'] == slide, 'hematoxylin_eosin_image'].values[0]
+            spatial_file = manifest.loc[manifest['sample_name'] == slide, 'spatial_preprocessed'].values[0]
+            index_file = manifest.loc[manifest['sample_name'] == slide, 'index'].values[0]
+            dataset = SpatialPatchDataset(
+                image_file=Path(image_file),
+                spatial_file=Path(spatial_file),
+                indices_file=Path(index_file),
+                cell_type_id_file=Path(cell_type_id_file),
+                num_cell_types=num_cell_types
             )
-        self.modality_datasets = modality_datasets
+            li_datsets.append(dataset)
+        self.modality_datasets = torch.utils.data.ConcatDataset(li_datsets)
 
-    def __len__(self) -> int:
-        return sum(len(dataset) for dataset in self.modality_datasets.values())
+    def __getitem__(self, idx: int):
+        return self.modality_datasets[idx]
 
-    def __getitem__(self, idx: int) -> Any:
-       sample_dict ={modality: dataset[idx] for modality, dataset in self.modality_datasets.items()}
-       return sample_dict
+    def __len__(self):
+        return len(self.modality_datasets)
+
 
 class SpatialPatchDataset(torch.utils.data.Dataset):
     def __init__(
@@ -56,11 +59,14 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         image_file: Path | str,
         spatial_file: Path | str,
         indices_file: Path | str,
+        cell_type_id_file: Path | str,
         fov_size: int = 256,
         number_of_genes: int = 50,
         num_resolutions: int = 3,
+        num_cell_types: int = 84,
         housekeeping_genes: Optional[Sequence[str]] = None,
         hierarchical_graph: bool = True,
+        tissue_filtering_threshold: float = 500,
     ):
         self.image_file = str(image_file)
         self.indices_file = str(indices_file)
@@ -68,22 +74,26 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         self.image_array = zarr.open(image_file, mode="r")
         self.index_array = zarr.open(indices_file, mode="r")
+        if tissue_filtering_threshold is not None:
+            mask = self.index_array[:, -1] >= tissue_filtering_threshold
+            valid_indices = np.where(mask)[0]
+            self.index_array = self.index_array[valid_indices]
         self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
         )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
-        sq.gr.spatial_neighbors(self.spatial_anndata, n_neighs=10, coord_type="generic") # TODO moved this to preprocessing step
+        self.cell_type_id = pd.read_csv(cell_type_id_file, index_col=0).to_dict()['cell_type']
+
         self.fov_size = fov_size
         self.number_of_genes = number_of_genes
         self.num_resolutions = num_resolutions
+        self.num_cell_types = num_cell_types
         self.housekeeping_genes = housekeeping_genes
         self.hierarchical_graph = hierarchical_graph
 
 
     def __getitem__(self, idx):
-        slice_args = self.index_array[idx, :, :]
-        y_start = slice_args[0, :].item()
-        x_start = slice_args[1, :].item()
-
+        slice_args = self.index_array[idx]
+        y_start, x_start, _ = np.uint32(slice_args)
         # 1-1. spatial embedding (cells inside this FOV)
         points = self.spatial_anndata.obsm["spatial"]
 
@@ -95,17 +105,18 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         )
 
         spatial_embedding = (
-            torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask]).mean(dim=0)
-            # torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
-        )
+                            torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
+                            # torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
+                            )
 
         # 1-2. spatial graph
         sparse_matrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
-
         spatial_graph = dgl.from_scipy(sparse_matrix)
-        node_features = torch.Tensor(self.spatial_anndata[mask,:].X.toarray())
+        node_features = torch.Tensor(self.spatial_anndata.obsm['nemo_latent'][mask])
+        # node_features = torch.Tensor(self.spatial_anndata[mask,:].X.toarray())
         # node_features = torch.Tensor(self.spatial_anndata.obsm['novae_latent'][mask])
-        # node_features = torch.Tensor(self.spatial_anndata.obsm['nemo_latent'][mask])
+
+        
         spatial_graph.ndata['feat'] = node_features
 
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges)
@@ -167,22 +178,24 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         spatial_text = " ".join(filtered_spatial_anndata.var.index[np.argsort(mean_exp)[-K:][::-1]]) # TODO: exclude empty strings
 
         # 2. cell type composition
-        cell_type_dict = collections.Counter(dict.fromkeys(self.spatial_anndata.obs["cell_types"].unique(),0))
-        cell_type_counter = collections.Counter(self.spatial_anndata.obs["cell_types"][mask].dropna())
-        # cell_type_dict = collections.Counter(dict.fromkeys(self.spatial_anndata.obs["Annotation"].unique(),0))
-        # cell_type_counter = collections.Counter(self.spatial_anndata.obs["Annotation"][mask].dropna())
-        cell_type_dict.update(cell_type_counter)
-        cell_type_composition = torch.tensor([cell_type_dict[k] for k in sorted(cell_type_dict)])
+
+        cell_type_ids = self.spatial_anndata.obs["Annotation"][mask].apply(lambda x:self.cell_type_id[x])
+        cell_type_ids_tensor = torch.tensor(cell_type_ids.tolist())
+        if len(cell_type_ids_tensor) != 0:
+            cell_type_composition = torch.bincount(cell_type_ids_tensor, minlength=self.num_cell_types).long()
+        else:
+            cell_type_composition = torch.zeros(self.num_cell_types)
         cell_type_composition = cell_type_composition.float() / cell_type_composition.sum() if cell_type_composition.sum() > 0 else cell_type_composition
 
         # 3. cropped image
         fov_image = self.image_array[
-                    y_start : y_start + self.fov_size, 
-                    x_start : x_start + self.fov_size, 
-                    :
+                    :,
+                    y_start : y_start + self.fov_size,
+                    x_start : x_start + self.fov_size,
                     ]
         # → Resize image for ViT input
-        transform = Compose([ToTensor(), Resize((224, 224))])
+        fov_image = torch.tensor(fov_image) / 255.0
+        transform = Resize((224, 224))
         image = transform(fov_image)
 
         return {
@@ -191,15 +204,15 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             "spatial_graph": spatial_graph,
             "spatial_text": spatial_text,
             "cell_type_composition": cell_type_composition,
-            "image_file": self.image_file,
-            "indices_file": self.indices_file,
-            "spatial_file": self.spatial_file,
-            "fov_size": self.fov_size,
+            # "image_file": self.image_file,
+            # "indices_file": self.indices_file,
+            # "spatial_file": self.spatial_file,
+            # "fov_size": self.fov_size,
             "index": idx,
         }
 
     def __len__(self) -> int:
-        return self.index_array.shape[0]
+        return len(self.index_array)
 
 def multimodal_collate(batch: collections.abc.MutableMapping):
     elem = batch[0]

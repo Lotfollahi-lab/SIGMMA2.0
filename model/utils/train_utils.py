@@ -4,7 +4,7 @@ from typing import Optional
 from ml_collections.config_dict import ConfigDict
 
 import timm
-from model.datasets.dataset import SpatialPatchDataset
+from model.datasets.dataset import MultiSectionDataset
 from model.model import hierarchical_img_cellgraph, base_contrastive, openAI_CLIP, PLIP, OmiCLIP
 from transformers import CLIPProcessor, CLIPModel
 import loki.utils
@@ -18,14 +18,9 @@ def load_dataset(config_dataset):
     """
     Load the training and evaluation datasets based on the configuration.
     """
-
-    dataset = SpatialPatchDataset(
-        image_file=Path(config_dataset.image_file),
-        spatial_file=Path(config_dataset.spatial_file),
-        indices_file=Path(config_dataset.indices_file),
-        fov_size=config_dataset.fov_size,
-    )
-
+    dataset = MultiSectionDataset(manifest_path=Path(config_dataset.manifest_path),
+                                  cell_type_id_file=Path(config_dataset.celltype_id_file),
+                                  num_cell_types=config_dataset.num_cell_types)
     return dataset
 
 

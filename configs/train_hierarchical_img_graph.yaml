@@ -3,7 +3,7 @@ model:
   pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
   image_encoder_input_dim: 1024
   image_encoder_output_dim: 512
-  spatial_encoder_input_dim: 4624 # cell vector dimension from pretrained model (novae: 64) or raw cell vector dimension (e.g. 4624)
+  spatial_encoder_input_dim: 384 # cell vector dimension from pretrained model (novae: 64, nemo: 384) or raw cell vector dimension (e.g. 4624)
   spatial_encoder_output_dim: 512
   num_resolutions: 3
   num_cell_types: 84
@@ -31,4 +31,4 @@ train:
   eval_every: 100
   gradient_accumulation_steps: 2
   num_workers: 16
-  max_num_samples_per_epoch: 5000 # Limit the number of samples for training
+  max_num_samples_per_epoch: 1000 # Limit the number of samples for training

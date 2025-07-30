@@ -176,10 +176,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         cell_type_ids = self.spatial_anndata.obs["Annotation"][mask].apply(lambda x:self.cell_type_id[x])
         cell_type_ids_tensor = torch.tensor(cell_type_ids.tolist())
         if len(cell_type_ids_tensor) != 0:
-            cell_type_composition = torch.bincount(cell_type_ids_tensor, minlength=self.num_cell_types)
+            cell_type_composition = torch.bincount(cell_type_ids_tensor, minlength=self.num_cell_types).long()
         else:
             cell_type_composition = torch.zeros(self.num_cell_types)
-        cell_type_composition = cell_type_composition.float() / cell_type_composition.sum()
+        cell_type_composition = cell_type_composition.float() / cell_type_composition.sum() if cell_type_composition.sum() > 0 else cell_type_composition
 
         # 3. cropped image
         fov_image = self.image_array[
@@ -188,7 +188,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                     x_start : x_start + self.fov_size,
                     ]
         # → Resize image for ViT input
-        fov_image = torch.tensor(fov_image)
+        fov_image = torch.tensor(fov_image) / 255.0
         transform = Resize((224, 224))
         image = transform(fov_image)
 
@@ -198,15 +198,15 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             "spatial_graph": spatial_graph,
             "spatial_text": spatial_text,
             "cell_type_composition": cell_type_composition,
-            "image_file": self.image_file,
-            "indices_file": self.indices_file,
-            "spatial_file": self.spatial_file,
-            "fov_size": self.fov_size,
+            # "image_file": self.image_file,
+            # "indices_file": self.indices_file,
+            # "spatial_file": self.spatial_file,
+            # "fov_size": self.fov_size,
             "index": idx,
         }
 
     def __len__(self) -> int:
-        return self.index_array.shape[0]
+        return len(self.index_array)
 
 def multimodal_collate(batch: collections.abc.MutableMapping):
     elem = batch[0]

@@ -15,6 +15,8 @@ import yaml
 from model.utils import load_dataset, load_model, retrieval_score, eval_retrieval, WandbLogger
 from model.datasets import multimodal_collate
 
+import wandb
+
 def main(args):
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
@@ -55,17 +57,17 @@ def main(args):
     assert reference_path is not None, f"Reference path for {model_name} is not set."
     
     # Retrieval
-    scores_img2spatial, scores_spatial2img = retrieval_score(model, reference_dataloader, device, config)
+    scores_img2spatial, scores_spatial2img = retrieval_score(model, query_dataloader, reference_dataloader, device, config)
+
     # Compute recall@K
-    result = eval_retrieval(scores_img2spatial, scores_spatial2img, query_dataloader, reference_dataloader)
-    wandb_logger.update(
-        {f"{model_name} image_recall_10": result["image_recall_10"],
-         f"{model_name} image_recall_50": result["image_recall_50"],
-         f"{model_name} image_recall_100": result["image_recall_100"],
-         f"{model_name} spatial_recall_10": result["spatial_recall_10"],
-         f"{model_name} spatial_recall_50": result["spatial_recall_50"],
-         f"{model_name} spatial_recall_100": result["spatial_recall_100"]}
-    )
+    result = eval_retrieval(scores_img2spatial, scores_spatial2img)
+
+    table = wandb.Table(columns=["metric", "value"])
+    for metric, value in result.items():
+        table.add_data(metric, value)
+        print(f"{metric}: {value}")
+    wandb_logger.update({f"{model_name}_retrieval_results": table})
+
     # Compute PCC
 
 if __name__ == "__main__":

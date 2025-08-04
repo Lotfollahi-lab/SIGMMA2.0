@@ -6,16 +6,25 @@ import pandas as pd
 from scipy.stats import pearsonr
 
 @torch.no_grad()
-def retrieval_score(model, data_loader, device, config):
-    model_name = config.model.get("name")
+def retrieval_score(model, query_dataloader, reference_dataloader, device, config):
     model.eval()
 
-    num_datapoints = len(data_loader.dataset)
-    batch_size = config.get("test.batch_size", 1)
+    # Load embeddings for query and reference datasets
+    img_embeds_query, spatial_embeds_query = load_embeddings(model, query_dataloader, device, config)
+    img_embeds_reference, spatial_embeds_reference = load_embeddings(model, reference_dataloader, device, config)
+
+    # Cosine similarity scores
+    score_matrix_img2spatial = img_embeds_query @ spatial_embeds_reference.T
+    score_matrix_spatial2img = spatial_embeds_query @ img_embeds_reference.T
+
+    return score_matrix_img2spatial.cpu().numpy(), score_matrix_spatial2img.cpu().numpy()
+
+def load_embeddings(model, dataloader, device, config):
+    model_name = config.model.get("name")
 
     image_embed_li = []
     spatial_embed_li = []
-    for batch in data_loader:
+    for batch in dataloader:
         image = batch["image"].to(device)
         cell_type_composition = batch["cell_type_composition"].to(device)
 
@@ -44,41 +53,35 @@ def retrieval_score(model, data_loader, device, config):
 
         image_embed_li.append(image_embed.detach().cpu())
         spatial_embed_li.append(spatial_embed.detach().cpu())
+
     img_embeds = torch.cat(image_embed_li, dim=0)
     spatial_embeds = torch.cat(spatial_embed_li, dim=0)
+    return img_embeds, spatial_embeds
 
-    score_matrix_img2spatial = img_embeds @ spatial_embeds.T
-    score_matrix_spatial2img = spatial_embeds @ img_embeds.T
-
-    return score_matrix_img2spatial.cpu().numpy(), score_matrix_spatial2img.cpu().numpy()
-
-def eval_retrieval(scores_img2spatial, scores_spatial2img, query_dataloader, reference_dataloader):
-    num_queries = len(query_dataloader.dataset)
-    num_reference = len(reference_dataloader.dataset)
-    target_len = num_reference - num_queries
-
-    gt_indices = np.arange(num_queries) + target_len
+def eval_retrieval(scores_img2spatial, scores_spatial2img):
+    num_reference = scores_img2spatial.shape[1]
+    gt_indices = np.arange(scores_img2spatial.shape[0])
     ranks = np.zeros(scores_img2spatial.shape[0])
     for index, score in enumerate(scores_img2spatial):
         inds = np.argsort(score)[::-1]
         ranks[index] = np.where(inds == gt_indices[index])[0][0]
-    img_r10 = 100 *len(np.where(ranks < 10)[0]) / len(ranks)
-    img_r50 = 100 *len(np.where(ranks < 50)[0]) / len(ranks)
-    img_r100 = 100 *len(np.where(ranks < 100)[0]) / len(ranks)
+    img_r_5percent = 100 *len(np.where(ranks < int(num_reference*0.05))[0]) / len(ranks)
+    img_r_10percent = 100 *len(np.where(ranks < int(num_reference*0.1))[0]) / len(ranks)
+    img_r_15percent = 100 *len(np.where(ranks < int(num_reference*0.15))[0]) / len(ranks)
 
     for index, score in enumerate(scores_spatial2img):
         inds = np.argsort(score)[::-1]
         ranks[index] = np.where(inds == gt_indices[index])[0][0]
-    spatial_r10 = 100 *len(np.where(ranks < 10)[0]) / len(ranks)
-    spatial_r50 = 100 *len(np.where(ranks < 50)[0]) / len(ranks)
-    spatial_r100 = 100 *len(np.where(ranks < 100)[0]) / len(ranks)
+    spatial_r_5percent = 100 *len(np.where(ranks < int(num_reference*0.05))[0]) / len(ranks)
+    spatial_r_10percent = 100 *len(np.where(ranks < int(num_reference*0.1))[0]) / len(ranks)
+    spatial_r_15percent = 100 *len(np.where(ranks < int(num_reference*0.15))[0]) / len(ranks)
 
-    eval_results = {"image_recall_10": img_r10,
-                     "image_recall_50": img_r50,
-                     "image_recall_100": img_r100,
-                     "spatial_recall_10": spatial_r10,
-                     "spatial_recall_50": spatial_r50,
-                     "spatial_recall_100": spatial_r100}
+    eval_results = {"image_recall@5percent": img_r_5percent,
+                     "image_recall@10percent": img_r_10percent,
+                     "image_recall@15percent": img_r_15percent,
+                     "spatial_recall@5percent": spatial_r_5percent,
+                     "spatial_recall@10percent": spatial_r_10percent,
+                     "spatial_recall@15percent": spatial_r_15percent}
     return eval_results
 
 def cross_modal_retrieval(query_embedding: torch.Tensor,

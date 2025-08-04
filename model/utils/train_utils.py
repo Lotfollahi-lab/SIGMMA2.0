@@ -285,8 +285,8 @@ def evaluate(config, model, eval_dataloader, device):
     all_image_embeddings = torch.cat(all_image_embeddings, dim=0)
     all_spatial_embeddings = torch.cat(all_spatial_embeddings, dim=0)
 
-    score_matrix_img2spatial, score_matrix_spatial2image = retrieval_score(model, eval_dataloader, device, config)
-    eval_results = eval_retrieval(score_matrix_img2spatial, score_matrix_spatial2image, eval_dataloader, eval_dataloader)
+    score_matrix_img2spatial, score_matrix_spatial2image = retrieval_score(model, eval_dataloader, eval_dataloader, device, config)
+    eval_results = eval_retrieval(score_matrix_img2spatial, score_matrix_spatial2image)
 
     return avg_loss, all_image_embeddings, all_spatial_embeddings, score_matrix_img2spatial, score_matrix_spatial2image, eval_results
 

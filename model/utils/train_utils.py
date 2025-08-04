@@ -3,9 +3,11 @@ from pathlib import Path
 from typing import Optional
 from ml_collections.config_dict import ConfigDict
 
+import pickle
 import timm
 from model.datasets.dataset import MultiSectionDataset
 from model.model import hierarchical_img_cellgraph, base_contrastive, openAI_CLIP, PLIP, OmiCLIP
+from .evaluate_retrieval import retrieval_score, eval_retrieval
 from transformers import CLIPProcessor, CLIPModel
 import loki.utils
 
@@ -178,13 +180,19 @@ def train_one_epoch(
             eval_dataloader is not None
             and (global_step + 1) % config.train.eval_every == 0
         ):
-            eval_loss, eval_image_embedding, eval_spatial_embedding = evaluate(config, model, eval_dataloader, device)
+            eval_loss, eval_image_embedding, eval_spatial_embedding, score_matrix_img2spatial, score_matrix_spatial2image, eval_results = evaluate(config, model, eval_dataloader, device)
             fig_eval = PCA_embeddings(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu())
 
             fig_train = PCA_embeddings(image_embedding.detach().cpu(), spatial_embedding.detach().cpu())
             wandb_logger.update({"(train)PCA_embeddings": wandb.Image(fig_train),
                                  "(eval)loss": eval_loss,
-                                 "(eval)PCA_embeddings": wandb.Image(fig_eval)})
+                                 "(eval)PCA_embeddings": wandb.Image(fig_eval),
+                                 "(eval)image recall@10": eval_results["image_recall_10"],
+                                 "(eval)image recall@50": eval_results["image_recall_50"],
+                                 "(eval)image recall@100": eval_results["image_recall_100"],
+                                 "(eval)spatial recall@10": eval_results["spatial_recall_10"],
+                                 "(eval)spatial recall@50": eval_results["spatial_recall_50"],
+                                 "(eval)spatial recall@100": eval_results["spatial_recall_100"]})
             torch.save({"eval_image_embeddings": eval_image_embedding,
                         "eval_spatial_embeddings": eval_spatial_embedding},
                        f"{config.outdir}/embeddings-{global_step + 1}.pt")
@@ -277,7 +285,10 @@ def evaluate(config, model, eval_dataloader, device):
     all_image_embeddings = torch.cat(all_image_embeddings, dim=0)
     all_spatial_embeddings = torch.cat(all_spatial_embeddings, dim=0)
 
-    return avg_loss, all_image_embeddings, all_spatial_embeddings
+    score_matrix_img2spatial, score_matrix_spatial2image = retrieval_score(model, eval_dataloader, device, config)
+    eval_results = eval_retrieval(score_matrix_img2spatial, score_matrix_spatial2image, eval_dataloader, eval_dataloader)
+
+    return avg_loss, all_image_embeddings, all_spatial_embeddings, score_matrix_img2spatial, score_matrix_spatial2image, eval_results
 
 def PCA_embeddings(image_embeddings, spatial_embeddings, num_samples=1000):
     """

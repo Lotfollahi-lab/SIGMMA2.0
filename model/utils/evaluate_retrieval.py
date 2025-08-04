@@ -52,18 +52,23 @@ def retrieval_score(model, data_loader, device, config):
 
     return score_matrix_img2spatial.cpu().numpy(), score_matrix_spatial2img.cpu().numpy()
 
-def eval_retrieval(scores_img2spatial, scores_spatial2img, img_spatial_dataset):
+def eval_retrieval(scores_img2spatial, scores_spatial2img, query_dataloader, reference_dataloader):
+    num_queries = len(query_dataloader.dataset)
+    num_reference = len(reference_dataloader.dataset)
+    target_len = num_reference - num_queries
+
+    gt_indices = np.arange(num_queries) + target_len
     ranks = np.zeros(scores_img2spatial.shape[0])
     for index, score in enumerate(scores_img2spatial):
         inds = np.argsort(score)[::-1]
-        ranks[index] = np.where(inds == img_spatial_dataset[index])[0][0]
+        ranks[index] = np.where(inds == gt_indices[index])[0][0]
     img_r10 = 100 *len(np.where(ranks < 10)[0]) / len(ranks)
     img_r50 = 100 *len(np.where(ranks < 50)[0]) / len(ranks)
     img_r100 = 100 *len(np.where(ranks < 100)[0]) / len(ranks)
 
     for index, score in enumerate(scores_spatial2img):
         inds = np.argsort(score)[::-1]
-        ranks[index] = np.where(inds == img_spatial_dataset[index])[0][0]
+        ranks[index] = np.where(inds == gt_indices[index])[0][0]
     spatial_r10 = 100 *len(np.where(ranks < 10)[0]) / len(ranks)
     spatial_r50 = 100 *len(np.where(ranks < 50)[0]) / len(ranks)
     spatial_r100 = 100 *len(np.where(ranks < 100)[0]) / len(ranks)

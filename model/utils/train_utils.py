@@ -187,12 +187,12 @@ def train_one_epoch(
             wandb_logger.update({"(train)PCA_embeddings": wandb.Image(fig_train),
                                  "(eval)loss": eval_loss,
                                  "(eval)PCA_embeddings": wandb.Image(fig_eval),
-                                 "(eval)image recall@10": eval_results["image_recall_10"],
-                                 "(eval)image recall@50": eval_results["image_recall_50"],
-                                 "(eval)image recall@100": eval_results["image_recall_100"],
-                                 "(eval)spatial recall@10": eval_results["spatial_recall_10"],
-                                 "(eval)spatial recall@50": eval_results["spatial_recall_50"],
-                                 "(eval)spatial recall@100": eval_results["spatial_recall_100"]})
+                                 "(eval)image recall@5percent": eval_results["image_recall_5@percent"],
+                                 "(eval)image recall@10percent": eval_results["image_recall_10@percent"],
+                                 "(eval)image recall@15percent": eval_results["image_recall_15@percent"],
+                                 "(eval)spatial recall@5percent": eval_results["spatial_recall_5@percent"],
+                                 "(eval)spatial recall@10percent": eval_results["spatial_recall_10@percent"],
+                                 "(eval)spatial recall@15percent": eval_results["spatial_recall_15@percent"]})
             torch.save({"eval_image_embeddings": eval_image_embedding,
                         "eval_spatial_embeddings": eval_spatial_embedding},
                        f"{config.outdir}/embeddings-{global_step + 1}.pt")

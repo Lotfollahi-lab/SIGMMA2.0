@@ -80,7 +80,11 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             self.index_array = self.index_array[valid_indices]
         self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
-        )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
+        )
+        assert 'nemo_latent' in self.spatial_anndata.obsm, "'nemo_latent' embedding is required in the spatial anndata obsm, please run the preprocessing script first."
+        assert 'spatial_connectivities' in self.spatial_anndata.obsp, "'spatial_connectivities' is required in the spatial anndata obsp, please run the preprocessing script first."
+        assert 'Annotation' in self.spatial_anndata.obs, "'Annotation' is required in the spatial anndata obs, please run the preprocessing script first."
+
         self.cell_type_id = pd.read_csv(cell_type_id_file, index_col=0).to_dict()['cell_type']
 
         self.fov_size = fov_size

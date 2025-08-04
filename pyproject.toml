@@ -6,24 +6,25 @@ authors = [
     {name = "Dabin Jeong", email = "dj16@sanger.ac.uk"},
 ]
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.12"
 dependencies = ["novae (>=0.2.4,<0.3.0)",
                 "uni @ git+https://github.com/mahmoodlab/UNI.git",
                 "ipykernel (>=6.29.5,<7.0.0)",
                 "tifffile (>=2025.5.26,<2026.0.0)",
                 "pot (>=0.9.5,<0.10.0)",
                 "ml-collections (>=1.1.0,<2.0.0)",
-                "zarr (==2.16.1)",
+                "zarr (==3.1)",
                 "scanpy (>=1.11.2,<2.0.0)",
-                "numcodecs (==0.11.0)",
+                "numcodecs (==0.14)",
                 "wandb (>=0.20.1,<0.21.0)",
                 "optuna (>=4.3.0,<5.0.0)",
                 "gseapy (>=1.1.9,<2.0.0)",
                 "xarray-dataclasses (>=1.9.1,<2.0.0)",
                 "torch (==2.3.1)",
-                "dgl @ https://data.dgl.ai/wheels-test/torch-2.3/cu121/dgl-2.5a241214%2Bcu121-cp312-cp312-manylinux1_x86_64.whl",
+                "dgl @ https://data.dgl.ai/wheels-test/torch-2.3/cu121/dgl-2.5a241214%2Bcu121-cp311-cp311-manylinux1_x86_64.whl",
                 "nichejepa @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/nichejepa",
-                "loki @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/Loki/src"]
+                "loki @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/Loki/src",
+                "shapely (>=2.0,<3.0)"]
 
 [tool.poetry.dependencies]
 loki = {develop = true}

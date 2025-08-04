@@ -66,7 +66,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         num_cell_types: int = 84,
         housekeeping_genes: Optional[Sequence[str]] = None,
         hierarchical_graph: bool = True,
-        tissue_filtering_threshold: float = 500,
+        tissue_filtering_threshold: float = 20000,
     ):
         self.image_file = str(image_file)
         self.indices_file = str(indices_file)
@@ -80,7 +80,11 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             self.index_array = self.index_array[valid_indices]
         self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
-        )  # Must be preprocessed with `novae` to have the `novae_latent` field and `obsm["spatial"]` field.
+        )
+        assert 'nemo_latent' in self.spatial_anndata.obsm, "'nemo_latent' embedding is required in the spatial anndata obsm, please run the preprocessing script first."
+        assert 'spatial_connectivities' in self.spatial_anndata.obsp, "'spatial_connectivities' is required in the spatial anndata obsp, please run the preprocessing script first."
+        assert 'Annotation' in self.spatial_anndata.obs, "'Annotation' is required in the spatial anndata obs, please run the preprocessing script first."
+
         self.cell_type_id = pd.read_csv(cell_type_id_file, index_col=0).to_dict()['cell_type']
 
         self.fov_size = fov_size
@@ -104,20 +108,15 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             & (points[:, 1] < y_start + self.fov_size)
         )
 
-        spatial_embedding = (
-                            torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
-                            # torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
-                            )
-
+        cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
+        spatial_embedding = cell_embeddings.mean(dim=0)
+        if torch.isnan(spatial_embedding).any():
+            spatial_embedding = spatial_embedding.nan_to_num(0.0)
         # 1-2. spatial graph
         sparse_matrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
         spatial_graph = dgl.from_scipy(sparse_matrix)
-        node_features = torch.Tensor(self.spatial_anndata.obsm['nemo_latent'][mask])
-        # node_features = torch.Tensor(self.spatial_anndata[mask,:].X.toarray())
-        # node_features = torch.Tensor(self.spatial_anndata.obsm['novae_latent'][mask])
 
-        
-        spatial_graph.ndata['feat'] = node_features
+        spatial_graph.ndata['feat'] = cell_embeddings
 
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges)
         # Edge mask: -1 (intra-subgraph edges) or 0 (inter-subgraph edges)
@@ -162,10 +161,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             spatial_graph.edata['mask'] = edge_mask
             spatial_graph.edata['weight'] = torch.where(edge_mask == -1, torch.tensor(1.0), torch.tensor(0.0))
 
-            # print("Disjoint spatial graph:")
-            # print(disjoint_spatial_graph.num_nodes(), disjoint_spatial_graph.num_edges())
-            # print("Spatial graph:")
-            # print(spatial_graph.num_nodes(), spatial_graph.num_edges())
+            print("Disjoint spatial graph:")
+            print(disjoint_spatial_graph.num_nodes(), disjoint_spatial_graph.num_edges())
+            print("Spatial graph:")
+            print(spatial_graph.num_nodes(), spatial_graph.num_edges())
         # 1-3. spatial text (top K ranked genes in this FOV): same logic as loki preprocessing "https://github.com/GuangyuWangLab2021/Loki/blob/main/src/loki/preprocess.py"
         # exclude housekeeping genes
         if self.housekeeping_genes is not None:
@@ -198,6 +197,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         transform = Resize((224, 224))
         image = transform(fov_image)
 
+        if disjoint_spatial_graph.num_nodes() == 0:
+            import matplotlib.pyplot as plt
+            plt.imshow(fov_image.permute(1, 2, 0).numpy())
+            # plt.savefig(f"empty_fov_{idx}_{self.image_file.split("/")[-2]}.png")
         return {
             "image": image,
             "spatial": spatial_embedding,
@@ -208,7 +211,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             # "indices_file": self.indices_file,
             # "spatial_file": self.spatial_file,
             # "fov_size": self.fov_size,
-            "index": idx,
+            # "index": idx,
         }
 
     def __len__(self) -> int:

@@ -23,24 +23,17 @@ def main(args):
     config.outdir = config.get("outdir") if args.out_dir is None else args.out_dir
     if os.path.exists(config.outdir) == False:
         os.makedirs(config.outdir)
+
     # == Query dataset preparation ==
     query_dataset = load_dataset(config.query_dataset)
-    # valid_indices = []
-    # for i in range(len(query_dataset)):
-    #     spatial = query_dataset[i]['spatial']
-    #     if not torch.any(torch.isnan(spatial)):
-    #         valid_indices.append(i)
-    # with open("valid_indices_test.txt", "wb") as f:
-    #     pickle.dump(valid_indices, f)
-    with open("valid_indices_test.txt", "rb") as f:
-        valid_indices = pickle.load(f)
-    test_dataset = torch.utils.data.Subset(query_dataset, valid_indices)
-    print(f"Total samples after filtering: {len(query_dataset)}")
+    sequential_sampler = SequentialSampler(query_dataset)
+    query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
-    batch_size = config.get("test.batch_size", 1)
-    num_samples = config.get("test.num_samples", len(test_dataset))
-    sequential_sampler = SequentialSampler(test_dataset)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, sampler=sequential_sampler, num_workers=0, collate_fn=multimodal_collate)
+    # == Reference dataset preparation ==
+    target_dataset = load_dataset(config.reference_dataset)
+    reference_dataset = torch.utils.data.ConcatDataset([target_dataset, query_dataset])
+    sequential_sampler = SequentialSampler(reference_dataset)
+    reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
     # Add wandb logging
     wandb_config = {
@@ -62,9 +55,9 @@ def main(args):
     assert reference_path is not None, f"Reference path for {model_name} is not set."
     
     # Retrieval
-    scores_img2spatial, scores_spatial2img = retrieval_score(model, test_dataloader, device, config)
+    scores_img2spatial, scores_spatial2img = retrieval_score(model, reference_dataloader, device, config)
     # Compute recall@K
-    result = eval_retrieval(scores_img2spatial, scores_spatial2img, test_dataloader.dataset)
+    result = eval_retrieval(scores_img2spatial, scores_spatial2img, query_dataloader, reference_dataloader)
     wandb_logger.update(
         {f"{model_name} image_recall_10": result["image_recall_10"],
          f"{model_name} image_recall_50": result["image_recall_50"],

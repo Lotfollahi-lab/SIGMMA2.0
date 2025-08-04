@@ -108,20 +108,15 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             & (points[:, 1] < y_start + self.fov_size)
         )
 
-        spatial_embedding = (
-                            torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
-                            # torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask]).mean(dim=0)
-                            )
-
+        cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
+        spatial_embedding = cell_embeddings.mean(dim=0)
+        if torch.isnan(spatial_embedding).any():
+            spatial_embedding = spatial_embedding.nan_to_num(0.0)
         # 1-2. spatial graph
         sparse_matrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
         spatial_graph = dgl.from_scipy(sparse_matrix)
-        node_features = torch.Tensor(self.spatial_anndata.obsm['nemo_latent'][mask])
-        # node_features = torch.Tensor(self.spatial_anndata[mask,:].X.toarray())
-        # node_features = torch.Tensor(self.spatial_anndata.obsm['novae_latent'][mask])
 
-        
-        spatial_graph.ndata['feat'] = node_features
+        spatial_graph.ndata['feat'] = cell_embeddings
 
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges)
         # Edge mask: -1 (intra-subgraph edges) or 0 (inter-subgraph edges)
@@ -212,7 +207,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             # "indices_file": self.indices_file,
             # "spatial_file": self.spatial_file,
             # "fov_size": self.fov_size,
-            "index": idx,
+            # "index": idx,
         }
 
     def __len__(self) -> int:

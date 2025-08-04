@@ -66,7 +66,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         num_cell_types: int = 84,
         housekeeping_genes: Optional[Sequence[str]] = None,
         hierarchical_graph: bool = True,
-        tissue_filtering_threshold: float = 500,
+        tissue_filtering_threshold: float = 20000,
     ):
         self.image_file = str(image_file)
         self.indices_file = str(indices_file)
@@ -161,10 +161,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             spatial_graph.edata['mask'] = edge_mask
             spatial_graph.edata['weight'] = torch.where(edge_mask == -1, torch.tensor(1.0), torch.tensor(0.0))
 
-            # print("Disjoint spatial graph:")
-            # print(disjoint_spatial_graph.num_nodes(), disjoint_spatial_graph.num_edges())
-            # print("Spatial graph:")
-            # print(spatial_graph.num_nodes(), spatial_graph.num_edges())
+            print("Disjoint spatial graph:")
+            print(disjoint_spatial_graph.num_nodes(), disjoint_spatial_graph.num_edges())
+            print("Spatial graph:")
+            print(spatial_graph.num_nodes(), spatial_graph.num_edges())
         # 1-3. spatial text (top K ranked genes in this FOV): same logic as loki preprocessing "https://github.com/GuangyuWangLab2021/Loki/blob/main/src/loki/preprocess.py"
         # exclude housekeeping genes
         if self.housekeeping_genes is not None:
@@ -197,6 +197,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         transform = Resize((224, 224))
         image = transform(fov_image)
 
+        if disjoint_spatial_graph.num_nodes() == 0:
+            import matplotlib.pyplot as plt
+            plt.imshow(fov_image.permute(1, 2, 0).numpy())
+            # plt.savefig(f"empty_fov_{idx}_{self.image_file.split("/")[-2]}.png")
         return {
             "image": image,
             "spatial": spatial_embedding,

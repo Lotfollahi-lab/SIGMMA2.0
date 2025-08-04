@@ -27,13 +27,13 @@ def main(args):
     # == Query dataset preparation ==
     query_dataset = load_dataset(config.query_dataset)
     sequential_sampler = SequentialSampler(query_dataset)
-    query_dataloader = DataLoader(query_dataset, batch_size=config.query_dataset.batch_size, sampler=sequential_sampler, num_workers=0, collate_fn=multimodal_collate)
+    query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
     # == Reference dataset preparation ==
     target_dataset = load_dataset(config.reference_dataset)
     reference_dataset = torch.utils.data.ConcatDataset([target_dataset, query_dataset])
     sequential_sampler = SequentialSampler(reference_dataset)
-    reference_dataloader = DataLoader(reference_dataset, batch_size=config.reference_dataset.batch_size, sampler=sequential_sampler, num_workers=0, collate_fn=multimodal_collate)
+    reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
     # Add wandb logging
     wandb_config = {
@@ -57,7 +57,7 @@ def main(args):
     # Retrieval
     scores_img2spatial, scores_spatial2img = retrieval_score(model, reference_dataloader, device, config)
     # Compute recall@K
-    result = eval_retrieval(scores_img2spatial, scores_spatial2img, query_dataloader)
+    result = eval_retrieval(scores_img2spatial, scores_spatial2img, query_dataloader, reference_dataloader)
     wandb_logger.update(
         {f"{model_name} image_recall_10": result["image_recall_10"],
          f"{model_name} image_recall_50": result["image_recall_50"],

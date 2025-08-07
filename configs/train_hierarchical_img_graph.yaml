@@ -13,7 +13,6 @@ model:
   
 dataset:
   manifest_path: /nfs/team361/dj16/data/sanger_in_house_xenium/MANIFEST_train.csv
-  celltype_id_file: /nfs/team361/dj16/data/sanger_in_house_xenium/cell_type_ids.csv
   num_cell_types: 84
   fov_size: 256
 

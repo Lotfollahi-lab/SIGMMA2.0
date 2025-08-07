@@ -21,7 +21,6 @@ def load_dataset(config_dataset):
     Load the training and evaluation datasets based on the configuration.
     """
     dataset = MultiSectionDataset(manifest_path=Path(config_dataset.manifest_path),
-                                  cell_type_id_file=Path(config_dataset.celltype_id_file),
                                   num_cell_types=config_dataset.num_cell_types)
     return dataset
 
@@ -304,4 +303,18 @@ def PCA_embeddings(image_embeddings, spatial_embeddings, num_samples=1000):
     ax.set_title("PCA of Image vs Spatial Embeddings")
     ax.legend()
 
+    return fig
+
+def heatmap(score_matrix, xlabel="Spatial Embeddings", ylabel="Image Embeddings"):
+    """
+    Plot a heatmap of the score matrix.
+    """
+    fig, ax = plt.subplots(figsize=(10, 10))
+    cax = ax.matshow(score_matrix, cmap='binary')
+    fig.colorbar(cax)
+    ax.set_title("Score Matrix Heatmap")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    plt.xticks([])
+    plt.yticks([])
     return fig

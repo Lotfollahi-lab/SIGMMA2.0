@@ -27,7 +27,6 @@ collate_fn_map[bytes] = collate_str_fn
 class MultiSectionDataset(torch.utils.data.Dataset):
     def __init__(self,
                  manifest_path: Path | str,
-                 cell_type_id_file: Path | str,
                  num_cell_types: int = 84):
         manifest =  pd.read_csv(manifest_path)
         slides = manifest['sample_name']
@@ -40,7 +39,6 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                 image_file=Path(image_file),
                 spatial_file=Path(spatial_file),
                 indices_file=Path(index_file),
-                cell_type_id_file=Path(cell_type_id_file),
                 num_cell_types=num_cell_types
             )
             li_datsets.append(dataset)
@@ -59,7 +57,6 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         image_file: Path | str,
         spatial_file: Path | str,
         indices_file: Path | str,
-        cell_type_id_file: Path | str,
         fov_size: int = 256,
         number_of_genes: int = 50,
         num_resolutions: int = 3,
@@ -84,8 +81,6 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         assert 'nemo_latent' in self.spatial_anndata.obsm, "'nemo_latent' embedding is required in the spatial anndata obsm, please run the preprocessing script first."
         assert 'spatial_connectivities' in self.spatial_anndata.obsp, "'spatial_connectivities' is required in the spatial anndata obsp, please run the preprocessing script first."
         assert 'Annotation' in self.spatial_anndata.obs, "'Annotation' is required in the spatial anndata obs, please run the preprocessing script first."
-
-        self.cell_type_id = pd.read_csv(cell_type_id_file, index_col=0).to_dict()['cell_type']
 
         self.fov_size = fov_size
         self.number_of_genes = number_of_genes
@@ -178,8 +173,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         # 2. cell type composition
 
-        cell_type_ids = self.spatial_anndata.obs["Annotation"][mask].apply(lambda x:self.cell_type_id[x])
-        cell_type_ids_tensor = torch.tensor(cell_type_ids.tolist())
+        cell_type_ids = self.spatial_anndata.obs["Annotation"][mask]
+        cell_type_ids_tensor = torch.tensor(cell_type_ids.tolist(), dtype=torch.int8)
         if len(cell_type_ids_tensor) != 0:
             cell_type_composition = torch.bincount(cell_type_ids_tensor, minlength=self.num_cell_types).long()
         else:

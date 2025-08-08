@@ -3,7 +3,7 @@ model:
   temperature: 0.01
 
 dataset:
-  manifest_path: /nfs/team361/dj16/data/sanger_in_house_xenium/MANIFEST.csv
+  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_train.csv
   fov_size: 256
   
 train:

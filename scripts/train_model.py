@@ -64,7 +64,6 @@ def objective(args):
     # config.train.weight_decay = trial.suggest_loguniform("weight_decay", 1e-5, 1e-2)
     # config.model.temperature = trial.suggest_uniform("temperature", 0.05, 0.2)
 
-
     wandb_logger = WandbLogger(config=dict(config.model)|dict(config.train), **wandb_config)
     wandb_logger.set_step(0)
 

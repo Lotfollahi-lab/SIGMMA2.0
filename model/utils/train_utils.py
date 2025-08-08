@@ -195,8 +195,8 @@ def train_one_epoch(
         ):
             eval_loss, eval_image_embedding, eval_spatial_embedding, score_matrix_img2spatial, score_matrix_spatial2image, eval_results = evaluate(config, model, eval_dataloader, device)
             fig_eval = PCA_embeddings(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu())
-
             fig_train = PCA_embeddings(image_embedding.detach().cpu(), spatial_embedding.detach().cpu())
+            model.train() # Set model back to training mode
             wandb_logger.update({"(train)PCA_embeddings": wandb.Image(fig_train),
                                  "(eval)loss": eval_loss,
                                  "(eval)PCA_embeddings": wandb.Image(fig_eval),

@@ -192,21 +192,12 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         transform = Resize((224, 224))
         image = transform(fov_image)
 
-        if disjoint_spatial_graph.num_nodes() == 0:
-            import matplotlib.pyplot as plt
-            plt.imshow(fov_image.permute(1, 2, 0).numpy())
-            # plt.savefig(f"empty_fov_{idx}_{self.image_file.split("/")[-2]}.png")
         return {
             "image": image,
             "spatial": spatial_embedding,
             "spatial_graph": spatial_graph,
             "spatial_text": spatial_text,
             "cell_type_composition": cell_type_composition,
-            # "image_file": self.image_file,
-            # "indices_file": self.indices_file,
-            # "spatial_file": self.spatial_file,
-            # "fov_size": self.fov_size,
-            # "index": idx,
         }
 
     def __len__(self) -> int:

@@ -9,13 +9,14 @@ import yaml
 
 import timm
 
-from model.utils import train_one_epoch, load_dataset, load_model, evaluate, WandbLogger
+from model.utils import train_one_epoch, load_dataset, load_model, evaluate, fix_seed, seed_worker, WandbLogger
 from model.datasets import multimodal_collate
 
 import optuna
 
 # def objective(trial):
 def objective(args):
+    fix_seed(42)
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
 
@@ -39,11 +40,14 @@ def objective(args):
         generator=torch.Generator().manual_seed(42),
     )
 
+    g = torch.Generator()
+    g.manual_seed(42)
+
     batch_size = config.get("train.batch_size")
     random_sampler = torch.utils.data.RandomSampler(train_dataset, num_samples=config.get("train.max_num_samples_per_epoch", len(train_dataset)), replacement=False)
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=random_sampler, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=random_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
     sequential_sampler = torch.utils.data.SequentialSampler(eval_dataset)
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, sampler=sequential_sampler, collate_fn=multimodal_collate, num_workers=config.train.num_workers)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, sampler=sequential_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers)
 
     # Add wandb logging
     wandb_config = {

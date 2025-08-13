@@ -17,5 +17,6 @@ query_dataset:
   fov_size: 256
 
 test:
-  batch_size: 10
+  batch_size: 256
   num_samples: 100
+  num_workers: 16

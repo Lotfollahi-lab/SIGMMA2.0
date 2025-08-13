@@ -1,11 +1,5 @@
 model:
-  name: basic_contrastive
-  checkpoint_path: TODO
-  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
-  image_encoder_output_dim: 1024
-  spatial_encoder_output_dim: 64
-  projection_dim: 128
-  num_cell_types: 20
+  name: openAI_CLIP
   temperature: 0.01
 
 reference_dataset:
@@ -21,5 +15,6 @@ query_dataset:
   fov_size: 256
 
 test:
-  batch_size: 10
+  batch_size: 256
   num_samples: 100
+  num_workers: 16

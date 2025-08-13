@@ -1,0 +1,21 @@
+model:
+  name: loki_OmiCLIP
+  pretrained_omiclip_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/loki/
+  temperature: 0.01
+
+reference_dataset:
+  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_train.csv
+  celltype_id_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/cell_type_ids.csv
+  num_cell_types: 84
+  fov_size: 256
+
+query_dataset:
+  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_test.csv
+  celltype_id_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/cell_type_ids.csv
+  num_cell_types: 84
+  fov_size: 256
+
+test:
+  batch_size: 256
+  num_samples: 100
+  num_workers: 16

@@ -4,9 +4,9 @@ import torch.nn as nn
 from .losses import InfoNCE
 from .layers import DINOHead
 
-class base_contrastive(nn.Module):
+class single_img_spatial(nn.Module):
     def __init__(self, config, image_encoder):
-        super(base_contrastive, self).__init__()
+        super(single_img_spatial, self).__init__()
         self.config = config
 
         self.image_encoder = image_encoder

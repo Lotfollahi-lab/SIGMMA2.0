@@ -9,7 +9,7 @@ from ml_collections.config_dict import ConfigDict
 import pickle
 import timm
 from model.datasets.dataset import MultiSectionDataset
-from model.model import hierarchical_img_cellgraph, base_contrastive, openAI_CLIP, PLIP, OmiCLIP
+from model.model import hierarchical_img_cellgraph, single_img_spatial, openAI_CLIP, PLIP, OmiCLIP
 from .evaluate_retrieval import retrieval_score, eval_retrieval
 from transformers import CLIPProcessor, CLIPModel
 import loki.utils
@@ -49,7 +49,7 @@ def load_model(config:ConfigDict,
     if config.model.name == "hierarchical_img_cellgraph":
         model = hierarchical_img_cellgraph(config.model)
 
-    elif config.model.name == "basic_contrastive":
+    elif config.model.name == "single_img_spatial":
         pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
         assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
         pretrained_image_encoder = timm.create_model(
@@ -68,7 +68,7 @@ def load_model(config:ConfigDict,
         )
         pretrained_image_encoder.eval()
 
-        model = base_contrastive(config.model, pretrained_image_encoder)
+        model = single_img_spatial(config.model, pretrained_image_encoder)
 
     elif config.model.name == "openAI_CLIP":
         model_raw = CLIPModel.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
@@ -157,7 +157,7 @@ def train_one_epoch(
         if config.model.name == "hierarchical_img_cellgraph":
             spatial = batch['spatial_graph'].to(device)
             inputs = [image, spatial, cell_type_composition]
-        elif config.model.name == "basic_contrastive":
+        elif config.model.name == "single_img_spatial":
             spatial = batch["spatial"].to(device)
             inputs = [image, spatial, cell_type_composition]
         elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
@@ -276,7 +276,7 @@ def evaluate(config, model, eval_dataloader, device):
             if config.model.name == "hierarchical_img_cellgraph":
                 spatial = batch['spatial_graph'].to(device)
                 inputs = [image, spatial, cell_type_composition]
-            elif config.model.name == "basic_contrastive":
+            elif config.model.name == "single_img_spatial":
                 spatial = batch["spatial"].to(device)
                 inputs = [image, spatial, cell_type_composition]
             elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
@@ -300,7 +300,6 @@ def evaluate(config, model, eval_dataloader, device):
 
     score_matrix_img2spatial, score_matrix_spatial2image = retrieval_score(model, eval_dataloader, eval_dataloader, device, config)
     eval_results = eval_retrieval(score_matrix_img2spatial, score_matrix_spatial2image)
-
     return avg_loss, all_image_embeddings, all_spatial_embeddings, score_matrix_img2spatial, score_matrix_spatial2image, eval_results
 
 def PCA_embeddings(image_embeddings, spatial_embeddings, num_samples=1000):

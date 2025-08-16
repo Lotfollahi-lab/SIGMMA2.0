@@ -9,7 +9,7 @@ from ml_collections.config_dict import ConfigDict
 import pickle
 import timm
 from model.datasets.dataset import MultiSectionDataset
-from model.model import hierarchical_img_cellgraph, single_img_spatial, openAI_CLIP, PLIP, OmiCLIP
+from model.model import hierarchical_img_cellgraph, single_img_spatial, single_img_spatial_graph, openAI_CLIP, PLIP, OmiCLIP
 from .evaluate_retrieval import retrieval_score, eval_retrieval
 from transformers import CLIPProcessor, CLIPModel
 import loki.utils
@@ -70,6 +70,26 @@ def load_model(config:ConfigDict,
 
         model = single_img_spatial(config.model, pretrained_image_encoder)
 
+    elif config.model.name == "single_img_spatial_graph":
+        pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
+        assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
+        pretrained_image_encoder = timm.create_model(
+            "vit_large_patch16_224",
+            img_size=224,
+            patch_size=16,
+            init_values=1e-5,
+            num_classes=0,
+            dynamic_img_size=True,
+        )
+        pretrained_image_encoder.load_state_dict(
+            torch.load(
+                Path(pretrained_ckpt_dir, "pytorch_model.bin"), map_location="cpu"
+            ),
+            strict=True,
+        )
+        pretrained_image_encoder.eval()
+
+        model = single_img_spatial_graph(config.model, pretrained_image_encoder)
     elif config.model.name == "openAI_CLIP":
         model_raw = CLIPModel.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
         processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
@@ -154,7 +174,7 @@ def train_one_epoch(
         image = batch["image"].to(device)
         cell_type_composition = batch["cell_type_composition"].to(device)
 
-        if config.model.name == "hierarchical_img_cellgraph":
+        if config.model.name in ["hierarchical_img_cellgraph", "single_img_spatial_graph"]:
             spatial = batch['spatial_graph'].to(device)
             inputs = [image, spatial, cell_type_composition]
         elif config.model.name == "single_img_spatial":

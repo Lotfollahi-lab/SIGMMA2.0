@@ -205,7 +205,7 @@ class BaseGRAPHLayer(torch.nn.Module):
                  threshold: float = 0.5,
                  temperature: float = 0.5,
                  ):
-        super(GRAPHLayer, self).__init__()
+        super(BaseGRAPHLayer, self).__init__()
         if activation == 'relu':
             self.activation = torch.nn.ReLU()
         elif activation == 'sigmoid':

@@ -13,8 +13,8 @@ class single_img_spatial_graph(nn.Module):
 
         self.image_encoder = image_encoder
         self.image_projection = DINOHead(
-            in_dim = config.image_encoder_output_dim,
-            out_dim = config.projection_dim,
+            in_dim = config.image_encoder_input_dim,
+            out_dim = config.image_encoder_output_dim,
             )
 
         self.spatial_projection = torch.nn.ModuleList()
@@ -23,12 +23,12 @@ class single_img_spatial_graph(nn.Module):
                                                       config.activation,
                                                       config.dropout))
         self.spatial_projection.append(READOUTLayer(config.spatial_encoder_output_dim,
-                                                   config.projection_dim,
+                                                   config.spatial_encoder_output_dim,
                                                    config.aggregate,
                                                    config.activation,
                                                    config.dropout))
 
-        self.celltype_prediction = self._cell_type_composition_predictor(input_dim = config.projection_dim,
+        self.celltype_prediction = self._cell_type_composition_predictor(input_dim = config.image_encoder_output_dim,
                                                                          output_dim = config.num_cell_types,
                                                                          dropout=config.dropout,
                                                                          activation=config.activation)
@@ -94,16 +94,16 @@ class single_img_spatial(nn.Module):
 
         self.image_encoder = image_encoder
         self.image_projection = DINOHead(
-            in_dim = config.image_encoder_output_dim,
-            out_dim = config.projection_dim,
+            in_dim = config.image_encoder_input_dim,
+            out_dim = config.image_encoder_output_dim,
             )
 
         self.spatial_projection = DINOHead(
-            in_dim = config.spatial_encoder_output_dim,
-            out_dim = config.projection_dim,
+            in_dim = config.spatial_encoder_input_dim,
+            out_dim = config.spatial_encoder_output_dim,
         )
 
-        self.celltype_prediction = self._cell_type_composition_predictor(input_dim = config.projection_dim,
+        self.celltype_prediction = self._cell_type_composition_predictor(input_dim = config.image_encoder_output_dim,
                                                                          output_dim = config.num_cell_types,
                                                                          dropout=config.dropout,
                                                                          activation=config.activation)

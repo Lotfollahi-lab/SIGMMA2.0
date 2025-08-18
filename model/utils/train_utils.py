@@ -177,7 +177,7 @@ def train_one_epoch(
         if config.model.name in ["hierarchical_img_cellgraph", "single_img_spatial_graph"]:
             spatial = batch['spatial_graph'].to(device)
             inputs = [image, spatial, cell_type_composition]
-        elif config.model.name == "single_img_spatial":
+        elif config.model.name in ["single_img_spatial"]:
             spatial = batch["spatial"].to(device)
             inputs = [image, spatial, cell_type_composition]
         elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
@@ -293,10 +293,10 @@ def evaluate(config, model, eval_dataloader, device):
         for batch in eval_dataloader:
             image = batch["image"].to(device)
             cell_type_composition = batch["cell_type_composition"].to(device)
-            if config.model.name == "hierarchical_img_cellgraph":
+            if config.model.name in ["hierarchical_img_cellgraph", "single_img_spatial_graph"]:
                 spatial = batch['spatial_graph'].to(device)
                 inputs = [image, spatial, cell_type_composition]
-            elif config.model.name == "single_img_spatial":
+            elif config.model.name in ["single_img_spatial"]:
                 spatial = batch["spatial"].to(device)
                 inputs = [image, spatial, cell_type_composition]
             elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:

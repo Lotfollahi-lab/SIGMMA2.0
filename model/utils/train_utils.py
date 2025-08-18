@@ -214,12 +214,12 @@ def train_one_epoch(
             and (global_step + 1) % config.train.eval_every == 0
         ):
             eval_loss, eval_image_embedding, eval_spatial_embedding, score_matrix_img2spatial, score_matrix_spatial2image, eval_results = evaluate(config, model, eval_dataloader, device)
-            fig_eval = PCA_embeddings(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu())
-            fig_train = PCA_embeddings(image_embedding.detach().cpu(), spatial_embedding.detach().cpu())
+            fig_eval = UMAP_embeddings(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu())
+            fig_train = UMAP_embeddings(image_embedding.detach().cpu(), spatial_embedding.detach().cpu())
             model.train() # Set model back to training mode
-            wandb_logger.update({"(train)PCA_embeddings": wandb.Image(fig_train),
+            wandb_logger.update({"(train)UMAP_embeddings": wandb.Image(fig_train),
                                  "(eval)loss": eval_loss,
-                                 "(eval)PCA_embeddings": wandb.Image(fig_eval),
+                                 "(eval)UMAP_embeddings": wandb.Image(fig_eval),
                                  "(eval)image recall@5percent": eval_results["image_recall@5percent"],
                                  "(eval)image recall@10percent": eval_results["image_recall@10percent"],
                                  "(eval)image recall@15percent": eval_results["image_recall@15percent"],
@@ -336,6 +336,30 @@ def PCA_embeddings(image_embeddings, spatial_embeddings, num_samples=1000):
     ax.set_title("PCA of Image vs Spatial Embeddings")
     ax.legend()
 
+    return fig
+
+def UMAP_embeddings(image_embeddings, spatial_embeddings, num_samples=1000):
+    """
+    Plot the image and spatial embeddings using UMAP.
+    """
+    reducer = umap.UMAP(n_components=2, random_state=42)
+    embeddings = np.concatenate((image_embeddings[:num_samples], spatial_embeddings[:num_samples]), axis=0)
+    embeddings_umap = reducer.fit_transform(embeddings)
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    n = min(num_samples, len(image_embeddings), len(spatial_embeddings))
+
+    ax.scatter(
+        embeddings_umap[:n, 0], embeddings_umap[:n, 1],
+        color="blue", label="Image Embeddings", alpha=0.6
+    )
+    ax.scatter(
+        embeddings_umap[n:2*n, 0], embeddings_umap[n:2*n, 1],
+        color="red", label="Spatial Embeddings", alpha=0.6
+    )
+
+    ax.set_title("UMAP of Image vs Spatial Embeddings")
+    ax.legend()
     return fig
 
 def heatmap(score_matrix, xlabel="Spatial Embeddings", ylabel="Image Embeddings"):

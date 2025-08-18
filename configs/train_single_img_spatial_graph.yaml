@@ -26,4 +26,4 @@ train:
   save_every: 100
   eval_every: 100
   gradient_accumulation_steps: 20
-  num_workers: 0
+  num_workers: 16

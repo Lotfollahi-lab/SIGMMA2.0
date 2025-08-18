@@ -137,8 +137,7 @@ class single_img_spatial(nn.Module):
         y: cell type composition, shape (B, L) with L being the number of cell types
         """
         # image embedding
-        with torch.no_grad():
-            image_embedding = self.image_encoder(x1)
+        image_embedding = self.image_encoder(x1)
         image_embedding = self.image_projection(image_embedding)
 
         # spatial embedding

@@ -10,6 +10,7 @@ class single_img_spatial_graph(nn.Module):
     def __init__(self, config, image_encoder):
         super(single_img_spatial_graph, self).__init__()
         self.config = config
+        assert config.image_encoder_output_dim == config.spatial_encoder_output_dim, "Image and spatial encoder output dimensions must match."
 
         self.image_encoder = image_encoder
         self.image_projection = DINOHead(
@@ -62,13 +63,14 @@ class single_img_spatial_graph(nn.Module):
         y: cell type composition, shape (B, L) with L being the number of cell types
         """
         # image embedding
-        with torch.no_grad():
-            image_embedding = self.image_encoder(x1)
+        image_embedding = self.image_encoder(x1)
         image_embedding = self.image_projection(image_embedding)
 
         # spatial embedding
+        g, h_x2 = x2, x2.ndata['feat']
         for layer in self.spatial_projection:
-            spatial_embedding = layer(x2)
+            h_x2 = layer(g, h_x2)
+        spatial_embedding = h_x2
 
         image_embedding = torch.nn.functional.normalize(image_embedding, dim=-1)
         spatial_embedding = torch.nn.functional.normalize(spatial_embedding, dim=-1)

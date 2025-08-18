@@ -193,7 +193,59 @@ class GRAPHLayer(torch.nn.Module):
         kl = torch.mean(raw_edge_intra_weight * (log_p - log_q))
 
         return kl
-    
+
+class BaseGRAPHLayer(torch.nn.Module):
+    def __init__(self,
+                 input_dim: int,
+                 output_dim: int,
+                 activation: Union['relu','sigmoid','leaky_relu'] = 'leaky_relu',
+                 dropout: float = 0,
+                 bias: bool = True,
+                 num_layers: int = 1,
+                 threshold: float = 0.5,
+                 temperature: float = 0.5,
+                 ):
+        super(BaseGRAPHLayer, self).__init__()
+        if activation == 'relu':
+            self.activation = torch.nn.ReLU()
+        elif activation == 'sigmoid':
+            self.activation = torch.nn.Sigmoid()
+        elif activation == 'leaky_relu':
+            self.activation = torch.nn.LeakyReLU()
+
+        # Graph node embedding layer w/o message passing
+        self.node_embedding = torch.nn.ModuleList([torch.nn.Dropout(p=dropout), torch.nn.Linear(input_dim, output_dim), self.activation, torch.nn.Dropout(p=dropout)])
+        # self.node_embedding = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
+        #                                 torch.nn.BatchNorm1d(output_dim),
+        #                                 self.activation,
+        #                                 torch.nn.Dropout(p=dropout),])
+
+
+        self.convs = torch.nn.ModuleList()
+        self.num_layers = num_layers
+        for _ in range(self.num_layers):
+            self.convs.append(dgl.nn.GraphConv(output_dim, output_dim))
+            # self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim))
+        self.threshold = threshold
+        self.temperature = temperature
+
+    def forward(self,
+                g: dgl.graph,
+                h: torch.Tensor,
+                ):
+
+        for layer in self.node_embedding:
+            h = layer(h)
+
+        # Apply GCN/structure learning layers
+        g = dgl.add_self_loop(g)
+
+        for i in range(self.num_layers):
+            h = self.convs[i](g, h)
+            h = self.activation(h)
+            # Regularization
+        return h
+
 class READOUTLayer(torch.nn.Module):
     def __init__(self, 
                  input_dim: int,

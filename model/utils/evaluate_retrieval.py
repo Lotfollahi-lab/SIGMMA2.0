@@ -28,10 +28,10 @@ def load_embeddings(model, dataloader, device, config):
         image = batch["image"].to(device)
         cell_type_composition = batch["cell_type_composition"].to(device)
 
-        if  model_name == "hierarchical_img_cellgraph":
+        if config.model.name in ["hierarchical_img_cellgraph", "single_img_spatial_graph"]:
             spatial = batch["spatial_graph"].to(device)
             inputs = [image, spatial, cell_type_composition]
-        elif model_name == "base_contrastive":
+        elif model_name == "single_img_spatial":
             spatial = batch["spatial"].to(device)
             inputs = [image, spatial, cell_type_composition]
         elif model_name in ["openAI_CLIP", "PLIP", "OmiCLIP"]:

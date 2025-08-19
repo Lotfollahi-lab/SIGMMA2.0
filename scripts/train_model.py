@@ -29,16 +29,20 @@ def objective(args):
     if os.path.exists(config.outdir) == False:
         os.makedirs(config.outdir)
 
-    dataset = load_dataset(config.dataset)
-    total = len(dataset)
-    train_len = int(0.8 * total)
-    val_len = total - train_len
+    if config.dataset.split_type == "section_split":
+        train_dataset = load_dataset(config.dataset.train)
+        eval_dataset = load_dataset(config.dataset.validation)
+    elif config.dataset.split_type == "pooled_FOV_split":
+        dataset = load_dataset(config.dataset)
+        total = len(dataset)
+        train_len = int(0.8 * total)
+        val_len = total - train_len
 
-    train_dataset, eval_dataset = random_split(
-        dataset,
-        [train_len, val_len],
-        generator=torch.Generator().manual_seed(42),
-    )
+        train_dataset, eval_dataset = random_split(
+            dataset,
+            [train_len, val_len],
+            generator=torch.Generator().manual_seed(42),
+        )
 
     g = torch.Generator()
     g.manual_seed(42)

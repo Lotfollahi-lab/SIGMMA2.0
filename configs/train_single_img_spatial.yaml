@@ -12,7 +12,6 @@ model:
   aggregate: 'max'
   
 dataset:
-<<<<<<< HEAD
   split_type: 'section_split'
   train:
     manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_train.csv
@@ -25,25 +24,12 @@ dataset:
   
 train:
   batch_size: 64
-=======
-  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_train.csv
-  num_cell_types: 84
-  fov_size: 256
-  
-train:
-  batch_size: 128
->>>>>>> bf0dca2 (Update configs)
   epochs: 100
   learning_rate: 0.000001
   weight_decay: 0.000001
   lr_step_size: 10
   lr_gamma: 0.1
-<<<<<<< HEAD
   save_every: 100
   eval_every: 100
-=======
-  save_every: 50
-  eval_every: 50
->>>>>>> bf0dca2 (Update configs)
   gradient_accumulation_steps: 20
   num_workers: 16

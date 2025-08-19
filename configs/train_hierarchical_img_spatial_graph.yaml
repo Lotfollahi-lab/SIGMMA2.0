@@ -12,9 +12,15 @@ model:
   aggregate: 'max'
   
 dataset:
-  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_train.csv
-  num_cell_types: 84
-  fov_size: 256
+  split_type: 'section_split'
+  train:
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_train.csv
+    num_cell_types: 84
+    fov_size: 256
+  validation:
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_val.csv
+    num_cell_types: 84
+    fov_size: 256
 
 train:
   batch_size: 512

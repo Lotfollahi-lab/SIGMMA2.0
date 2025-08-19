@@ -72,14 +72,14 @@ class single_img_spatial_graph(nn.Module):
             h_x2 = layer(g, h_x2)
         spatial_embedding = h_x2
 
-        image_embedding = torch.nn.functional.normalize(image_embedding, dim=-1)
-        spatial_embedding = torch.nn.functional.normalize(spatial_embedding, dim=-1)
+        image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
+        spatial_embedding_norm = torch.nn.functional.normalize(spatial_embedding, dim=-1)
 
         # cell type prediction
         y_hat = self.celltype_prediction(image_embedding)
 
         # constrastive loss
-        loss_contrastive = self.loss_fn(image_embedding, spatial_embedding)
+        loss_contrastive = self.loss_fn(image_embedding_norm, spatial_embedding_norm)
 
         # cell type composition prediction
         loss_cross_entropy = nn.functional.cross_entropy(y_hat, y)
@@ -87,7 +87,7 @@ class single_img_spatial_graph(nn.Module):
         # total loss
         loss = loss_contrastive + loss_cross_entropy
 
-        return loss, image_embedding, spatial_embedding
+        return loss, image_embedding_norm, spatial_embedding
 
 class single_img_spatial(nn.Module):
     def __init__(self, config, image_encoder):
@@ -145,14 +145,14 @@ class single_img_spatial(nn.Module):
         # spatial embedding
         spatial_embedding = self.spatial_projection(x2)
 
-        image_embedding = torch.nn.functional.normalize(image_embedding, dim=-1)
-        spatial_embedding = torch.nn.functional.normalize(spatial_embedding, dim=-1)
+        image_embedding_norm = torch.nn.functional.normalize(image_embedding, dim=-1)
+        spatial_embedding_norm = torch.nn.functional.normalize(spatial_embedding, dim=-1)
 
         # cell type prediction
         y_hat = self.celltype_prediction(image_embedding)
 
         # constrastive loss
-        loss_contrastive = self.loss_fn(image_embedding, spatial_embedding)
+        loss_contrastive = self.loss_fn(image_embedding_norm, spatial_embedding_norm)
 
         # cell type composition prediction
         loss_cross_entropy = nn.functional.cross_entropy(y_hat, y)
@@ -160,4 +160,4 @@ class single_img_spatial(nn.Module):
         # total loss
         loss = loss_contrastive + loss_cross_entropy 
 
-        return loss, image_embedding, spatial_embedding
+        return loss, image_embedding_norm, spatial_embedding_norm

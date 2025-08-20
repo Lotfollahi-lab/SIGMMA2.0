@@ -172,7 +172,7 @@ def train_one_epoch(
 
     accum_freq = config.get("train.gradient_accumulation_steps", 1)
     if accum_freq > 1:
-        accum_images, accum_spatial, accum_features = [], [], {}
+        accum_images, accum_spatial, accum_celltype_composition, accum_features = [], [], [], {}
 
     for i, batch in enumerate(train_dataloader):
         image = batch["image"].to(device)
@@ -191,6 +191,7 @@ def train_one_epoch(
             raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
         optimizer.zero_grad()
+        # Gradient accumulation code adapted from OpenCLIP (https://github.com/mlfoundations/open_clip/blob/main/src/open_clip_train/train.py)
         if accum_freq == 1:
             # Forward pass
             with torch.amp.autocast(device.type, enabled=False):
@@ -201,41 +202,44 @@ def train_one_epoch(
             # Backward pass
             loss.backward()
         else:
-            # Forward pass
-            with torch.amp.autocast(device.type, enabled=False):
-                if config.model.name == "hierarchical_img_cellgraph":
-                    loss_kl, loss_contrastive, loss_ce, loss, image_embedding, spatial_embedding = model(*inputs) # TODO: multi-resolution embeddings
+            with torch.no_grad():
+                # Forward pass
+                with torch.amp.autocast(device.type, enabled=False):
+                    if config.model.name == "hierarchical_img_cellgraph":
+                        loss_kl, loss_contrastive, loss_ce, loss, image_embedding, spatial_embedding = model(*inputs) # TODO: multi-resolution embeddings
+                    else:
+                        loss, image_embedding, spatial_embedding = model(*inputs)
+                accum_images.append(image)
+                accum_spatial.append(spatial)
+                accum_celltype_composition.append(cell_type_composition)
+                if "image_embedding" not in accum_features:
+                    accum_features["image_embedding"] = [image_embedding]
+                    accum_features["spatial_embedding"] = [spatial_embedding]
                 else:
-                    loss, image_embedding, spatial_embedding = model(*inputs)
-            
-            accum_images.append(image)
-            accum_spatial.append(spatial)
-            accum_features["image_embedding"] = image_embedding
-            accum_features["spatial_embedding"] = spatial_embedding
+                    accum_features["image_embedding"].append(image_embedding)
+                    accum_features["spatial_embedding"].append(spatial_embedding)
 
             if (i+1) % accum_freq > 0:
                 continue
             
             # Take gradients for the last accum_freq batches
+            # Re-do the forward pass for those batches, and use the cached features from the other batches as negatives.
             optimizer.zero_grad()
+            total_loss = None
             for j in range(len(accum_images)):
                 image = accum_images[j].to(device)
                 spatial = accum_spatial[j].to(device)
+                cell_type_composition = accum_celltype_composition[j].to(device)
                 with torch.amp.autocast(device.type, enabled=False):
-                    if config.model.name == "hierarchical_img_cellgraph":
-                        loss_kl, loss_contrastive, loss_ce, loss, image_embedding, spatial_embedding = model(image, spatial, cell_type_composition)
-                    else:
-                        loss, image_embedding, spatial_embedding = model(image, spatial)
-                model_out = {"image_embedding": image_embedding,
-                             "spatial_embedding": spatial_embedding}
-                inputs ={}
-                for key, val in accum_features.items():
-                    accumulated = accum_features[key]
-                    inputs[key] = torch.cat(accumulated[:j]+[model_out[key]]+accumulated[j+1:])
-                losses = InfoNCE(**inputs)
-                del inputs
-                loss = sum(losses)
-            loss.backward()
+                    model_out = model(image, spatial, cell_type_composition)
+                    inputs_for_loss = {}
+                    for key, val in accum_features.items():
+                        accumulated = accum_features[key]
+                        inputs_for_loss[key] = torch.cat(accumulated[:j] + [model_out[key]] + accumulated[j+1:])
+                    loss = InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
+                    del inputs_for_loss
+                    total_loss = loss if total_loss is None else total_loss + loss
+                total_loss.backward()
 
         if (i+1) % config.get("train.gradient_accumulation_steps",1) == 0:
             optimizer.step()

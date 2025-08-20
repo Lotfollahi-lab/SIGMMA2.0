@@ -87,7 +87,10 @@ class single_img_spatial_graph(nn.Module):
         # total loss
         loss = loss_contrastive + loss_cross_entropy
 
-        return loss, image_embedding_norm, spatial_embedding
+        model_outputs = {"loss": loss,
+                        "image_embedding": image_embedding_norm,
+                        "spatial_embedding": spatial_embedding_norm}
+        return  model_outputs
 
 class single_img_spatial(nn.Module):
     def __init__(self, config, image_encoder):
@@ -160,4 +163,7 @@ class single_img_spatial(nn.Module):
         # total loss
         loss = loss_contrastive #+ loss_cross_entropy 
 
-        return loss, image_embedding_norm, spatial_embedding_norm
+        model_outputs = {"loss": loss,
+                        "image_embedding": image_embedding_norm,
+                        "spatial_embedding": spatial_embedding_norm}
+        return model_outputs

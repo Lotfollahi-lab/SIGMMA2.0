@@ -126,4 +126,11 @@ class hierarchical_img_cellgraph(nn.Module):
 
         # embedding_pairs = [(u1, v1), (u2, v2), ...] where u is image embedding and v is spatial embedding
         image_embeddings, spatial_embeddings = embedding_pairs[-1]
-        return loss_kl, loss_contrastive, loss_ce, loss, image_embeddings, spatial_embeddings
+
+        model_outputs = {"loss": loss,
+                         "loss_kl": loss_kl,
+                         "loss_contrastive": loss_contrastive,
+                         "loss_ce": loss_ce,
+                         "image_embedding": image_embeddings,
+                         "spatial_embedding": spatial_embeddings}
+        return model_outputs

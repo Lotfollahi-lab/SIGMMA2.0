@@ -195,20 +195,21 @@ def train_one_epoch(
         if accum_freq == 1:
             # Forward pass
             with torch.amp.autocast(device.type, enabled=False):
-                if config.model.name == "hierarchical_img_cellgraph":
-                    loss_kl, loss_contrastive, loss_ce, loss, image_embedding, spatial_embedding = model(*inputs) # TODO: multi-resolution embeddings
-                else:
-                    loss, image_embedding, spatial_embedding = model(*inputs)
+                model_out = model(*inputs)
+            loss = model_out["loss"]
+            image_embedding = model_out["image_embedding"]
+            spatial_embedding = model_out["spatial_embedding"]
             # Backward pass
             loss.backward()
         else:
             with torch.no_grad():
                 # Forward pass
                 with torch.amp.autocast(device.type, enabled=False):
-                    if config.model.name == "hierarchical_img_cellgraph":
-                        loss_kl, loss_contrastive, loss_ce, loss, image_embedding, spatial_embedding = model(*inputs) # TODO: multi-resolution embeddings
-                    else:
-                        loss, image_embedding, spatial_embedding = model(*inputs)
+                    model_out = model(*inputs)
+                loss = model_out["loss"]
+                image_embedding = model_out["image_embedding"]
+                spatial_embedding = model_out["spatial_embedding"]
+
                 accum_images.append(image)
                 accum_spatial.append(spatial)
                 accum_celltype_composition.append(cell_type_composition)
@@ -237,8 +238,10 @@ def train_one_epoch(
                         accumulated = accum_features[key]
                         inputs_for_loss[key] = torch.cat(accumulated[:j] + [model_out[key]] + accumulated[j+1:])
                     loss = InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
+                    losses = {'contrastive_loss': loss}
+                    total_loss = sum(losses.values())
+                    losses['loss'] = total_loss
                     del inputs_for_loss
-                    total_loss = loss if total_loss is None else total_loss + loss
                 total_loss.backward()
 
         if (i+1) % config.get("train.gradient_accumulation_steps",1) == 0:
@@ -299,17 +302,9 @@ def train_one_epoch(
                         "eval_spatial_embeddings": eval_spatial_embedding},
                        f"{config.outdir}/embeddings-{global_step + 1}.pt")
 
-        if config.model.name == "hierarchical_img_cellgraph":
-            wandb_logger.update({"(train)loss": loss,
-                                 "(train)loss_kl": loss_kl,
-                                 "(train)loss_contrastive": loss_contrastive,
-                                 "(train)loss_ce": loss_ce,
-                                 "(train)lr": lr_scheduler.get_last_lr()[0],
-                                 "(train)epoch": epoch_index})
-        else:
-            wandb_logger.update({"(train)loss": loss,
-                                 "(train)lr": lr_scheduler.get_last_lr()[0],
-                                 "(train)epoch": epoch_index})
+        wandb_logger.update({"(train)loss": loss,
+                             "(train)lr": lr_scheduler.get_last_lr()[0],
+                             "(train)epoch": epoch_index})
         wandb_logger.set_step()
 
         global_step += 1

@@ -155,9 +155,9 @@ class single_img_spatial(nn.Module):
         loss_contrastive = self.loss_fn(image_embedding_norm, spatial_embedding_norm)
 
         # cell type composition prediction
-        loss_cross_entropy = nn.functional.cross_entropy(y_hat, y)
+        # loss_cross_entropy = nn.functional.cross_entropy(y_hat, y)
 
         # total loss
-        loss = loss_contrastive + loss_cross_entropy 
+        loss = loss_contrastive #+ loss_cross_entropy 
 
         return loss, image_embedding_norm, spatial_embedding_norm

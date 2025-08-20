@@ -9,7 +9,7 @@ from ml_collections.config_dict import ConfigDict
 import pickle
 import timm
 from model.datasets.dataset import MultiSectionDataset
-from model.model import hierarchical_img_cellgraph, single_img_spatial, single_img_spatial_graph, openAI_CLIP, PLIP, OmiCLIP
+from model.model import hierarchical_img_cellgraph, single_img_spatial, single_img_spatial_graph, openAI_CLIP, PLIP, OmiCLIP, InfoNCE
 from .evaluate_retrieval import retrieval_score, eval_retrieval
 from transformers import CLIPProcessor, CLIPModel
 import loki.utils
@@ -170,6 +170,10 @@ def train_one_epoch(
 
     wandb.watch(model, log="all", log_freq=10)
 
+    accum_freq = config.get("train.gradient_accumulation_steps", 1)
+    if accum_freq > 1:
+        accum_images, accum_spatial, accum_features = [], [], {}
+
     for i, batch in enumerate(train_dataloader):
         image = batch["image"].to(device)
         cell_type_composition = batch["cell_type_composition"].to(device)
@@ -186,14 +190,52 @@ def train_one_epoch(
         else:
             raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
-        # Forward pass
-        with torch.amp.autocast(device.type, enabled=False):
-            if config.model.name == "hierarchical_img_cellgraph":
-                loss_kl, loss_contrastive, loss_ce, loss, image_embedding, spatial_embedding = model(*inputs) # TODO: multi-resolution embeddings
-            else:
-                loss, image_embedding, spatial_embedding = model(*inputs)
-        # Backward pass
-        loss.backward()
+        optimizer.zero_grad()
+        if accum_freq == 1:
+            # Forward pass
+            with torch.amp.autocast(device.type, enabled=False):
+                if config.model.name == "hierarchical_img_cellgraph":
+                    loss_kl, loss_contrastive, loss_ce, loss, image_embedding, spatial_embedding = model(*inputs) # TODO: multi-resolution embeddings
+                else:
+                    loss, image_embedding, spatial_embedding = model(*inputs)
+            # Backward pass
+            loss.backward()
+        else:
+            # Forward pass
+            with torch.amp.autocast(device.type, enabled=False):
+                if config.model.name == "hierarchical_img_cellgraph":
+                    loss_kl, loss_contrastive, loss_ce, loss, image_embedding, spatial_embedding = model(*inputs) # TODO: multi-resolution embeddings
+                else:
+                    loss, image_embedding, spatial_embedding = model(*inputs)
+            
+            accum_images.append(image)
+            accum_spatial.append(spatial)
+            accum_features["image_embedding"] = image_embedding
+            accum_features["spatial_embedding"] = spatial_embedding
+
+            if (i+1) % accum_freq > 0:
+                continue
+            
+            # Take gradients for the last accum_freq batches
+            optimizer.zero_grad()
+            for j in range(len(accum_images)):
+                image = accum_images[j].to(device)
+                spatial = accum_spatial[j].to(device)
+                with torch.amp.autocast(device.type, enabled=False):
+                    if config.model.name == "hierarchical_img_cellgraph":
+                        loss_kl, loss_contrastive, loss_ce, loss, image_embedding, spatial_embedding = model(image, spatial, cell_type_composition)
+                    else:
+                        loss, image_embedding, spatial_embedding = model(image, spatial)
+                model_out = {"image_embedding": image_embedding,
+                             "spatial_embedding": spatial_embedding}
+                inputs ={}
+                for key, val in accum_features.items():
+                    accumulated = accum_features[key]
+                    inputs[key] = torch.cat(accumulated[:j]+[model_out[key]]+accumulated[j+1:])
+                losses = InfoNCE(**inputs)
+                del inputs
+                loss = sum(losses)
+            loss.backward()
 
         if (i+1) % config.get("train.gradient_accumulation_steps",1) == 0:
             optimizer.step()
@@ -215,15 +257,34 @@ def train_one_epoch(
         ):
             eval_loss, eval_image_embedding, eval_spatial_embedding, score_matrix_img2spatial, score_matrix_spatial2image, eval_results = evaluate(config, model, eval_dataloader, device)
             fig_eval_umap = UMAP_embeddings(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu())
-            fig_eval_heatmap = heatmap(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu())
+            fig_eval_img2spatial_heatmap = heatmap(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")
+            fig_eval_img2img_heatmap = heatmap(eval_image_embedding.detach().cpu(), eval_image_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Image Embeddings")
+            fig_eval_spatial2spatial_heatmap = heatmap(eval_spatial_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
+
+            # Plot raw embeddings
+            image_flat, spatial_flat = image_embedding.view(image_embedding.size(0), -1), spatial_embedding.view(spatial_embedding.size(0), -1)
+            pca = PCA(n_components=min(image_flat.size(1), spatial_flat.size(1), 2))
+            both = torch.cat((image_flat, spatial_flat), dim=0)
+            both_pca = pca.fit_transform(both.detach().cpu().numpy())
+            image_pca, spatial_pca = both_pca[:image_flat.size(0)], both_pca[image_flat.size(0):]
+            fig_train_raw_umap = PCA_embeddings(image_pca, spatial_pca)
+            # Plot learnt embeddings
             fig_train_umap = UMAP_embeddings(image_embedding.detach().cpu(), spatial_embedding.detach().cpu())
-            fig_train_heatmap = heatmap(image_embedding.detach().cpu(), spatial_embedding.detach().cpu())
+            fig_train_img2spatial_heatmap = heatmap(image_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")
+            fig_train_img2img_heatmap = heatmap(image_embedding.detach().cpu(), image_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Image Embeddings")
+            fig_train_spatial2spatial_heatmap = heatmap(spatial_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
+
             model.train() # Set model back to training mode
-            wandb_logger.update({"(train)UMAP_embeddings": wandb.Image(fig_train_umap),
-                                 "(train)heatmap": wandb.Image(fig_train_heatmap),
+            wandb_logger.update({"raw_UMAP_embeddings": wandb.Image(fig_train_raw_umap),
+                                 "(train)UMAP_embeddings": wandb.Image(fig_train_umap),
+                                 "(train)img2spatial heatmap": wandb.Image(fig_train_img2spatial_heatmap),
+                                 "(train)img2img heatmap": wandb.Image(fig_train_img2img_heatmap),
+                                 "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),
                                  "(eval)loss": eval_loss,
                                  "(eval)UMAP_embeddings": wandb.Image(fig_eval_umap),
-                                 "(eval)heatmap": wandb.Image(fig_eval_heatmap),
+                                 "(eval)img2spatial heatmap": wandb.Image(fig_eval_img2spatial_heatmap),
+                                 "(eval)img2img heatmap": wandb.Image(fig_eval_img2img_heatmap),
+                                 "(eval)spatial2spatial heatmap": wandb.Image(fig_eval_spatial2spatial_heatmap),
                                  "(eval)image recall@5percent": eval_results["image_recall@5percent"],
                                  "(eval)image recall@10percent": eval_results["image_recall@10percent"],
                                  "(eval)image recall@15percent": eval_results["image_recall@15percent"],
@@ -371,10 +432,9 @@ def heatmap(image_embedding, spatial_embedding, xlabel="Spatial Embeddings", yla
     Plot a heatmap of the score matrix.
     """
     score_matrix = torch.matmul(image_embedding, spatial_embedding.T).cpu().numpy()
-    score_matrix = np.clip(score_matrix, 0, 1)
 
     fig, ax = plt.subplots(figsize=(10, 10))
-    cax = ax.matshow(score_matrix, cmap='binary')
+    cax = ax.matshow(score_matrix, cmap='coolwarm', vmin=-0.5, vmax=0.5)
     fig.colorbar(cax)
     ax.set_title("Score Matrix Heatmap")
     ax.set_xlabel(xlabel)

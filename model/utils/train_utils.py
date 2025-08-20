@@ -168,7 +168,7 @@ def train_one_epoch(
     model = model.to(device)
     model.train()
 
-    wandb.watch(model, log="all", log_freq=10)
+    # wandb.watch(model, log="all", log_freq=10)
 
     accum_freq = config.get("train.gradient_accumulation_steps", 1)
     if accum_freq > 1:

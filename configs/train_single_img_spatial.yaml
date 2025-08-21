@@ -23,13 +23,13 @@ dataset:
     fov_size: 256
   
 train:
-  batch_size: 64
+  batch_size: 128
   epochs: 100
   learning_rate: 0.000001
   weight_decay: 0.000001
   lr_step_size: 10
   lr_gamma: 0.1
-  save_every: 100
-  eval_every: 100
-  gradient_accumulation_steps: 20
+  save_every: 50
+  eval_every: 50
+  gradient_accumulation_steps: 10
   num_workers: 16

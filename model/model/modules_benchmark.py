@@ -26,7 +26,10 @@ class openAI_CLIP(nn.Module):
         outputs = self.model(**inputs)
         image_embeds = outputs.image_embeds
         text_embeds = outputs.text_embeds
-        return outputs.loss, image_embeds, text_embeds
+        model_outputs = {"loss": outputs.loss,
+                         "image_embedding": image_embeds,
+                         "text_embedding": text_embeds}
+        return model_outputs
 
 class PLIP(nn.Module):
     def __init__(self, config, model, processor):
@@ -50,7 +53,10 @@ class PLIP(nn.Module):
         image_embeds = outputs.image_embeds
         text_embeds = outputs.text_embeds
 
-        return outputs.loss, image_embeds, text_embeds
+        model_outputs = {"loss": outputs.loss,
+                         "image_embedding": image_embeds,
+                         "text_embedding": text_embeds}
+        return model_outputs
 
 
 class OmiCLIP(nn.Module):
@@ -69,4 +75,7 @@ class OmiCLIP(nn.Module):
         text_embeddings = loki.utils.encode_texts(self.model, self.tokenizer, text, device=self.model.device)
 
         loss = self.loss_fn(image_embeddings, text_embeddings)
-        return loss, image_embeddings, text_embeddings
+        model_outputs = {"loss": loss,
+                         "image_embedding": image_embeddings,
+                         "text_embedding": text_embeddings}
+        return model_outputs

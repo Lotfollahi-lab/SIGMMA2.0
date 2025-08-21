@@ -241,10 +241,12 @@ def train_one_epoch(
                 total_loss.backward()
             loss = total_loss.item()
 
-        if (i+1) % config.get("train.gradient_accumulation_steps",1) == 0:
             optimizer.step()
-            optimizer.zero_grad()
             lr_scheduler.step()
+
+            # Reset accumulators
+            if accum_freq > 1:
+                accum_images, accum_spatial, accum_features = [], [], {}
 
         if (global_step + 1) % config.train.save_every == 0:
             save_checkpoint(
@@ -258,7 +260,7 @@ def train_one_epoch(
         if (
             eval_dataloader is not None
             and (global_step + 1) % config.train.eval_every == 0
-        ):
+            ):
             eval_loss, eval_image_embedding, eval_spatial_embedding, score_matrix_img2spatial, score_matrix_spatial2image, eval_results = evaluate(config, model, eval_dataloader, device)
             fig_eval_umap = UMAP_embeddings(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu())
             fig_eval_img2spatial_heatmap = heatmap(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")

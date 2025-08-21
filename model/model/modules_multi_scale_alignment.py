@@ -51,15 +51,15 @@ class hierarchical_img_cellgraph(nn.Module):
 
         self.cross_attention = CrossAttention(config.image_encoder_output_dim, config.spatial_encoder_output_dim)
         
-        self.predictors = nn.ModuleList()
-        for _ in range(config.num_resolutions):
-            y_per_layer = self._cell_type_composition_predictor(
-            input_dim=config.image_encoder_output_dim,
-            output_dim=config.num_cell_types,
-            dropout=config.dropout,
-            activation=config.activation
-            )
-            self.predictors.append(y_per_layer)
+        # self.predictors = nn.ModuleList()
+        # for _ in range(config.num_resolutions):
+        #     y_per_layer = self._cell_type_composition_predictor(
+        #     input_dim=config.image_encoder_output_dim,
+        #     output_dim=config.num_cell_types,
+        #     dropout=config.dropout,
+        #     activation=config.activation
+        #     )
+        #     self.predictors.append(y_per_layer)
 
         self.contrastive_loss = InfoNCE(temperature=config.temperature)
 

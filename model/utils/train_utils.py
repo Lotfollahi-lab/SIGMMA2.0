@@ -168,22 +168,20 @@ def train_one_epoch(
     model = model.to(device)
     model.train()
 
-    # wandb.watch(model, log="all", log_freq=10)
+    wandb.watch(model, log="all", log_freq=10)
 
     accum_freq = config.get("train.gradient_accumulation_steps", 1)
     if accum_freq > 1:
-        accum_images, accum_spatial, accum_celltype_composition, accum_features = [], [], [], {}
+        accum_images, accum_spatial, accum_features = [], [], {}
 
     for i, batch in enumerate(train_dataloader):
         image = batch["image"].to(device)
-        cell_type_composition = batch["cell_type_composition"].to(device)
-
         if config.model.name in ["hierarchical_img_cellgraph", "single_img_spatial_graph"]:
             spatial = batch['spatial_graph'].to(device)
-            inputs = [image, spatial, cell_type_composition]
+            inputs = [image, spatial]
         elif config.model.name in ["single_img_spatial"]:
             spatial = batch["spatial"].to(device)
-            inputs = [image, spatial, cell_type_composition]
+            inputs = [image, spatial]
         elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
             spatial = batch['spatial_text']
             inputs = [image, spatial]
@@ -212,7 +210,6 @@ def train_one_epoch(
 
                 accum_images.append(image)
                 accum_spatial.append(spatial)
-                accum_celltype_composition.append(cell_type_composition)
                 if "image_embedding" not in accum_features:
                     accum_features["image_embedding"] = [image_embedding]
                     accum_features["spatial_embedding"] = [spatial_embedding]
@@ -230,9 +227,8 @@ def train_one_epoch(
             for j in range(len(accum_images)):
                 image = accum_images[j].to(device)
                 spatial = accum_spatial[j].to(device)
-                cell_type_composition = accum_celltype_composition[j].to(device)
                 with torch.amp.autocast(device.type, enabled=False):
-                    model_out = model(image, spatial, cell_type_composition)
+                    model_out = model(image, spatial)
                     inputs_for_loss = {}
                     for key, val in accum_features.items():
                         accumulated = accum_features[key]
@@ -243,6 +239,7 @@ def train_one_epoch(
                     losses['loss'] = total_loss
                     del inputs_for_loss
                 total_loss.backward()
+            loss = total_loss.item()
 
         if (i+1) % config.get("train.gradient_accumulation_steps",1) == 0:
             optimizer.step()

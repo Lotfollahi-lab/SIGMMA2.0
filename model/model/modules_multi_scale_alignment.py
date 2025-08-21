@@ -84,7 +84,7 @@ class hierarchical_img_cellgraph(nn.Module):
         
         return cell_type_composition_predictor
  
-    def forward(self, x1, x2, y):
+    def forward(self, x1, x2):
         """
         x1: image features, shape (B, C, H, W)
         x2: spatial features, shape (B, g) where g is a dgl graph object
@@ -112,17 +112,17 @@ class hierarchical_img_cellgraph(nn.Module):
 
             loss_contrastive = self.contrastive_loss(h_x1, h_x2_pooled)
 
-            # cross attention
-            att = self.cross_attention(h_x1, h_x2_pooled)
-            h_x1 = h_x1 + att
+            # # cross attention
+            # att = self.cross_attention(h_x1, h_x2_pooled)
+            # h_x1 = h_x1 + att
 
-            # cell type composition predictor
-            y_hat = self.predictors[i](h_x1)
-            loss_ce = nn.functional.cross_entropy(y_hat, y)
+            # # cell type composition predictor
+            # y_hat = self.predictors[i](h_x1)
+            # loss_ce = nn.functional.cross_entropy(y_hat, y)
         loss_kl = torch.stack(loss_kl).mean()
 
         # loss: mean of KL divergence
-        loss = loss_kl + loss_contrastive + loss_ce
+        loss = loss_kl + loss_contrastive
 
         # embedding_pairs = [(u1, v1), (u2, v2), ...] where u is image embedding and v is spatial embedding
         image_embeddings, spatial_embeddings = embedding_pairs[-1]
@@ -130,7 +130,6 @@ class hierarchical_img_cellgraph(nn.Module):
         model_outputs = {"loss": loss,
                          "loss_kl": loss_kl,
                          "loss_contrastive": loss_contrastive,
-                         "loss_ce": loss_ce,
                          "image_embedding": image_embeddings,
                          "spatial_embedding": spatial_embeddings}
         return model_outputs

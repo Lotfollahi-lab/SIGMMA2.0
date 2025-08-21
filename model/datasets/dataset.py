@@ -103,7 +103,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             & (points[:, 1] < y_start + self.fov_size)
         )
 
-        cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
+        # cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
+        cell_embeddings = torch.Tensor(self.spatial_anndata.X[mask].toarray())
         spatial_embedding = cell_embeddings.mean(dim=0)
         if torch.isnan(spatial_embedding).any():
             spatial_embedding = spatial_embedding.nan_to_num(0.0)

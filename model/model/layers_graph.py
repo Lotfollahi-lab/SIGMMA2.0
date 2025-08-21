@@ -63,6 +63,7 @@ class StructureLearning(torch.nn.Module):
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges) or 1 (inter-subgraph edges rescued in this layer)
         # Edge mask: -1 (intra-subgraph edges) or 0 (inter-subgraph edges) or layer+1 (inter-subgraph edges rescued in this layer)
         with g.local_scope():
+            breakpoint()
             # Add self-loops
             g = dgl.remove_self_loop(g)
             g = dgl.add_self_loop(g, edge_feat_names=['mask'], fill_data=-1)

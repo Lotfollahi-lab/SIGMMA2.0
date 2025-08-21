@@ -15,27 +15,40 @@ from transformers import CLIPProcessor, CLIPModel
 import loki.utils
 
 from sklearn.decomposition import PCA
+import umap
 import matplotlib.pyplot as plt
 
 import wandb
 
-def load_dataset(config_dataset):
+def load_dataset(config_dataset, test=False):
     """
     Load the training and evaluation datasets based on the configuration.
     """
     dataset = MultiSectionDataset(manifest_path=Path(config_dataset.manifest_path),
                                   num_cell_types=config_dataset.num_cell_types)
 
-    # valid_indices = []
-    # for i in range(len(dataset)):
-    #     spatial_graph = dataset[i]['spatial_graph']
-    #     if not spatial_graph.num_nodes() == 0:
-    #         valid_indices.append(i)
-    # with open("valid_indices_skin.txt", "wb") as f:
-    #     pickle.dump(valid_indices, f)
-    with open("valid_indices_skin.txt", "rb") as f:
-        valid_indices = pickle.load(f)
-    dataset = torch.utils.data.Subset(dataset, valid_indices)
+    # if not test:
+    #     # valid_indices = []
+    #     # for i in range(len(dataset)):
+    #     #     spatial_graph = dataset[i]['spatial_graph']
+    #     #     if not spatial_graph.num_nodes() == 0:
+    #     #         valid_indices.append(i)
+    #     # with open("valid_indices_skin.txt", "wb") as f:
+    #     #     pickle.dump(valid_indices, f)
+    #     with open("valid_indices_skin.txt", "rb") as f:
+    #         valid_indices = pickle.load(f)
+    #     dataset = torch.utils.data.Subset(dataset, valid_indices)
+    # else:
+    #     # valid_indices = []
+    #     # for i in range(len(dataset)):
+    #     #     spatial_graph = dataset[i]['spatial_graph']
+    #     #     if not spatial_graph.num_nodes() == 0:
+    #     #         valid_indices.append(i)
+    #     # with open("valid_indices_skin_test.txt", "wb") as f:
+    #     #     pickle.dump(valid_indices, f)
+    #     with open("valid_indices_skin_test.txt", "rb") as f:
+    #         valid_indices = pickle.load(f)
+    #     dataset = torch.utils.data.Subset(dataset, valid_indices)
     return dataset
 
 

@@ -136,6 +136,11 @@ class GRAPHLayer(torch.nn.Module):
 
         # Graph node embedding layer w/o message passing
         self.node_embedding = torch.nn.ModuleList([torch.nn.Dropout(p=dropout), torch.nn.Linear(input_dim, output_dim), self.activation, torch.nn.Dropout(p=dropout)])
+        # self.node_embedding = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
+        #                                 torch.nn.BatchNorm1d(output_dim),
+        #                                 self.activation,
+        #                                 torch.nn.Dropout(p=dropout),])
+
 
         # Initialize the GCN layers and structure learning layers
         self.convs = torch.nn.ModuleList()
@@ -143,6 +148,7 @@ class GRAPHLayer(torch.nn.Module):
         self.num_layers = num_layers
         for _ in range(self.num_layers):
             self.convs.append(dgl.nn.GraphConv(output_dim, output_dim))
+            # self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim))
             self.sls.append(StructureLearning(output_dim, sparse='hard', emb_layer=1, threshold=threshold, temperature=temperature))
         self.threshold = threshold
         self.temperature = temperature

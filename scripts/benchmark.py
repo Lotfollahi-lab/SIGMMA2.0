@@ -27,7 +27,7 @@ def main(args):
         os.makedirs(config.outdir)
 
     # == Query dataset preparation ==
-    query_dataset = load_dataset(config.query_dataset)
+    query_dataset = load_dataset(config.query_dataset, test=True)
     sequential_sampler = SequentialSampler(query_dataset)
     query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
@@ -38,23 +38,31 @@ def main(args):
     reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
     # Add wandb logging
-    wandb_config = {
-        "entity": None,
-        "project": "img-spatial-alignment",
-        "group": None,
-        "name": "benchmark",
-        "tags": None,
-        "mode": "online",
-    }
+    if args.zeroshot:
+        wandb_config = {
+            "entity": None,
+            "project": "img-spatial-alignment",
+            "group": None,
+            "name": "benchmark_zeroshot",
+            "tags": None,
+            "mode": "online",
+        }
+    else:
+        wandb_config = {
+            "entity": None,
+            "project": "img-spatial-alignment",
+            "group": None,
+            "name": "benchmark",
+            "tags": None,
+            "mode": "online",
+        }
 
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
-    model = load_model(config, device, train=False)
+    model = load_model(config, device, pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
     model_name = config.model.get("name")
     model.eval()
-    reference_path = config.model.get("reference_path", None)
-    assert reference_path is not None, f"Reference path for {model_name} is not set."
     
     # Retrieval
     scores_img2spatial, scores_spatial2img = retrieval_score(model, query_dataloader, reference_dataloader, device, config)
@@ -74,5 +82,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-config_file")
     parser.add_argument("-out_dir", type=str, default=None, help="Output directory path")
+    parser.add_argument("-zeroshot", type=bool, default=False, help="Run in zero-shot mode")
     args = parser.parse_args()
+
     main(args)

@@ -59,7 +59,7 @@ def objective(args):
         "project": "img-spatial-alignment",
         "group": None,
         # "name": f"{model_name}_trail_{trial.number}",
-        "name": f"{model_name}_trial_test",
+        "name": f"{model_name}_trial_beacon",
         "tags": None,
         "mode": "online",
     }
@@ -93,7 +93,7 @@ def objective(args):
             wandb_logger=wandb_logger,
         )
 
-    eval_loss, _, _ = evaluate(config, model, eval_dataloader, device)
+    eval_loss, _, _, _, _, _ = evaluate(config, model, eval_dataloader, device)
     return eval_loss
 
 if __name__ == "__main__":

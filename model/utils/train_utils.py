@@ -368,23 +368,24 @@ def evaluate(config, model, eval_dataloader, device):
     with torch.no_grad():
         for batch in eval_dataloader:
             image = batch["image"].to(device)
-            cell_type_composition = batch["cell_type_composition"].to(device)
             if config.model.name in ["hierarchical_img_cellgraph", "single_img_spatial_graph"]:
                 spatial = batch['spatial_graph'].to(device)
-                inputs = [image, spatial, cell_type_composition]
+                inputs = [image, spatial]
             elif config.model.name in ["single_img_spatial"]:
                 spatial = batch["spatial"].to(device)
-                inputs = [image, spatial, cell_type_composition]
+                inputs = [image, spatial]
             elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
                 spatial = batch['spatial_text']
                 inputs = [image, spatial]
             else:
                 raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
-            if config.model.name == "hierarchical_img_cellgraph":
-                _, _, _, loss, image_embedding, spatial_embedding = model(*inputs)
-            else:
-                loss, image_embedding, spatial_embedding = model(*inputs)
+            with torch.no_grad():
+                model_out = model(*inputs)
+                loss = model_out["loss"]
+                image_embedding = model_out["image_embedding"]
+                spatial_embedding = model_out["spatial_embedding"]
+
             all_image_embeddings.append(image_embedding.cpu())
             all_spatial_embeddings.append(spatial_embedding.cpu())
 

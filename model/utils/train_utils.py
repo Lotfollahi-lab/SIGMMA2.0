@@ -446,7 +446,7 @@ def heatmap(image_embedding, spatial_embedding, xlabel="Spatial Embeddings", yla
     score_matrix = torch.matmul(image_embedding, spatial_embedding.T).cpu().numpy()
 
     fig, ax = plt.subplots(figsize=(10, 10))
-    cax = ax.matshow(score_matrix, cmap='coolwarm', vmin=-0.5, vmax=0.5)
+    cax = ax.matshow(score_matrix, cmap='coolwarm', vmin=-1, vmax=1)
     fig.colorbar(cax)
     ax.set_title("Score Matrix Heatmap")
     ax.set_xlabel(xlabel)

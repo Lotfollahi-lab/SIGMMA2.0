@@ -63,18 +63,25 @@ class StructureLearning(torch.nn.Module):
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges) or 1 (inter-subgraph edges rescued in this layer)
         # Edge mask: -1 (intra-subgraph edges) or 0 (inter-subgraph edges) or layer+1 (inter-subgraph edges rescued in this layer)
         with g.local_scope():
-            breakpoint()
             # Add self-loops
             g = dgl.remove_self_loop(g)
-            g = dgl.add_self_loop(g, edge_feat_names=['mask'], fill_data=-1)
-            g = dgl.add_self_loop(g, edge_feat_names=['weight'], fill_data=0)
+
+            edge_feat_specs = {"mask": -1, "weight": 0}
+
+            g_unbatched = []
+            for graph in dgl.unbatch(g):
+                for feat, fill_val in edge_feat_specs.items():
+                    graph = dgl.add_self_loop(graph, edge_feat_names=[feat], fill_data=fill_val)
+                g_unbatched.append(graph)
+
+            g = dgl.batch(g_unbatched)
+
             # GGN on intra-subgraph edges only
             if self.emb_layer > 0:
                 for i in range(self.emb_layer):
                     # Message passing within intra-subgraph edges + learned edges only
                     edge_mask = g.edata['mask'] != 0
-                    edge_ids = edge_mask.nonzero(as_tuple=True)[0]
-                    g_intra = dgl.edge_subgraph(g, edge_ids, store_ids=True)
+                    g_intra = edge_subgraph_per_graph(g, edge_mask, store_ids=True)
                     x = self.gnns[i](g_intra, x)
                     x = self.activation(x)
             g.ndata['learned_node_feat'] = x
@@ -162,7 +169,8 @@ class GRAPHLayer(torch.nn.Module):
             h = layer(h)
 
         # Apply GCN/structure learning layers
-        g = dgl.add_self_loop(g)
+        g_unbatched = [dgl.add_self_loop(graph) for graph in dgl.unbatch(g)]
+        g = dgl.batch(g_unbatched)
 
         self.kl_terms = []  # Store KL divergence terms for each forward pass
         for i in range(self.num_layers):
@@ -295,3 +303,11 @@ class READOUTLayer(torch.nn.Module):
         for layer in self.mlp:
             h = layer(h)
         return h
+
+def edge_subgraph_per_graph(bg: dgl.DGLGraph, edge_mask_bool: torch.Tensor, store_ids=True):
+    assert edge_mask_bool.dtype == torch.bool and edge_mask_bool.numel() == bg.num_edges()
+    graphs = dgl.unbatch(bg)
+    e_sizes = bg.batch_num_edges().tolist()
+    masks = torch.split(edge_mask_bool, e_sizes)
+    subs = [dgl.edge_subgraph(g, m, store_ids=store_ids) for g, m in zip(graphs, masks)]
+    return dgl.batch(subs)

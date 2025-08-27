@@ -280,13 +280,6 @@ def train_one_epoch(
             fig_eval_img2img_heatmap = heatmap(eval_image_embedding.detach().cpu(), eval_image_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Image Embeddings")
             fig_eval_spatial2spatial_heatmap = heatmap(eval_spatial_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
 
-            # Plot raw embeddings
-            image_flat, spatial_flat = image_embedding.view(image_embedding.size(0), -1), spatial_embedding.view(spatial_embedding.size(0), -1)
-            pca = PCA(n_components=min(image_flat.size(1), spatial_flat.size(1), 2))
-            both = torch.cat((image_flat, spatial_flat), dim=0)
-            both_pca = pca.fit_transform(both.detach().cpu().numpy())
-            image_pca, spatial_pca = both_pca[:image_flat.size(0)], both_pca[image_flat.size(0):]
-            fig_train_raw_umap = PCA_embeddings(image_pca, spatial_pca)
             # Plot learnt embeddings
             fig_train_umap = UMAP_embeddings(image_embedding.detach().cpu(), spatial_embedding.detach().cpu())
             fig_train_img2spatial_heatmap = heatmap(image_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")
@@ -294,8 +287,7 @@ def train_one_epoch(
             fig_train_spatial2spatial_heatmap = heatmap(spatial_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
 
             model.train() # Set model back to training mode
-            wandb_logger.update({"raw_UMAP_embeddings": wandb.Image(fig_train_raw_umap),
-                                 "(train)UMAP_embeddings": wandb.Image(fig_train_umap),
+            wandb_logger.update({"(train)UMAP_embeddings": wandb.Image(fig_train_umap),
                                  "(train)img2spatial heatmap": wandb.Image(fig_train_img2spatial_heatmap),
                                  "(train)img2img heatmap": wandb.Image(fig_train_img2img_heatmap),
                                  "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),

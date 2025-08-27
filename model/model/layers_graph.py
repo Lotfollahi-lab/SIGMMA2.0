@@ -103,16 +103,7 @@ class StructureLearning(torch.nn.Module):
             edges_hard = (edges_soft > self.threshold).float()
             y = (edges_hard - edges_soft).detach() + edges_soft  # Straight-through
             print('------------')
-            plt.hist(y.detach().cpu(), bins=50, alpha=0.5, color="red", label="sampled_weight")
-            plt.legend()
-            plt.savefig("hist_edges_sampled.png")
 
-            plt.figure()
-            plt.hist(g.edata['weight'].detach().cpu(), bins=50, alpha=0.5, color="lightsteelblue", label="original_weight")
-            plt.hist(y.detach().cpu(), bins=50, alpha=0.5, color="red", label="sampled_weight")
-            plt.legend()
-            plt.savefig("hist_edges_compare.png")
-            breakpoint()
             #  == Update inter-subgraph edges ===
             # Identify inter-subgraph edges
             inter_mask = (g.edata['weight'] == 0)

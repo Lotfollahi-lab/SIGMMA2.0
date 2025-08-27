@@ -2,7 +2,7 @@ model:
   name: hierarchical_img_cellgraph
   image_encoder_input_dim: 1024
   image_encoder_output_dim: 512
-  spatial_encoder_input_dim: 384 # cell vector dimension from pretrained model (novae: 64, nemo: 384) or raw cell vector dimension (e.g. 4624)
+  spatial_encoder_input_dim: 4952 # cell vector dimension from pretrained model (novae: 64, nemo: 384) or raw cell vector dimension (e.g. 4952)
   spatial_encoder_output_dim: 512
   num_resolutions: 3
   num_cell_types: 84
@@ -32,4 +32,4 @@ train:
   save_every: 10
   eval_every: 10
   gradient_accumulation_steps: 2
-  num_workers: 0
+  num_workers: 16

@@ -109,11 +109,11 @@ class StructureLearning(torch.nn.Module):
             inter_mask = (g.edata['weight'] == 0)
             # Identify non-neighbor edges
             u, v = g.edges()
-            x = g.ndata['x_pos']
-            y = g.ndata['y_pos']
+            x_pos = g.ndata['x_pos']
+            y_pos = g.ndata['y_pos']
 
-            dx = (x[u] - x[v]).abs()
-            dy = (y[u] - y[v]).abs()
+            dx = (x_pos[u] - x_pos[v]).abs()
+            dy = (y_pos[u] - y_pos[v]).abs()
             non_neighbor_edge_mask = (dx >= 2) | (dy >= 2)
             # Update edge weights for inter-subgraph edges only
             g.edata['weight'][inter_mask & non_neighbor_edge_mask] = y[inter_mask & non_neighbor_edge_mask]

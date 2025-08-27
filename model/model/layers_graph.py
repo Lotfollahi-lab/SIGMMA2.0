@@ -103,15 +103,33 @@ class StructureLearning(torch.nn.Module):
             edges_hard = (edges_soft > self.threshold).float()
             y = (edges_hard - edges_soft).detach() + edges_soft  # Straight-through
             print('------------')
+            plt.hist(y.detach().cpu(), bins=50, alpha=0.5, color="red", label="sampled_weight")
+            plt.legend()
+            plt.savefig("hist_edges_sampled.png")
 
-            # TODO: confine edge addition to neighboring subgraphs only
-            # Update inter-subgraph edges
+            plt.figure()
+            plt.hist(g.edata['weight'].detach().cpu(), bins=50, alpha=0.5, color="lightsteelblue", label="original_weight")
+            plt.hist(y.detach().cpu(), bins=50, alpha=0.5, color="red", label="sampled_weight")
+            plt.legend()
+            plt.savefig("hist_edges_compare.png")
+            breakpoint()
+            #  == Update inter-subgraph edges ===
+            # Identify inter-subgraph edges
             inter_mask = (g.edata['weight'] == 0)
-            g.edata['weight'][inter_mask] = y[inter_mask]
+            # Identify non-neighbor edges
+            u, v = g.edges()
+            x = g.ndata['x_pos']
+            y = g.ndata['y_pos']
+
+            dx = (x[u] - x[v]).abs()
+            dy = (y[u] - y[v]).abs()
+            non_neighbor_edge_mask = (dx >= 2) | (dy >= 2)
+            # Update edge weights for inter-subgraph edges only
+            g.edata['weight'][inter_mask & non_neighbor_edge_mask] = y[inter_mask & non_neighbor_edge_mask]
             print(f"the number of {layer}th-step rescued edges: {g.edata['weight'].sum()} / {g.num_edges()}")
-            # Update edge mask
+            # Update edge masks for inter-subgraph edges only
             edge_mask = g.edata['mask']
-            g.edata['mask'][(edge_mask == 0) & (y > self.threshold)] = layer + 1
+            g.edata['mask'][(edge_mask == 0) & (y > self.threshold) & non_neighbor_edge_mask] = layer + 1
             print(f"the number of {layer}th-step rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
  
             updated_weight = g.edata['weight'].clone()

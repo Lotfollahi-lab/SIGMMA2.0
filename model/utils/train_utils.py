@@ -313,7 +313,13 @@ def train_one_epoch(
         wandb_logger.set_step()
 
         global_step += 1
-
+    save_checkpoint(model,
+                    optimizer,
+                    lr_scheduler,
+                    config.outdir,
+                    global_step + 1,
+                    epoch_index + 1,
+                )
     return global_step
 
 

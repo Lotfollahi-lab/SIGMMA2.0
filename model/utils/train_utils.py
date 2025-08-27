@@ -301,14 +301,15 @@ def train_one_epoch(
                                  "(eval)image recall@15percent": eval_results["image_recall@15percent"],
                                  "(eval)spatial recall@5percent": eval_results["spatial_recall@5percent"],
                                  "(eval)spatial recall@10percent": eval_results["spatial_recall@10percent"],
-                                 "(eval)spatial recall@15percent": eval_results["spatial_recall@15percent"]})
+                                 "(eval)spatial recall@15percent": eval_results["spatial_recall@15percent"],
+                                 "epoch": epoch_index + 1})
             torch.save({"eval_image_embeddings": eval_image_embedding,
                         "eval_spatial_embeddings": eval_spatial_embedding},
                        f"{config.outdir}/embeddings-{global_step + 1}.pt")
 
         wandb_logger.update({"(train)loss": loss,
                              "(train)lr": lr_scheduler.get_last_lr()[0],
-                             "(train)epoch": epoch_index})
+                             "epoch": epoch_index + 1})
         wandb_logger.set_step()
 
         global_step += 1

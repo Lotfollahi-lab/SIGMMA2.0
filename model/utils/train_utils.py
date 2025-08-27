@@ -79,7 +79,7 @@ def load_model(config:ConfigDict,
             ),
             strict=True,
         )
-        pretrained_image_encoder.eval()
+        pretrained_image_encoder.eval() # TODO
 
         model = single_img_spatial(config.model, pretrained_image_encoder)
 
@@ -231,6 +231,7 @@ def train_one_epoch(
                     accum_features["spatial_embedding"].append(spatial_embedding)
 
             if (i+1) % accum_freq > 0:
+                print(f"Skipping optimizer step at iter {i}, accumulating more gradients...")
                 continue
             
             # Take gradients for the last accum_freq batches

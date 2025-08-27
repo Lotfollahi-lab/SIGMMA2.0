@@ -139,7 +139,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
                 node_features_grid = torch.Tensor(self.spatial_anndata[mask_grid,:].X.toarray())
                 subgraph_grid.ndata['feat'] = node_features_grid
-
+                subgraph_grid.ndata['x_pos'] = torch.full((subgraph_grid.num_nodes(),), x_start_grid // grid_size)
+                subgraph_grid.ndata['y_pos'] = torch.full((subgraph_grid.num_nodes(),), y_start_grid // grid_size)
                 subgraphs.append(subgraph_grid)
             
             disjoint_spatial_graph = dgl.batch(subgraphs)
@@ -153,6 +154,9 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             for edge in sub_edges:
                 if edge in spatial_edge_map:
                     edge_mask[spatial_edge_map[edge]] = -1
+
+            spatial_graph.ndata['x_pos'] = disjoint_spatial_graph.ndata['x_pos']
+            spatial_graph.ndata['y_pos'] = disjoint_spatial_graph.ndata['y_pos']
 
             spatial_graph.edata['mask'] = edge_mask
             spatial_graph.edata['weight'] = torch.where(edge_mask == -1, torch.tensor(1.0), torch.tensor(0.0))

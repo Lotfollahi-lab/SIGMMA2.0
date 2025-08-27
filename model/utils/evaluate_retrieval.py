@@ -30,10 +30,10 @@ def load_embeddings(model, dataloader, device, config):
 
         if config.model.name in ["hierarchical_img_cellgraph", "single_img_spatial_graph"]:
             spatial = batch["spatial_graph"].to(device)
-            inputs = [image, spatial, cell_type_composition]
+            inputs = [image, spatial]
         elif model_name == "single_img_spatial":
             spatial = batch["spatial"].to(device)
-            inputs = [image, spatial, cell_type_composition]
+            inputs = [image, spatial]
         elif model_name in ["openAI_CLIP", "PLIP", "OmiCLIP"]:
             spatial = batch["spatial_text"]
             inputs = [image, spatial]
@@ -42,10 +42,9 @@ def load_embeddings(model, dataloader, device, config):
         
         # Forward pass through the model
         with torch.no_grad():
-            if config.model.name == "hierarchical_img_cellgraph":
-                loss_kl, loss_contrastive, loss_ce, loss, image_embed, spatial_embed = model(*inputs) # TODO: multi-resolution embeddings
-            else:
-                loss, image_embed, spatial_embed = model(*inputs)
+            model_output = model(*inputs)
+            image_embed = model_output["image_embedding"]
+            spatial_embed = model_output["spatial_embedding"]
 
         # Normalize embeddings
         image_embed = image_embed / image_embed.norm(dim=-1, keepdim=True)

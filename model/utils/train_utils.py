@@ -181,7 +181,7 @@ def train_one_epoch(
     model = model.to(device)
     model.train()
 
-    wandb.watch(model, log="all", log_freq=10)
+    wandb.watch(model, log=None, log_freq=10)
 
     accum_freq = config.get("train.gradient_accumulation_steps", 1)
     if accum_freq > 1:
@@ -280,13 +280,6 @@ def train_one_epoch(
             fig_eval_img2img_heatmap = heatmap(eval_image_embedding.detach().cpu(), eval_image_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Image Embeddings")
             fig_eval_spatial2spatial_heatmap = heatmap(eval_spatial_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
 
-            # Plot raw embeddings
-            image_flat, spatial_flat = image_embedding.view(image_embedding.size(0), -1), spatial_embedding.view(spatial_embedding.size(0), -1)
-            pca = PCA(n_components=min(image_flat.size(1), spatial_flat.size(1), 2))
-            both = torch.cat((image_flat, spatial_flat), dim=0)
-            both_pca = pca.fit_transform(both.detach().cpu().numpy())
-            image_pca, spatial_pca = both_pca[:image_flat.size(0)], both_pca[image_flat.size(0):]
-            fig_train_raw_umap = PCA_embeddings(image_pca, spatial_pca)
             # Plot learnt embeddings
             fig_train_umap = UMAP_embeddings(image_embedding.detach().cpu(), spatial_embedding.detach().cpu())
             fig_train_img2spatial_heatmap = heatmap(image_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")
@@ -294,8 +287,7 @@ def train_one_epoch(
             fig_train_spatial2spatial_heatmap = heatmap(spatial_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
 
             model.train() # Set model back to training mode
-            wandb_logger.update({"raw_UMAP_embeddings": wandb.Image(fig_train_raw_umap),
-                                 "(train)UMAP_embeddings": wandb.Image(fig_train_umap),
+            wandb_logger.update({"(train)UMAP_embeddings": wandb.Image(fig_train_umap),
                                  "(train)img2spatial heatmap": wandb.Image(fig_train_img2spatial_heatmap),
                                  "(train)img2img heatmap": wandb.Image(fig_train_img2img_heatmap),
                                  "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),
@@ -309,18 +301,25 @@ def train_one_epoch(
                                  "(eval)image recall@15percent": eval_results["image_recall@15percent"],
                                  "(eval)spatial recall@5percent": eval_results["spatial_recall@5percent"],
                                  "(eval)spatial recall@10percent": eval_results["spatial_recall@10percent"],
-                                 "(eval)spatial recall@15percent": eval_results["spatial_recall@15percent"]})
+                                 "(eval)spatial recall@15percent": eval_results["spatial_recall@15percent"],
+                                 "epoch": epoch_index + 1})
             torch.save({"eval_image_embeddings": eval_image_embedding,
                         "eval_spatial_embeddings": eval_spatial_embedding},
                        f"{config.outdir}/embeddings-{global_step + 1}.pt")
 
         wandb_logger.update({"(train)loss": loss,
                              "(train)lr": lr_scheduler.get_last_lr()[0],
-                             "(train)epoch": epoch_index})
+                             "epoch": epoch_index + 1})
         wandb_logger.set_step()
 
         global_step += 1
-
+    save_checkpoint(model,
+                    optimizer,
+                    lr_scheduler,
+                    config.outdir,
+                    global_step + 1,
+                    epoch_index + 1,
+                )
     return global_step
 
 
@@ -368,23 +367,24 @@ def evaluate(config, model, eval_dataloader, device):
     with torch.no_grad():
         for batch in eval_dataloader:
             image = batch["image"].to(device)
-            cell_type_composition = batch["cell_type_composition"].to(device)
             if config.model.name in ["hierarchical_img_cellgraph", "single_img_spatial_graph"]:
                 spatial = batch['spatial_graph'].to(device)
-                inputs = [image, spatial, cell_type_composition]
+                inputs = [image, spatial]
             elif config.model.name in ["single_img_spatial"]:
                 spatial = batch["spatial"].to(device)
-                inputs = [image, spatial, cell_type_composition]
+                inputs = [image, spatial]
             elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
                 spatial = batch['spatial_text']
                 inputs = [image, spatial]
             else:
                 raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
-            if config.model.name == "hierarchical_img_cellgraph":
-                _, _, _, loss, image_embedding, spatial_embedding = model(*inputs)
-            else:
-                loss, image_embedding, spatial_embedding = model(*inputs)
+            with torch.no_grad():
+                model_out = model(*inputs)
+                loss = model_out["loss"]
+                image_embedding = model_out["image_embedding"]
+                spatial_embedding = model_out["spatial_embedding"]
+
             all_image_embeddings.append(image_embedding.cpu())
             all_spatial_embeddings.append(spatial_embedding.cpu())
 
@@ -445,7 +445,7 @@ def heatmap(image_embedding, spatial_embedding, xlabel="Spatial Embeddings", yla
     score_matrix = torch.matmul(image_embedding, spatial_embedding.T).cpu().numpy()
 
     fig, ax = plt.subplots(figsize=(10, 10))
-    cax = ax.matshow(score_matrix, cmap='coolwarm', vmin=-0.5, vmax=0.5)
+    cax = ax.matshow(score_matrix, cmap='coolwarm', vmin=-1, vmax=1)
     fig.colorbar(cax)
     ax.set_title("Score Matrix Heatmap")
     ax.set_xlabel(xlabel)

@@ -92,8 +92,8 @@ class hierarchical_img_cellgraph(nn.Module):
         """
         embedding_pairs = []
 
-        # Imaage embeddings
-        img_embeddings = self.image_encoder(x1)
+        # Image embeddings
+        x1_multiple_resolution = self.image_encoder(x1)
         # Spatial embeddings
         g, h_x2 = x2, x2.ndata['feat']
         self_loops = (g.edges()[0] == g.edges()[1])
@@ -107,10 +107,14 @@ class hierarchical_img_cellgraph(nn.Module):
 
             loss_kl.extend(self.spatial_encoder[i*2].kl_terms)
 
-            h_x1 = img_embeddings[i]
-            embedding_pairs.append((h_x1, h_x2_pooled))
+            h_x1 = x1_multiple_resolution[i]
 
-            loss_contrastive = self.contrastive_loss(h_x1, h_x2_pooled)
+            # normalize embeddings
+            h_x1_norm = nn.functional.normalize(h_x1, dim=-1)
+            h_x2_norm = nn.functional.normalize(h_x2_pooled, dim=-1)
+
+            embedding_pairs.append((h_x1_norm, h_x2_norm))
+            loss_contrastive = self.contrastive_loss(h_x1_norm, h_x2_norm)
 
             # # cross attention
             # att = self.cross_attention(h_x1, h_x2_pooled)

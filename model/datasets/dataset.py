@@ -103,6 +103,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             & (points[:, 1] < y_start + self.fov_size)
         )
 
+        # TODO: Raw exp vs nemo latent
         # cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
         cell_embeddings = torch.Tensor(self.spatial_anndata.X[mask].toarray())
         spatial_embedding = cell_embeddings.mean(dim=0)
@@ -137,6 +138,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
                 subgraph_grid = dgl.from_scipy(sparse_maxtrix_grid)
 
+                # TODO: Raw exp vs nemo latent
+                # node_features_grid = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask_grid])
                 node_features_grid = torch.Tensor(self.spatial_anndata[mask_grid,:].X.toarray())
                 subgraph_grid.ndata['feat'] = node_features_grid
                 subgraph_grid.ndata['x_pos'] = torch.full((subgraph_grid.num_nodes(),), x_start_grid // grid_size)

@@ -361,8 +361,6 @@ def evaluate(config, model, eval_dataloader, device):
     Evaluate the model on the validation dataset.
     """
     model.eval()
-    total_loss = 0.0
-    num_samples = 0
     all_image_embeddings = []
     all_spatial_embeddings = []
 
@@ -382,24 +380,19 @@ def evaluate(config, model, eval_dataloader, device):
                 raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
             model_out = model(*inputs)
-            loss = model_out["loss"]
             image_embedding = model_out["image_embedding"]
             spatial_embedding = model_out["spatial_embedding"]
 
-            batch_size = image.shape[0]
-            num_samples += batch_size
             all_image_embeddings.append(image_embedding.cpu())
             all_spatial_embeddings.append(spatial_embedding.cpu())
 
-            total_loss += loss.item() * batch_size
-
-    avg_loss = total_loss / num_samples
-    all_image_embeddings = torch.cat(all_image_embeddings, dim=0)
-    all_spatial_embeddings = torch.cat(all_spatial_embeddings, dim=0)
+    all_image_embeddings = torch.concat(all_image_embeddings, dim=0).to(device)
+    all_spatial_embeddings = torch.concat(all_spatial_embeddings, dim=0).to(device)
+    loss = InfoNCE()(all_image_embeddings, all_spatial_embeddings)
 
     score_matrix_img2spatial, score_matrix_spatial2image = retrieval_score(model, eval_dataloader, eval_dataloader, device, config)
     eval_results = eval_retrieval(score_matrix_img2spatial, score_matrix_spatial2image)
-    return avg_loss, all_image_embeddings, all_spatial_embeddings, score_matrix_img2spatial, score_matrix_spatial2image, eval_results
+    return loss, all_image_embeddings, all_spatial_embeddings, score_matrix_img2spatial, score_matrix_spatial2image, eval_results
 
 def PCA_embeddings(image_embeddings, spatial_embeddings, num_samples=1000):
     """

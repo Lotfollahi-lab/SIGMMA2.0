@@ -248,10 +248,7 @@ class BaseGRAPHLayer(torch.nn.Module):
         self.convs = torch.nn.ModuleList()
         self.num_layers = num_layers
         for _ in range(self.num_layers):
-            self.convs.append(dgl.nn.GraphConv(output_dim, output_dim))
-            # self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim))
-        self.threshold = threshold
-        self.temperature = temperature
+            self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim, 'mean'))
 
     def forward(self,
                 g: dgl.graph,

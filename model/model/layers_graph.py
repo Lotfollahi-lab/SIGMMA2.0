@@ -259,7 +259,8 @@ class BaseGRAPHLayer(torch.nn.Module):
             h = layer(h)
 
         # Apply GCN/structure learning layers
-        g = dgl.add_self_loop(g)
+        g_unbatched = [dgl.add_self_loop(graph) for graph in dgl.unbatch(g)]
+        g = dgl.batch(g_unbatched)
 
         for i in range(self.num_layers):
             h = self.convs[i](g, h)
@@ -298,7 +299,7 @@ class READOUTLayer(torch.nn.Module):
             self.pool = dgl.nn.GlobalAttentionPooling(gate_nn)
 
         self.mlp = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
-                                         torch.nn.BatchNorm1d(output_dim),
+                                        torch.nn.LayerNorm(output_dim),
                                         self.activation,
                                         torch.nn.Dropout(p=dropout),])
         

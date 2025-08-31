@@ -22,7 +22,8 @@ class single_img_spatial_graph(nn.Module):
         self.spatial_projection.append(BaseGRAPHLayer(config.spatial_encoder_input_dim,
                                                       config.spatial_encoder_output_dim,
                                                       config.activation,
-                                                      config.dropout))
+                                                      config.dropout,
+                                                      config.num_graph_layers))
         self.spatial_projection.append(READOUTLayer(config.spatial_encoder_output_dim,
                                                    config.spatial_encoder_output_dim,
                                                    config.aggregate,

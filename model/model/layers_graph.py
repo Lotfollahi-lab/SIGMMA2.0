@@ -235,12 +235,15 @@ class BaseGRAPHLayer(torch.nn.Module):
             self.activation = torch.nn.LeakyReLU()
 
         # Graph node embedding layer w/o message passing
-        self.node_embedding = torch.nn.ModuleList([torch.nn.Dropout(p=dropout), torch.nn.Linear(input_dim, output_dim), self.activation, torch.nn.Dropout(p=dropout)])
-        # self.node_embedding = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
-        #                                 torch.nn.BatchNorm1d(output_dim),
-        #                                 self.activation,
-        #                                 torch.nn.Dropout(p=dropout),])
-
+        self.node_embedding = torch.nn.ModuleList([torch.nn.Linear(input_dim, input_dim * 2),
+                                                   torch.nn.LayerNorm(input_dim * 2),
+                                                   self.activation,
+                                                   torch.nn.Dropout(p=dropout),
+                                                   torch.nn.Linear(input_dim * 2, output_dim),
+                                                   torch.nn.LayerNorm(output_dim),
+                                                   self.activation,
+                                                   torch.nn.Dropout(p=dropout),
+                                        ])
 
         self.convs = torch.nn.ModuleList()
         self.num_layers = num_layers
@@ -282,7 +285,10 @@ class READOUTLayer(torch.nn.Module):
         elif activation == 'leaky_relu':
             self.activation = torch.nn.LeakyReLU()
 
-        self.node_embedding = torch.nn.ModuleList([torch.nn.Dropout(p=dropout), torch.nn.Linear(input_dim, output_dim), self.activation, torch.nn.Dropout(p=dropout)])
+        self.node_embedding = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
+                                                   torch.nn.LayerNorm(output_dim),
+                                                   self.activation,
+                                                   torch.nn.Dropout(p=dropout),])
 
         if aggregate == 'mean':
             self.pool = dgl.nn.AvgPooling()

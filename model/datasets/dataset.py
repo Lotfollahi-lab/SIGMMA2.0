@@ -27,7 +27,8 @@ collate_fn_map[bytes] = collate_str_fn
 class MultiSectionDataset(torch.utils.data.Dataset):
     def __init__(self,
                  manifest_path: Path | str,
-                 num_cell_types: int = 84):
+                 num_cell_types: int = 84,
+                 pretrained_cell_embedding: bool = True):
         manifest =  pd.read_csv(manifest_path)
         slides = manifest['sample_name']
         li_datsets = []
@@ -39,7 +40,8 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                 image_file=Path(image_file),
                 spatial_file=Path(spatial_file),
                 indices_file=Path(index_file),
-                num_cell_types=num_cell_types
+                num_cell_types=num_cell_types,
+                pretrained_cell_embedding=pretrained_cell_embedding,
             )
             li_datsets.append(dataset)
         self.modality_datasets = torch.utils.data.ConcatDataset(li_datsets)
@@ -64,6 +66,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         housekeeping_genes: Optional[Sequence[str]] = None,
         hierarchical_graph: bool = True,
         tissue_filtering_threshold: float = 20000,
+        pretrained_cell_embedding: bool = True,
     ):
         self.image_file = str(image_file)
         self.indices_file = str(indices_file)
@@ -88,6 +91,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.num_cell_types = num_cell_types
         self.housekeeping_genes = housekeeping_genes
         self.hierarchical_graph = hierarchical_graph
+        self.pretrained_cell_embedding = pretrained_cell_embedding
 
 
     def __getitem__(self, idx):
@@ -103,9 +107,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             & (points[:, 1] < y_start + self.fov_size)
         )
 
-        # TODO: Raw exp vs nemo latent
-        # cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
-        cell_embeddings = torch.Tensor(self.spatial_anndata.X[mask].toarray())
+        if self.pretrained_cell_embedding == True:
+            cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
+        else:
+            cell_embeddings = torch.Tensor(self.spatial_anndata.X[mask].toarray())
         spatial_embedding = cell_embeddings.mean(dim=0)
         if torch.isnan(spatial_embedding).any():
             spatial_embedding = spatial_embedding.nan_to_num(0.0)
@@ -138,9 +143,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
                 subgraph_grid = dgl.from_scipy(sparse_maxtrix_grid)
 
-                # TODO: Raw exp vs nemo latent
-                # node_features_grid = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask_grid])
-                node_features_grid = torch.Tensor(self.spatial_anndata[mask_grid,:].X.toarray())
+                if self.pretrained_cell_embedding == True:
+                    node_features_grid = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask_grid])
+                else:
+                    node_features_grid = torch.Tensor(self.spatial_anndata[mask_grid,:].X.toarray())
                 subgraph_grid.ndata['feat'] = node_features_grid
                 subgraph_grid.ndata['x_pos'] = torch.full((subgraph_grid.num_nodes(),), x_start_grid // grid_size)
                 subgraph_grid.ndata['y_pos'] = torch.full((subgraph_grid.num_nodes(),), y_start_grid // grid_size)

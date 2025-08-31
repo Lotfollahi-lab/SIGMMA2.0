@@ -273,7 +273,7 @@ class READOUTLayer(torch.nn.Module):
     def __init__(self, 
                  input_dim: int,
                  output_dim: int,
-                 aggregate: Union['mean','max','add']= 'max', 
+                 aggregate: Union['mean','max','add','attn_pool']= 'max',
                  activation: Union['relu', 'sigmoid', 'leaky_relu'] = 'leaky_relu',
                  dropout: float = 0,
                  ):
@@ -296,6 +296,9 @@ class READOUTLayer(torch.nn.Module):
             self.pool = dgl.nn.MaxPooling()
         elif aggregate == 'add':
             self.pool = dgl.nn.SumPooling()
+        elif aggregate == 'attn_pool':
+            gate_nn = torch.nn.Sequential(torch.nn.Linear(input_dim, 2 * input_dim), torch.nn.LayerNorm(2 * input_dim), self.activation, torch.nn.Linear(2 * input_dim, 1))
+            self.pool = dgl.nn.GlobalAttentionPooling(gate_nn)
 
         self.mlp = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
                                          torch.nn.BatchNorm1d(output_dim),

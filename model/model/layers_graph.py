@@ -224,10 +224,7 @@ class BaseGRAPHLayer(torch.nn.Module):
                  output_dim: int,
                  activation: Union['relu','sigmoid','leaky_relu'] = 'leaky_relu',
                  dropout: float = 0,
-                 bias: bool = True,
                  num_layers: int = 1,
-                 threshold: float = 0.5,
-                 temperature: float = 0.5,
                  ):
         super(BaseGRAPHLayer, self).__init__()
         if activation == 'relu':
@@ -267,7 +264,6 @@ class BaseGRAPHLayer(torch.nn.Module):
         for i in range(self.num_layers):
             h = self.convs[i](g, h)
             h = self.activation(h)
-            # Regularization
         return h
 
 class READOUTLayer(torch.nn.Module):
@@ -296,7 +292,7 @@ class READOUTLayer(torch.nn.Module):
             self.pool = dgl.nn.SumPooling()
 
         self.mlp = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
-                                        torch.nn.BatchNorm1d(output_dim),
+                                         torch.nn.BatchNorm1d(output_dim),
                                         self.activation,
                                         torch.nn.Dropout(p=dropout),])
         

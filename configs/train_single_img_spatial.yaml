@@ -9,7 +9,6 @@ model:
   temperature: 0.01
   dropout: 0.1
   activation: 'leaky_relu'
-  aggregate: 'max'
   
 dataset:
   split_type: 'section_split'

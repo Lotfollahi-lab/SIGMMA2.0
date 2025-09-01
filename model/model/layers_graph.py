@@ -248,7 +248,7 @@ class BaseGRAPHLayer(torch.nn.Module):
         self.convs = torch.nn.ModuleList()
         self.num_layers = num_layers
         for _ in range(self.num_layers):
-            self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim, 'mean'))
+            self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim, 'lstm'))
 
     def forward(self,
                 g: dgl.graph,
@@ -283,7 +283,11 @@ class READOUTLayer(torch.nn.Module):
         elif activation == 'leaky_relu':
             self.activation = torch.nn.LeakyReLU()
 
-        self.node_embedding = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
+        self.node_embedding = torch.nn.ModuleList([torch.nn.Linear(input_dim, input_dim * 2),
+                                                   torch.nn.LayerNorm(input_dim * 2),
+                                                   self.activation,
+                                                   torch.nn.Dropout(p=dropout),
+                                                   torch.nn.Linear(input_dim * 2, output_dim),
                                                    torch.nn.LayerNorm(output_dim),
                                                    self.activation,
                                                    torch.nn.Dropout(p=dropout),])
@@ -295,14 +299,13 @@ class READOUTLayer(torch.nn.Module):
         elif aggregate == 'add':
             self.pool = dgl.nn.SumPooling()
         elif aggregate == 'attn_pool':
-            gate_nn = torch.nn.Sequential(torch.nn.Linear(input_dim, 2 * input_dim), torch.nn.LayerNorm(2 * input_dim), self.activation, torch.nn.Linear(2 * input_dim, 1))
+            gate_nn = torch.nn.Sequential(torch.nn.Linear(output_dim, output_dim), torch.nn.LayerNorm(output_dim), self.activation, torch.nn.Linear(output_dim, 1))
             self.pool = dgl.nn.GlobalAttentionPooling(gate_nn)
 
-        self.mlp = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
-                                        torch.nn.LayerNorm(output_dim),
-                                        self.activation,
-                                        torch.nn.Dropout(p=dropout),])
-        
+        self.mlp = torch.nn.ModuleList([torch.nn.Linear(output_dim, output_dim),
+                                         torch.nn.LayerNorm(output_dim),
+                                         torch.nn.Dropout(p=dropout),])
+
     def forward(self, g, h):
         # Embedding layer
         for layer in self.node_embedding:

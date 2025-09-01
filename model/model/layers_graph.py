@@ -224,10 +224,7 @@ class BaseGRAPHLayer(torch.nn.Module):
                  output_dim: int,
                  activation: Union['relu','sigmoid','leaky_relu'] = 'leaky_relu',
                  dropout: float = 0,
-                 bias: bool = True,
                  num_layers: int = 1,
-                 threshold: float = 0.5,
-                 temperature: float = 0.5,
                  ):
         super(BaseGRAPHLayer, self).__init__()
         if activation == 'relu':
@@ -238,20 +235,20 @@ class BaseGRAPHLayer(torch.nn.Module):
             self.activation = torch.nn.LeakyReLU()
 
         # Graph node embedding layer w/o message passing
-        self.node_embedding = torch.nn.ModuleList([torch.nn.Dropout(p=dropout), torch.nn.Linear(input_dim, output_dim), self.activation, torch.nn.Dropout(p=dropout)])
-        # self.node_embedding = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
-        #                                 torch.nn.BatchNorm1d(output_dim),
-        #                                 self.activation,
-        #                                 torch.nn.Dropout(p=dropout),])
-
+        self.node_embedding = torch.nn.ModuleList([torch.nn.Linear(input_dim, input_dim * 2),
+                                                   torch.nn.LayerNorm(input_dim * 2),
+                                                   self.activation,
+                                                   torch.nn.Dropout(p=dropout),
+                                                   torch.nn.Linear(input_dim * 2, output_dim),
+                                                   torch.nn.LayerNorm(output_dim),
+                                                   self.activation,
+                                                   torch.nn.Dropout(p=dropout),
+                                        ])
 
         self.convs = torch.nn.ModuleList()
         self.num_layers = num_layers
         for _ in range(self.num_layers):
-            self.convs.append(dgl.nn.GraphConv(output_dim, output_dim))
-            # self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim))
-        self.threshold = threshold
-        self.temperature = temperature
+            self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim, 'lstm'))
 
     def forward(self,
                 g: dgl.graph,
@@ -262,19 +259,19 @@ class BaseGRAPHLayer(torch.nn.Module):
             h = layer(h)
 
         # Apply GCN/structure learning layers
-        g = dgl.add_self_loop(g)
+        g_unbatched = [dgl.add_self_loop(graph) for graph in dgl.unbatch(g)]
+        g = dgl.batch(g_unbatched)
 
         for i in range(self.num_layers):
             h = self.convs[i](g, h)
             h = self.activation(h)
-            # Regularization
         return h
 
 class READOUTLayer(torch.nn.Module):
     def __init__(self, 
                  input_dim: int,
                  output_dim: int,
-                 aggregate: Union['mean','max','add']= 'max', 
+                 aggregate: Union['mean','max','add','attn_pool']= 'max',
                  activation: Union['relu', 'sigmoid', 'leaky_relu'] = 'leaky_relu',
                  dropout: float = 0,
                  ):
@@ -286,7 +283,14 @@ class READOUTLayer(torch.nn.Module):
         elif activation == 'leaky_relu':
             self.activation = torch.nn.LeakyReLU()
 
-        self.node_embedding = torch.nn.ModuleList([torch.nn.Dropout(p=dropout), torch.nn.Linear(input_dim, output_dim), self.activation, torch.nn.Dropout(p=dropout)])
+        self.node_embedding = torch.nn.ModuleList([torch.nn.Linear(input_dim, input_dim * 2),
+                                                   torch.nn.LayerNorm(input_dim * 2),
+                                                   self.activation,
+                                                   torch.nn.Dropout(p=dropout),
+                                                   torch.nn.Linear(input_dim * 2, output_dim),
+                                                   torch.nn.LayerNorm(output_dim),
+                                                   self.activation,
+                                                   torch.nn.Dropout(p=dropout),])
 
         if aggregate == 'mean':
             self.pool = dgl.nn.AvgPooling()
@@ -294,12 +298,14 @@ class READOUTLayer(torch.nn.Module):
             self.pool = dgl.nn.MaxPooling()
         elif aggregate == 'add':
             self.pool = dgl.nn.SumPooling()
+        elif aggregate == 'attn_pool':
+            gate_nn = torch.nn.Sequential(torch.nn.Linear(output_dim, output_dim), torch.nn.LayerNorm(output_dim), self.activation, torch.nn.Linear(output_dim, 1))
+            self.pool = dgl.nn.GlobalAttentionPooling(gate_nn)
 
-        self.mlp = torch.nn.ModuleList([torch.nn.Linear(input_dim, output_dim),
-                                        torch.nn.BatchNorm1d(output_dim),
-                                        self.activation,
-                                        torch.nn.Dropout(p=dropout),])
-        
+        self.mlp = torch.nn.ModuleList([torch.nn.Linear(output_dim, output_dim),
+                                         torch.nn.LayerNorm(output_dim),
+                                         torch.nn.Dropout(p=dropout),])
+
     def forward(self, g, h):
         # Embedding layer
         for layer in self.node_embedding:

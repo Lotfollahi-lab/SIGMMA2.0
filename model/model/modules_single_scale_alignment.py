@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .losses import InfoNCE
+from .losses import InfoNCE, symmetric_InfoNCE
 from .layers import DINOHead
 from .layers_graph import BaseGRAPHLayer, READOUTLayer
 
@@ -22,14 +22,15 @@ class single_img_spatial_graph(nn.Module):
         self.spatial_projection.append(BaseGRAPHLayer(config.spatial_encoder_input_dim,
                                                       config.spatial_encoder_output_dim,
                                                       config.activation,
-                                                      config.dropout))
+                                                      config.dropout,
+                                                      config.num_graph_layers))
         self.spatial_projection.append(READOUTLayer(config.spatial_encoder_output_dim,
                                                    config.spatial_encoder_output_dim,
                                                    config.aggregate,
                                                    config.activation,
                                                    config.dropout))
 
-        self.loss_fn = InfoNCE(temperature=config.temperature)
+        self.loss_fn = symmetric_InfoNCE(temperature=config.temperature)
 
     def forward(self, x1, x2):
         """
@@ -76,7 +77,7 @@ class single_img_spatial(nn.Module):
             out_dim = config.spatial_encoder_output_dim,
         )
 
-        self.loss_fn = InfoNCE(temperature=config.temperature)
+        self.loss_fn = symmetric_InfoNCE(temperature=config.temperature)
 
     def forward(self, x1, x2):
         """

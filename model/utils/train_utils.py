@@ -112,13 +112,15 @@ def load_model(config:ConfigDict,
             weight_decay=config.train.weight_decay,
         )
 
-        lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1, total_iters=config.train.epochs * config.train.batch_size)
+        if config.train.lr_scheduler == "constant":
+            lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1, total_iters=config.train.epochs * config.train.batch_size)
 
-        # lr_scheduler = torch.optim.lr_scheduler.StepLR(
-        #     optimizer,
-        #     step_size=config.train.lr_step_size,
-        #     gamma=config.train.lr_gamma,
-        # )
+        elif config.train.lr_scheduler == "step":
+            lr_scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer,
+                step_size=config.train.lr_step_size,
+                gamma=config.train.lr_gamma,
+        )
 
         # # + Warmup ---
         # gradient_accumulation_steps = config.get("train.gradient_accumulation_steps", 1)

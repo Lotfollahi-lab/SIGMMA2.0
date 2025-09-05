@@ -61,6 +61,22 @@ class single_img_spatial_graph(nn.Module):
                         "spatial_embedding": spatial_embedding_norm}
         return  model_outputs
 
+    def get_image_features(self, x1):
+        with torch.no_grad():
+            image_embedding = self.image_encoder(x1)
+            image_embedding = self.image_projection(image_embedding)
+            image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
+        return image_embedding_norm
+
+    def get_spatial_features(self, x2):
+        with torch.no_grad():
+            g, h_x2 = x2, x2.ndata['feat']
+            for layer in self.spatial_projection:
+                h_x2 = layer(g, h_x2)
+            spatial_embedding = h_x2
+            spatial_embedding_norm = torch.nn.functional.normalize(spatial_embedding, dim=-1)
+        return spatial_embedding_norm
+
 class single_img_spatial(nn.Module):
     def __init__(self, config, image_encoder):
         super(single_img_spatial, self).__init__()
@@ -104,6 +120,22 @@ class single_img_spatial(nn.Module):
                         "image_embedding": image_embedding_norm,
                         "spatial_embedding": spatial_embedding_norm}
         return model_outputs
+
+    def get_image_features(self, x1):
+        with torch.no_grad():
+            image_embedding = self.image_encoder(x1)
+            image_embedding = self.image_projection(image_embedding)
+            image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
+        return image_embedding_norm
+
+    def get_spatial_features(self, x2):
+        with torch.no_grad():
+            g, h_x2 = x2, x2.ndata['feat']
+            for layer in self.spatial_projection:
+                h_x2 = layer(g, h_x2)
+            spatial_embedding = h_x2
+            spatial_embedding_norm = torch.nn.functional.normalize(spatial_embedding, dim=-1)
+        return spatial_embedding_norm
 
 def cell_type_composition_predictor(
                         input_dim: int,

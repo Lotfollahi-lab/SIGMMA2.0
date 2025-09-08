@@ -6,6 +6,8 @@ from pathlib import Path
 import pandas as pd
 import pickle
 import copy
+import timm
+
 import torch
 from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 
@@ -57,7 +59,21 @@ def main(args):
     model_name = config.model.get("name")
     multimodal_model = load_model(config, device, pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
     multimodal_model.eval()
-    unimodal_image_encoder = None # TODO
+
+    unimodal_image_encoder = timm.create_model(
+            "vit_large_patch16_224",
+            img_size=224,
+            patch_size=16,
+            init_values=1e-5,
+            num_classes=0,
+            dynamic_img_size=True,
+        )
+    unimodal_image_encoder.load_state_dict(
+            torch.load(
+                Path(config.model.pretrained_image_encoder_ckpt_path, "pytorch_model.bin"), map_location="cpu"
+            ),
+            strict=True,
+        )
     unimodal_image_encoder.eval()
     
     # === Patch-level gene expression === 

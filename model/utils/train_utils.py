@@ -9,7 +9,7 @@ from ml_collections.config_dict import ConfigDict
 import pickle
 import timm
 from model.datasets.dataset import MultiSectionDataset
-from model.model import hierarchical_img_cellgraph, single_img_spatial, single_img_spatial_graph, openAI_CLIP, PLIP, OmiCLIP, InfoNCE
+from model.model import hierarchical_img_spatial_graph, single_img_spatial, single_img_spatial_graph, openAI_CLIP, PLIP, OmiCLIP, InfoNCE
 from .evaluate_retrieval import retrieval_score, eval_retrieval
 from transformers import CLIPProcessor, CLIPModel
 import loki.utils
@@ -38,8 +38,8 @@ def load_model(config:ConfigDict,
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
-    if config.model.name == "hierarchical_img_cellgraph":
-        model = hierarchical_img_cellgraph(config.model)
+    if config.model.name == "hierarchical_img_spatial_graph":
+        model = hierarchical_img_spatial_graph(config.model)
 
     elif config.model.name == "single_img_spatial":
         pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
@@ -170,7 +170,7 @@ def train_one_epoch(
 
     for i, batch in enumerate(train_dataloader):
         image = batch["image"].to(device)
-        if config.model.name in ["hierarchical_img_cellgraph", "single_img_spatial_graph"]:
+        if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph"]:
             spatial = batch['spatial_graph'].to(device)
             inputs = [image, spatial]
         elif config.model.name in ["single_img_spatial"]:
@@ -348,7 +348,7 @@ def evaluate(config, model, eval_dataloader, device):
     with torch.no_grad():
         for batch in eval_dataloader:
             image = batch["image"].to(device)
-            if config.model.name in ["hierarchical_img_cellgraph", "single_img_spatial_graph"]:
+            if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph"]:
                 spatial = batch['spatial_graph'].to(device)
                 inputs = [image, spatial]
             elif config.model.name in ["single_img_spatial"]:

@@ -8,9 +8,9 @@ from .modules_resnet import ResNet, BasicBlock, BottleneckBlock
 
 from .losses import InfoNCE
 
-class hierarchical_img_cellgraph(nn.Module):
+class hierarchical_img_spatial_graph(nn.Module):
     def __init__(self, config):
-        super(hierarchical_img_cellgraph, self).__init__()
+        super(hierarchical_img_spatial_graph, self).__init__()
         self.config = config
 
         block, layers = BasicBlock, [4, 3, 3] # TODO: take arbitary resnet config

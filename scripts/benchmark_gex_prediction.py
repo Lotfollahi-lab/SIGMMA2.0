@@ -15,7 +15,7 @@ from ml_collections.config_dict import ConfigDict
 import yaml
 
 from model.utils import load_dataset, load_model, linear_probing, WandbLogger
-
+from model.model import UNI
 from model.datasets import multimodal_collate
 
 from scipy.stats import pearsonr
@@ -60,20 +60,8 @@ def main(args):
     multimodal_model = load_model(config, device, pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
     multimodal_model.eval()
 
-    unimodal_image_encoder = timm.create_model(
-            "vit_large_patch16_224",
-            img_size=224,
-            patch_size=16,
-            init_values=1e-5,
-            num_classes=0,
-            dynamic_img_size=True,
-        )
-    unimodal_image_encoder.load_state_dict(
-            torch.load(
-                Path(config.model.pretrained_image_encoder_ckpt_path, "pytorch_model.bin"), map_location="cpu"
-            ),
-            strict=True,
-        )
+    unimodal_image_encoder = UNI(checkpoint_path=config.model.pretrained_image_encoder_ckpt_path)
+    unimodal_image_encoder.to(device)
     unimodal_image_encoder.eval()
     
     # === Patch-level gene expression === 
@@ -82,12 +70,15 @@ def main(args):
     
     # Image encoder only
     eval_unimodal = linear_probing(train_dataloader, test_dataloader, unimodal_image_encoder, device)
- 
     table = wandb.Table(columns=["metric", "value"])
     for metric, value in eval_multimodal.items():
+        if isinstance(value, list):
+            continue
         table.add_data(f"multimodal_{metric}", value)
         print(f"{metric}: {value}")
     for metric, value in eval_unimodal.items():
+        if isinstance(value, list):
+            continue
         table.add_data(f"unimodal_{metric}", value)
         print(f"{metric}: {value}")
     wandb_logger.update({f"{model_name}_retrieval_results": table})

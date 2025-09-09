@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import timm
+from pathlib import Path
 
 from .losses import symmetric_InfoNCE
 
@@ -79,3 +81,29 @@ class OmiCLIP(nn.Module):
                          "image_embedding": image_embeddings,
                          "text_embedding": text_embeddings}
         return model_outputs
+
+class UNI(nn.Module):
+    def __init__(self, checkpoint_path=None):
+        super(UNI, self).__init__()
+        uni_model = timm.create_model(
+            "vit_large_patch16_224",
+            img_size=224,
+            patch_size=16,
+            init_values=1e-5,
+            num_classes=0,
+            dynamic_img_size=True,
+        )
+
+        if checkpoint_path:
+            uni_model.load_state_dict(
+                torch.load(
+                    Path(checkpoint_path, "pytorch_model.bin"), map_location="cpu"
+                ),
+                strict=True,
+            )
+        self.model = uni_model
+
+    def get_image_features(self, x):
+        with torch.inference_mode():
+            image_embedding = self.model(x)
+        return image_embedding

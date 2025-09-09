@@ -71,7 +71,7 @@ def evaluate_gene_exp_prediction(y, y_pred, genes=None):
         r2_scores.append(r2_score)
         pearson_corrs.append(pearson_corr)
         score_dict = {
-            # 'name': genes[i], # TODO: add gene names
+            'name': i, #genes[i], # TODO: add gene names
             'pearson_corr': pearson_corr,
         }
         pearson_genes.append(score_dict)

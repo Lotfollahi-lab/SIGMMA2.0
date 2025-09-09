@@ -96,7 +96,6 @@ class hierarchical_img_spatial_graph(nn.Module):
         x1_multiple_resolution = self.image_encoder(x1)
         # Spatial embeddings
         g, h_x2 = x2, x2.ndata['feat']
-        self_loops = (g.edges()[0] == g.edges()[1])
         loss_kl = []
         for i in range(self.num_resolutions):
             # spatial encoder

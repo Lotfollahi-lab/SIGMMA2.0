@@ -67,7 +67,7 @@ class hierarchical_img_spatial_graph(nn.Module):
         for i in range(self.num_resolutions):
             # spatial encoder
             ## (1) graph layer
-            h_x2 = self.spatial_encoder[i*2](g, h_x2)
+            g, h_x2 = self.spatial_encoder[i*2](g, h_x2, layer_id=i)
             ## (2) graph readout layer
             h_x2_pooled = self.spatial_encoder[i*2+1](g, h_x2)
 

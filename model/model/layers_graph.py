@@ -167,7 +167,7 @@ class GRAPHLayer(torch.nn.Module):
         self.num_gnn_layers = num_gnn_layers
         for _ in range(self.num_gnn_layers):
             self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim, 'lstm'))
-            self.sls.append(StructureLearning(output_dim, sparse='hard', emb_layer=1, threshold=threshold, temperature=temperature))
+        self.sls = StructureLearning(output_dim, sparse='hard', emb_layer=1, threshold=threshold, temperature=temperature)
         self.threshold = threshold
         self.temperature = temperature
 
@@ -187,12 +187,12 @@ class GRAPHLayer(torch.nn.Module):
         for i in range(self.num_gnn_layers):
             h = self.convs[i](g, h)
             h = self.activation(h)
-            g = self.sls[i](g, h, layer=i)
-            # Regularization
-            kl = self.compute_kl_divergence(g)
-            self.kl_terms.append(kl)
+        g = self.sls(g, h, layer_id=layer_id)
+        # Regularization
+        kl = self.compute_kl_divergence(g)
+        self.kl_terms.append(kl)
 
-        return h
+        return g, h
     
     def compute_kl_divergence(self, g, use_edge_norm=True):
         """

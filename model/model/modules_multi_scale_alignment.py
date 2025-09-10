@@ -49,41 +49,8 @@ class hierarchical_img_spatial_graph(nn.Module):
                                 config.dropout)
                 )
 
-        self.cross_attention = CrossAttention(config.image_encoder_output_dim, config.spatial_encoder_output_dim)
-        
-        # self.predictors = nn.ModuleList()
-        # for _ in range(config.num_resolutions):
-        #     y_per_layer = self._cell_type_composition_predictor(
-        #     input_dim=config.image_encoder_output_dim,
-        #     output_dim=config.num_cell_types,
-        #     dropout=config.dropout,
-        #     activation=config.activation
-        #     )
-        #     self.predictors.append(y_per_layer)
-
         self.contrastive_loss = InfoNCE(temperature=config.temperature)
 
-    def _cell_type_composition_predictor(self,
-                            input_dim: int,
-                            output_dim: int,
-                            dropout: float,
-                            activation: str = 'relu'):
-
-        if activation == 'relu':
-            activation_layer = torch.nn.ReLU()
-        elif activation == 'sigmoid':
-            activation_layer = torch.nn.Sigmoid()
-        elif activation == 'leaky_relu':
-            activation_layer = torch.nn.LeakyReLU()
-     
-        # TODO: stage 1 (contrastive only)/ stage 2 (cross entropy only) split
-        cell_type_composition_predictor = torch.nn.Sequential(
-                                    torch.nn.Linear(input_dim,output_dim),torch.nn.BatchNorm1d(output_dim),
-                                    activation_layer,
-                                    torch.nn.Dropout(p=dropout))
-        
-        return cell_type_composition_predictor
- 
     def forward(self, x1, x2):
         """
         x1: image features, shape (B, C, H, W)
@@ -96,12 +63,11 @@ class hierarchical_img_spatial_graph(nn.Module):
         x1_multiple_resolution = self.image_encoder(x1)
         # Spatial embeddings
         g, h_x2 = x2, x2.ndata['feat']
-        self_loops = (g.edges()[0] == g.edges()[1])
         loss_kl = []
         for i in range(self.num_resolutions):
             # spatial encoder
             ## (1) graph layer
-            h_x2 = self.spatial_encoder[i*2](g, h_x2)
+            g, h_x2 = self.spatial_encoder[i*2](g, h_x2, layer_id=i)
             ## (2) graph readout layer
             h_x2_pooled = self.spatial_encoder[i*2+1](g, h_x2)
 
@@ -116,13 +82,6 @@ class hierarchical_img_spatial_graph(nn.Module):
             embedding_pairs.append((h_x1_norm, h_x2_norm))
             loss_contrastive = self.contrastive_loss(h_x1_norm, h_x2_norm)
 
-            # # cross attention
-            # att = self.cross_attention(h_x1, h_x2_pooled)
-            # h_x1 = h_x1 + att
-
-            # # cell type composition predictor
-            # y_hat = self.predictors[i](h_x1)
-            # loss_ce = nn.functional.cross_entropy(y_hat, y)
         loss_kl = torch.stack(loss_kl).mean()
 
         # loss: mean of KL divergence

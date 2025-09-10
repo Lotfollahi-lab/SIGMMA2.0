@@ -52,12 +52,12 @@ class StructureLearning(torch.nn.Module):
     def forward(self,
                 g: dgl.graph,
                 x: torch.Tensor,
-                layer):
+                layer_id: int):
         """
         g: DGLGraph
         x: Node features (e.g., cell embeddings)
-        pos_enc: Positional encodings (e.g., spatial coordinates
-        layer: Current layer index (for edge mask updates)
+        pos_enc: Positional encodings (e.g., spatial coordinates)
+        layer_id: Current layer index (for edge mask updates)
         """
 
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges) or 1 (inter-subgraph edges rescued in this layer)
@@ -117,12 +117,12 @@ class StructureLearning(torch.nn.Module):
             non_neighbor_edge_mask = (dx >= 2) | (dy >= 2)
             # Update edge weights for inter-subgraph edges only
             g.edata['weight'][inter_mask & non_neighbor_edge_mask] = y[inter_mask & non_neighbor_edge_mask]
-            print(f"the number of {layer}th-step rescued edges: {g.edata['weight'].sum()} / {g.num_edges()}")
+            print(f"the number of {layer_id}th-step rescued edges: {g.edata['weight'].sum()} / {g.num_edges()}")
             # Update edge masks for inter-subgraph edges only
             edge_mask = g.edata['mask']
-            g.edata['mask'][(edge_mask == 0) & (y > self.threshold) & non_neighbor_edge_mask] = layer + 1
-            print(f"the number of {layer}th-step rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
- 
+            g.edata['mask'][(edge_mask == 0) & (y > self.threshold) & non_neighbor_edge_mask] = layer_id + 1
+            print(f"the number of {layer_id}th-step rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
+
             updated_weight = g.edata['weight'].clone()
             updated_mask = g.edata['mask'].clone()
 
@@ -138,7 +138,7 @@ class GRAPHLayer(torch.nn.Module):
                  activation: Union['relu','sigmoid','leaky_relu'] = 'leaky_relu',
                  dropout: float = 0,
                  bias: bool = True,
-                 num_layers: int = 1,
+                 num_gnn_layers: int = 1,
                  threshold: float = 0.5,
                  temperature: float = 0.5,
                  ):
@@ -164,9 +164,8 @@ class GRAPHLayer(torch.nn.Module):
 
         # Initialize the GCN layers and structure learning layers
         self.convs = torch.nn.ModuleList()
-        self.sls = torch.nn.ModuleList()
-        self.num_layers = num_layers
-        for _ in range(self.num_layers):
+        self.num_gnn_layers = num_gnn_layers
+        for _ in range(self.num_gnn_layers):
             self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim, 'lstm'))
             self.sls.append(StructureLearning(output_dim, sparse='hard', emb_layer=1, threshold=threshold, temperature=temperature))
         self.threshold = threshold
@@ -175,7 +174,7 @@ class GRAPHLayer(torch.nn.Module):
     def forward(self, 
                 g: dgl.graph, 
                 h: torch.Tensor,
-                ):
+                layer_id: int):
 
         for layer in self.node_embedding:
             h = layer(h)
@@ -185,7 +184,7 @@ class GRAPHLayer(torch.nn.Module):
         g = dgl.batch(g_unbatched)
 
         self.kl_terms = []  # Store KL divergence terms for each forward pass
-        for i in range(self.num_layers):
+        for i in range(self.num_gnn_layers):
             h = self.convs[i](g, h)
             h = self.activation(h)
             g = self.sls[i](g, h, layer=i)
@@ -227,7 +226,7 @@ class BaseGRAPHLayer(torch.nn.Module):
                  output_dim: int,
                  activation: Union['relu','sigmoid','leaky_relu'] = 'leaky_relu',
                  dropout: float = 0,
-                 num_layers: int = 1,
+                 num_gnn_layers: int = 1,
                  ):
         super(BaseGRAPHLayer, self).__init__()
         if activation == 'relu':
@@ -249,8 +248,8 @@ class BaseGRAPHLayer(torch.nn.Module):
                                         ])
 
         self.convs = torch.nn.ModuleList()
-        self.num_layers = num_layers
-        for _ in range(self.num_layers):
+        self.num_gnn_layers = num_gnn_layers
+        for _ in range(self.num_gnn_layers):
             self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim, 'lstm'))
 
     def forward(self,
@@ -265,7 +264,7 @@ class BaseGRAPHLayer(torch.nn.Module):
         g_unbatched = [dgl.add_self_loop(graph) for graph in dgl.unbatch(g)]
         g = dgl.batch(g_unbatched)
 
-        for i in range(self.num_layers):
+        for i in range(self.num_gnn_layers):
             h = self.convs[i](g, h)
             h = self.activation(h)
         return h

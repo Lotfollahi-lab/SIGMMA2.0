@@ -206,12 +206,18 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         transform = Resize((224, 224))
         image = transform(fov_image)
 
+        # Label
+        label = {}
+        raw_exp = self.spatial_anndata.X[mask].toarray().mean(axis=0)
+        label['raw_exp'] = torch.tensor(raw_exp, dtype=torch.float32) # TODO: add gene names
+        label['cell_type_composition'] = cell_type_composition
+
         return {
             "image": image,
             "spatial": spatial_embedding,
             "spatial_graph": spatial_graph,
             "spatial_text": spatial_text,
-            "cell_type_composition": cell_type_composition,
+            "label": label
         }
 
     def __len__(self) -> int:

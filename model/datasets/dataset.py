@@ -231,4 +231,19 @@ def multimodal_collate(batch: collections.abc.MutableMapping):
             clone.update({key: collate([d[key] for d in batch], collate_fn_map=collate_fn_map)})
         elif isinstance(elem[key], dgl.DGLGraph):
             clone.update({key: dgl.batch([d[key] for d in batch])})
+        elif isinstance(elem[key], dict):  # dictionary 처리
+            clone[key] = multimodal_collate_dict([d[key] for d in batch])
     return clone
+
+def multimodal_collate_dict(batch_dicts):
+    elem = batch_dicts[0]
+    out = {}
+    for subkey in elem:
+        values = [d[subkey] for d in batch_dicts]
+        if type(elem[subkey]) in collate_fn_map.keys():
+            out[subkey] = collate(values, collate_fn_map=collate_fn_map)
+        elif isinstance(elem[subkey], dict):
+            out[subkey] = multimodal_collate_dict(values)
+        else:
+            out[subkey] = values
+    return out

@@ -28,7 +28,11 @@ def gene_exp_prediction(dataloader, model, device, train_mode=True, predictor=No
 
     all_embeddings = np.concatenate(all_embeddings, axis=0)
     all_labels = np.concatenate(all_labels, axis=0)
+
+    # If there are NaNs, replace them with 0
+    all_embeddings = np.nan_to_num(all_embeddings)
     all_labels = np.nan_to_num(all_labels)
+
     alpha = 100 /(all_embeddings.shape[1] * all_labels.shape[1]) 
     if train_mode:
         predictor = Ridge(solver='lsqr',
@@ -68,6 +72,7 @@ def evaluate_gene_exp_prediction(y, y_pred, genes=None):
         if np.isnan(pearson_corr):
             print(target_vals)
             print(preds)
+            pearson_corr = 0.0
         errors.append(l2_error)
         r2_scores.append(r2_score)
         pearson_corrs.append(pearson_corr)

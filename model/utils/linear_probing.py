@@ -20,14 +20,15 @@ def gene_exp_prediction(dataloader, model, device, train_mode=True, predictor=No
     with torch.no_grad():
         for batch in dataloader:
             image = batch["image"].to(device)
-            label = batch["spatial"].to(device) # TODO: adjust to accept multiple labels
+            # TODO: add option to select different labels
+            label = batch["label"]['raw_exp']
             embeddings = model.get_image_features(image)
             all_embeddings.append(embeddings.cpu())
-            all_labels.append(label.cpu())
+            all_labels.append(label)
 
     all_embeddings = np.concatenate(all_embeddings, axis=0)
     all_labels = np.concatenate(all_labels, axis=0)
-
+    all_labels = np.nan_to_num(all_labels)
     alpha = 100 /(all_embeddings.shape[1] * all_labels.shape[1]) 
     if train_mode:
         predictor = Ridge(solver='lsqr',

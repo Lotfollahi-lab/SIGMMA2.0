@@ -6,7 +6,7 @@ from .layers import CrossAttention
 
 from .modules_resnet import ResNet, BasicBlock, BottleneckBlock
 
-from .losses import InfoNCE
+from .losses import symmetric_InfoNCE
 
 class hierarchical_img_spatial_graph(nn.Module):
     def __init__(self, config, image_encoder):
@@ -48,7 +48,7 @@ class hierarchical_img_spatial_graph(nn.Module):
                                 config.dropout)
                 )
 
-        self.contrastive_loss = InfoNCE(temperature=config.temperature)
+        self.contrastive_loss = symmetric_InfoNCE(temperature=config.temperature)
 
         self.lambda_csc_img = getattr(config, "lambda_csc_img", 1.0)
         self.csc_mode = getattr(config, "csc_mode", "both")  # "both" or "alt"
@@ -98,12 +98,13 @@ class hierarchical_img_spatial_graph(nn.Module):
         y: target label (B, num_celltypes)
         """
         embedding_pairs = []
+        embedding_imgs, embedding_spatial = [], []
 
         # Image embeddings
         x1_multiple_resolution = self.image_encoder(x1)
         # Spatial embeddings
         g, h_x2 = x2, x2.ndata['feat']
-        loss_kl = []
+        loss_contrastive, loss_kl = [], []
         for i in range(self.num_resolutions):
             # spatial encoder
             ## (1) graph layer
@@ -113,6 +114,7 @@ class hierarchical_img_spatial_graph(nn.Module):
 
             loss_kl.extend(self.spatial_encoder[i*2].kl_terms)
 
+            # corresponding image embeddings
             h_x1 = x1_multiple_resolution[i]
 
             # normalize embeddings
@@ -120,7 +122,10 @@ class hierarchical_img_spatial_graph(nn.Module):
             h_x2_norm = nn.functional.normalize(h_x2_pooled, dim=-1)
 
             embedding_pairs.append((h_x1_norm, h_x2_norm))
-            loss_contrastive = self.contrastive_loss(h_x1_norm, h_x2_norm)
+            embedding_imgs.append(h_x1_norm)
+            embedding_spatial.append(h_x2_norm)
+
+            loss_contrastive.append(self.contrastive_loss(h_x1_norm, h_x2_norm))
 
         loss_kl = torch.stack(loss_kl).mean()
         loss_contrastive = torch.stack(loss_contrastive).mean()

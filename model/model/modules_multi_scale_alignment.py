@@ -50,6 +50,47 @@ class hierarchical_img_spatial_graph(nn.Module):
 
         self.contrastive_loss = InfoNCE(temperature=config.temperature)
 
+        self.lambda_csc_img = getattr(config, "lambda_csc_img", 1.0)
+        self.csc_mode = getattr(config, "csc_mode", "both")  # "both" or "alt"
+        self.register_buffer("global_step", torch.zeros((), dtype=torch.long))
+
+
+    def _csc_loss(self, z_list, mode="both", step: int = 0):
+        """
+        Cross-Scale Consistency Loss
+        =============================================
+        [Input]
+        z_list [ [B,D] for each scale ]: list of embeddings at different scales
+        mode (str): "both"-both-way optimization / "alt"-alternate optimization
+        step (int): current training step, used for "alt" mode
+        [Output]
+        loss (torch.Tensor): scalar loss
+        per_pair (dict): dictionary of loss values for each pair of scales
+        """
+        if len(z_list) <= 1:
+            return z_list[0].new_tensor(0.0), {}
+
+        pairs = list(itertools.combinations(range(len(z_list)), 2))
+        losses = []
+        per_pair = {}
+        for (a, b) in pairs:
+            za, zb = z_list[a], z_list[b]  # [B,D]
+            if mode == "both":
+                l1 = 1.0 - F.cosine_similarity(za, zb.detach(), dim=-1)
+                l2 = 1.0 - F.cosine_similarity(zb, za.detach(), dim=-1)
+                l = 0.5 * (l1 + l2)
+            elif mode == "alt":
+                if (step % 2) == 0:
+                    l = 1.0 - F.cosine_similarity(za, zb.detach(), dim=-1)
+                else:
+                    l = 1.0 - F.cosine_similarity(zb, za.detach(), dim=-1)
+            else:
+                raise ValueError("csc_mode must be 'both' or 'alt'")
+            losses.append(l.mean())
+            per_pair[f"{a}-{b}"] = float(l.mean().detach())
+        loss = torch.stack(losses).mean()
+        return loss, per_pair
+
     def forward(self, x1, x2):
         """
         x1: image features, shape (B, C, H, W)
@@ -82,9 +123,12 @@ class hierarchical_img_spatial_graph(nn.Module):
             loss_contrastive = self.contrastive_loss(h_x1_norm, h_x2_norm)
 
         loss_kl = torch.stack(loss_kl).mean()
+        loss_contrastive = torch.stack(loss_contrastive).mean()
 
-        # loss: mean of KL divergence
-        loss = loss_kl + loss_contrastive
+        self.global_step += 1
+        loss_csc_img, csc_img_terms = self._csc_loss(embedding_imgs,mode=self.csc_mode, step=self.global_step)
+
+        loss = loss_kl + loss_contrastive + self.lambda_csc_img*loss_csc_img
 
         # embedding_pairs = [(u1, v1), (u2, v2), ...] where u is image embedding and v is spatial embedding
         image_embeddings, spatial_embeddings = embedding_pairs[-1]
@@ -92,6 +136,7 @@ class hierarchical_img_spatial_graph(nn.Module):
         model_outputs = {"loss": loss,
                          "loss_kl": loss_kl,
                          "loss_contrastive": loss_contrastive,
+                         "loss_csc_img": loss_csc_img,
                          "image_embedding": image_embeddings,
                          "spatial_embedding": spatial_embeddings}
         return model_outputs

@@ -39,7 +39,25 @@ def load_model(config:ConfigDict,
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
     if config.model.name == "hierarchical_img_spatial_graph":
-        model = hierarchical_img_spatial_graph(config.model)
+        pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
+        assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
+        pretrained_image_encoder = timm.create_model(
+            "vit_large_patch16_224",
+            img_size=224,
+            patch_size=16,
+            init_values=1e-5,
+            num_classes=0,
+            dynamic_img_size=True,
+        )
+        pretrained_image_encoder.load_state_dict(
+            torch.load(
+                Path(pretrained_ckpt_dir, "pytorch_model.bin"), map_location="cpu"
+            ),
+            strict=True,
+        )
+        pretrained_image_encoder.eval()
+
+        model = hierarchical_img_spatial_graph(config.model, pretrained_image_encoder)
 
     elif config.model.name == "single_img_spatial":
         pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path

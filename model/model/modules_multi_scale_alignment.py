@@ -9,13 +9,12 @@ from .modules_resnet import ResNet, BasicBlock, BottleneckBlock
 from .losses import InfoNCE
 
 class hierarchical_img_spatial_graph(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, image_encoder):
         super(hierarchical_img_spatial_graph, self).__init__()
         self.config = config
-
-        block, layers = BasicBlock, [4, 3, 3] # TODO: take arbitary resnet config
-        # block, layers = BottleneckBlock, [4, 3, 3]
-        self.image_encoder = ResNet(block, layers)
+        assert config.image_encoder_output_dim == config.spatial_encoder_output_dim, "Image and spatial encoder output dimensions must match."
+        self.image_encoder = image_encoder
+        self.image_projection = nn.Linear(config.image_encoder_input_dim, config.image_encoder_output_dim)
 
         self.num_resolutions = config.num_resolutions
         self.spatial_encoder = torch.nn.ModuleList()

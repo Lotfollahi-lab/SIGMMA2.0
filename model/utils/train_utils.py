@@ -201,8 +201,8 @@ def train_one_epoch(
             with torch.amp.autocast(device.type, enabled=False):
                 model_out = model(*inputs)
             loss = model_out["loss"]
-            image_embedding = model_out["image_embedding"]
-            spatial_embedding = model_out["spatial_embedding"]
+            image_embedding = model_out["image_embedding"] # Tensor (B, D)
+            spatial_embedding = model_out["spatial_embedding"] # Tensor (B, D)
             # Backward pass
             loss.backward()
         else:
@@ -210,9 +210,9 @@ def train_one_epoch(
                 # Forward pass
                 with torch.amp.autocast(device.type, enabled=False):
                     model_out = model(*inputs)
-                loss = model_out["loss"]
-                image_embedding = model_out["image_embedding"]
-                spatial_embedding = model_out["spatial_embedding"]
+
+                image_embedding = model_out["image_embedding"] # List of Tensors [(B, D), (B, D), ...]
+                spatial_embedding = model_out["spatial_embedding"] # List of Tensors [(B, D), (B, D), ...]
 
                 accum_images.append(image)
                 accum_spatial.append(spatial)

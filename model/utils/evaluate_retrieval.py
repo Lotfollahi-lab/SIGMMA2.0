@@ -26,7 +26,6 @@ def load_embeddings(model, dataloader, device, config):
     spatial_embed_li = []
     for batch in dataloader:
         image = batch["image"].to(device)
-        cell_type_composition = batch["cell_type_composition"].to(device)
 
         if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph"]:
             spatial = batch["spatial_graph"].to(device)

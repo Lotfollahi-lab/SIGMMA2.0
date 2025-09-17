@@ -97,7 +97,6 @@ class hierarchical_img_spatial_graph(nn.Module):
         x2: spatial features, shape (B, g) where g is a dgl graph object
         y: target label (B, num_celltypes)
         """
-        embedding_pairs = []
         embedding_imgs, embedding_spatial = [], []
 
         # Image embeddings
@@ -121,7 +120,6 @@ class hierarchical_img_spatial_graph(nn.Module):
             h_x1_norm = nn.functional.normalize(h_x1, dim=-1)
             h_x2_norm = nn.functional.normalize(h_x2_pooled, dim=-1)
 
-            embedding_pairs.append((h_x1_norm, h_x2_norm))
             embedding_imgs.append(h_x1_norm)
             embedding_spatial.append(h_x2_norm)
 
@@ -135,13 +133,10 @@ class hierarchical_img_spatial_graph(nn.Module):
 
         loss = loss_kl + loss_contrastive + self.lambda_csc_img*loss_csc_img
 
-        # embedding_pairs = [(u1, v1), (u2, v2), ...] where u is image embedding and v is spatial embedding
-        image_embeddings, spatial_embeddings = embedding_pairs[-1]
-
         model_outputs = {"loss": loss,
                          "loss_kl": loss_kl,
                          "loss_contrastive": loss_contrastive,
                          "loss_csc_img": loss_csc_img,
-                         "image_embedding": image_embeddings,
-                         "spatial_embedding": spatial_embeddings}
+                         "image_embedding": embedding_imgs,
+                         "spatial_embedding": embedding_spatial}
         return model_outputs

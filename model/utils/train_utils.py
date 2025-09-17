@@ -55,8 +55,6 @@ def load_model(config:ConfigDict,
             ),
             strict=True,
         )
-        pretrained_image_encoder.eval()
-
         model = hierarchical_img_spatial_graph(config.model, pretrained_image_encoder)
 
     elif config.model.name == "single_img_spatial":
@@ -76,8 +74,6 @@ def load_model(config:ConfigDict,
             ),
             strict=True,
         )
-        pretrained_image_encoder.eval() # TODO
-
         model = single_img_spatial(config.model, pretrained_image_encoder)
 
     elif config.model.name == "single_img_spatial_graph":
@@ -97,8 +93,6 @@ def load_model(config:ConfigDict,
             ),
             strict=True,
         )
-        pretrained_image_encoder.eval()
-
         model = single_img_spatial_graph(config.model, pretrained_image_encoder)
     elif config.model.name == "openAI_CLIP":
         model_raw = CLIPModel.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torchvision.transforms import Resize
 
 from .losses import symmetric_InfoNCE
 from .layers import DINOHead
@@ -38,6 +39,8 @@ class single_img_spatial_graph(nn.Module):
         x2: spatial features, shape (B, D) where D is the number of spatial features
         """
         # image embedding
+        transform = Resize((224, 224))
+        x1 = transform(x1)
         image_embedding = self.image_encoder(x1)
         image_embedding = self.image_projection(image_embedding)
 
@@ -63,6 +66,8 @@ class single_img_spatial_graph(nn.Module):
 
     def get_image_features(self, x1):
         with torch.no_grad():
+            transform = Resize((224, 224))
+            x1 = transform(x1)
             image_embedding = self.image_encoder(x1)
             image_embedding = self.image_projection(image_embedding)
             image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
@@ -101,6 +106,8 @@ class single_img_spatial(nn.Module):
         x2: spatial features, shape (B, D) where D is the number of spatial features
         """
         # image embedding
+        transform = Resize((224, 224))
+        x1 = transform(x1)
         image_embedding = self.image_encoder(x1)
         image_embedding = self.image_projection(image_embedding)
 
@@ -123,6 +130,8 @@ class single_img_spatial(nn.Module):
 
     def get_image_features(self, x1):
         with torch.no_grad():
+            transform = Resize((224, 224))
+            x1 = transform(x1)
             image_embedding = self.image_encoder(x1)
             image_embedding = self.image_projection(image_embedding)
             image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)

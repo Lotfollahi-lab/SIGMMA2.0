@@ -202,9 +202,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                     x_start : x_start + self.fov_size,
                     ]
         # → Resize image for ViT input
-        fov_image = torch.tensor(fov_image) / 255.0
-        transform = Resize((224, 224))
-        image = transform(fov_image)
+        image = torch.tensor(fov_image) / 255.0
 
         # Label
         label = {}

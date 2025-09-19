@@ -9,7 +9,7 @@ from ml_collections.config_dict import ConfigDict
 import pickle
 import timm
 from model.datasets.dataset import MultiSectionDataset
-from model.model import hierarchical_img_spatial_graph, single_img_spatial, single_img_spatial_graph, openAI_CLIP, PLIP, OmiCLIP, InfoNCE
+from model.model import hierarchical_img_spatial_graph, single_img_spatial, single_img_spatial_graph, openAI_CLIP, PLIP, OmiCLIP, symmetric_InfoNCE
 from .evaluate_retrieval import retrieval_score, eval_retrieval
 from transformers import CLIPProcessor, CLIPModel
 import loki.utils
@@ -240,7 +240,7 @@ def train_one_epoch(
                     for key, val in accum_features.items():
                         accumulated = accum_features[key]
                         inputs_for_loss[key] = torch.cat(accumulated[:j] + [model_out[key]] + accumulated[j+1:])
-                    loss = InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
+                    loss = symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
                     losses = {'contrastive_loss': loss}
                     total_loss = sum(losses.values())
                     losses['loss'] = total_loss

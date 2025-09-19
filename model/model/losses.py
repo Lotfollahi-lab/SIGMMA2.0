@@ -21,7 +21,7 @@ class InfoNCE(torch.nn.Module):
             "off mean:", off.mean().item())
 
         # Filter: Only valid (non-zero) pairs
-        valid_mask = z_j.norm(dim=-1) > 0.0 
+        valid_mask = z_j.norm(dim=-1) > 0.0
         z_i = z_i[valid_mask]
         z_j = z_j[valid_mask]
 

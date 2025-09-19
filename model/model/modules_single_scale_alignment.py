@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
+from torchvision.transforms import Resize
 
-from .losses import InfoNCE, symmetric_InfoNCE
+from .losses import symmetric_InfoNCE
 from .layers import DINOHead
 from .layers_graph import BaseGRAPHLayer, READOUTLayer
 
@@ -38,6 +39,8 @@ class single_img_spatial_graph(nn.Module):
         x2: spatial features, shape (B, D) where D is the number of spatial features
         """
         # image embedding
+        transform = Resize((224, 224))
+        x1 = transform(x1)
         image_embedding = self.image_encoder(x1)
         image_embedding = self.image_projection(image_embedding)
 
@@ -63,6 +66,8 @@ class single_img_spatial_graph(nn.Module):
 
     def get_image_features(self, x1):
         with torch.no_grad():
+            transform = Resize((224, 224))
+            x1 = transform(x1)
             image_embedding = self.image_encoder(x1)
             image_embedding = self.image_projection(image_embedding)
             image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
@@ -101,6 +106,8 @@ class single_img_spatial(nn.Module):
         x2: spatial features, shape (B, D) where D is the number of spatial features
         """
         # image embedding
+        transform = Resize((224, 224))
+        x1 = transform(x1)
         image_embedding = self.image_encoder(x1)
         image_embedding = self.image_projection(image_embedding)
 
@@ -114,7 +121,7 @@ class single_img_spatial(nn.Module):
         loss_contrastive = self.loss_fn(image_embedding_norm, spatial_embedding_norm)
 
         # total loss
-        loss = loss_contrastive #+ loss_cross_entropy 
+        loss = loss_contrastive
 
         model_outputs = {"loss": loss,
                         "image_embedding": image_embedding_norm,
@@ -123,6 +130,8 @@ class single_img_spatial(nn.Module):
 
     def get_image_features(self, x1):
         with torch.no_grad():
+            transform = Resize((224, 224))
+            x1 = transform(x1)
             image_embedding = self.image_encoder(x1)
             image_embedding = self.image_projection(image_embedding)
             image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
@@ -150,7 +159,6 @@ def cell_type_composition_predictor(
     elif activation == 'leaky_relu':
         activation_layer = torch.nn.LeakyReLU()
 
-    # TODO: stage 1 (contrastive only)/ stage 2 (cross entropy only) split
     cell_type_composition_predictor = torch.nn.Sequential(
                                 torch.nn.Linear(input_dim,output_dim),torch.nn.BatchNorm1d(output_dim),
                                 activation_layer,

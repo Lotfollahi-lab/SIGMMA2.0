@@ -1,10 +1,11 @@
+import itertools
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from torchvision.transforms import Resize
 
 from .layers_graph import GRAPHLayer, READOUTLayer
-from .layers import CrossAttention
-
-from .modules_resnet import ResNet, BasicBlock, BottleneckBlock
 
 from .losses import symmetric_InfoNCE
 
@@ -15,6 +16,14 @@ class hierarchical_img_spatial_graph(nn.Module):
         assert config.image_encoder_output_dim == config.spatial_encoder_output_dim, "Image and spatial encoder output dimensions must match."
         self.image_encoder = image_encoder
         self.image_projection = nn.Linear(config.image_encoder_input_dim, config.image_encoder_output_dim)
+
+        self.encoder_input_size = getattr(config, "encoder_input_size", 224)
+        self.use_imagenet_norm = getattr(config, "use_imagenet_norm", False)
+        if self.use_imagenet_norm:
+            mean = torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1)
+            std  = torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1)
+            self.register_buffer("mean_rgb", mean)
+            self.register_buffer("std_rgb", std)
 
         self.num_resolutions = config.num_resolutions
         self.spatial_encoder = torch.nn.ModuleList()
@@ -91,6 +100,57 @@ class hierarchical_img_spatial_graph(nn.Module):
         loss = torch.stack(losses).mean()
         return loss, per_pair
 
+    def _encode_image_multiscale(self, x1: torch.Tensor):
+        """
+        Multi-scale image encoding
+        =============================================
+        [Input]
+        x1 (tensor): Original image features, shape [B, C, H, W]
+        [Output]
+        embeddings (list of tensor [B, D]): list of image embeddings at different scales
+        """
+        assert x1.dim() == 4, "x1 must be [B, C, H, W]"
+        B, C, H, W = x1.shape
+        assert H == W, "x1 must be square"
+        device = x1.device
+
+        # Patchfying
+        crops = []
+        for s in range(self.num_resolutions):
+            grid = 2 ** s
+            step = H // grid
+            batch_crops = []
+            for hi, wi in itertools.product(range(grid), range(grid)):
+                top = hi * step
+                left = wi * step
+                patch = x1[:, :, top:top+step, left:left+step] # [B, C, step, step]
+                batch_crops.append(patch)
+            patches = torch.stack(batch_crops, dim=1)  # [B, num_patches, C, step, step]
+            crops.append(patches)
+
+        # Resize & Normalize
+        resized = []
+        for im in crops:
+            B, num_patches, C, h, w = im.shape
+            im = im.view(B * num_patches, C, h, w)
+            if h != self.encoder_input_size:
+                im = F.interpolate(im, size=(self.encoder_input_size, self.encoder_input_size),
+                                   mode="bilinear", align_corners=False)
+            if self.use_imagenet_norm:
+                im = (im - self.mean_rgb) / self.std_rgb
+            resized.append((im, num_patches))  # [B*num_patches, C, enc_in, enc_in]
+
+        # Make embeddings
+        embeddings = []
+        for im, num_patches in resized:
+            feat = self.image_encoder(im)          # [B, D]
+            feat = F.normalize(feat, dim=-1)       # L2 norm
+            # Mean pooling over patches
+            feat = feat.view(B, num_patches, -1).mean(dim=1)
+            embeddings.append(feat)
+
+        return embeddings
+
     def forward(self, x1, x2):
         """
         x1: image features, shape (B, C, H, W)
@@ -100,7 +160,9 @@ class hierarchical_img_spatial_graph(nn.Module):
         embedding_imgs, embedding_spatial = [], []
 
         # Image embeddings
-        x1_multiple_resolution = self.image_encoder(x1)
+        x1_multiple_resolution = self._encode_image_multiscale(x1)
+        x1_multiple_resolution = [self.image_projection(feat) for feat in x1_multiple_resolution]
+
         # Spatial embeddings
         g, h_x2 = x2, x2.ndata['feat']
         loss_contrastive, loss_kl = [], []

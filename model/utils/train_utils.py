@@ -200,9 +200,15 @@ def train_one_epoch(
             # Forward pass
             with torch.amp.autocast(device.type, enabled=False):
                 model_out = model(*inputs)
-            loss = model_out["loss"]
-            image_embedding = model_out["image_embedding"] # Tensor (B, D)
-            spatial_embedding = model_out["spatial_embedding"] # Tensor (B, D)
+            if config.model.name == "hierarchical_img_spatial_graph":
+                loss = 0
+                for s in range(num_resolutions):
+                    loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'][s], inputs_for_loss['spatial_embedding'][s])
+                loss = loss / num_resolutions
+            else:
+                loss = model_out["loss"]
+                image_embedding = model_out["image_embedding"] # Tensor (B, D)
+                spatial_embedding = model_out["spatial_embedding"] # Tensor (B, D)
             # Backward pass
             loss.backward()
         else:
@@ -211,8 +217,8 @@ def train_one_epoch(
                 with torch.amp.autocast(device.type, enabled=False):
                     model_out = model(*inputs)
 
-                image_embedding = model_out["image_embedding"] # List of Tensors [(B, D), (B, D), ...]
-                spatial_embedding = model_out["spatial_embedding"] # List of Tensors [(B, D), (B, D), ...]
+                image_embedding = model_out["image_embedding"] # List of Tensors [(B, D), (B, D), ...] or Tensor (B, D)
+                spatial_embedding = model_out["spatial_embedding"] # List of Tensors [(B, D), (B, D), ...] or Tensor (B, D)
 
                 accum_images.append(image)
                 accum_spatial.append(spatial)
@@ -237,10 +243,21 @@ def train_one_epoch(
                 with torch.amp.autocast(device.type, enabled=False):
                     model_out = model(image, spatial)
                     inputs_for_loss = {}
-                    for key, val in accum_features.items():
-                        accumulated = accum_features[key]
-                        inputs_for_loss[key] = torch.cat(accumulated[:j] + [model_out[key]] + accumulated[j+1:])
-                    loss = symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
+                    if config.model.name == "hierarchical_img_spatial_graph":
+                        loss = 0
+                        num_resolutions = len(model_out['image_embedding'])
+                        for s in range(num_resolutions):
+                            for key in accum_features:
+                                accumulated = accum_features[key]
+                                parts = [accumulated[k][s] for k in range(j)] + [model_out[key][s]] + [accumulated[k][s] for k in range(j+1, len(accumulated))]
+                                inputs_for_loss[key] = torch.cat(parts)
+                            loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
+                        loss = loss / num_resolutions
+                    else:
+                        for key in accum_features:
+                            accumulated = accum_features[key]
+                            inputs_for_loss[key] = torch.cat(accumulated[:j] + [model_out[key]] + accumulated[j+1:])
+                        loss = symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
                     losses = {'contrastive_loss': loss}
                     total_loss = sum(losses.values())
                     losses['loss'] = total_loss
@@ -376,12 +393,21 @@ def evaluate(config, model, eval_dataloader, device):
             image_embedding = model_out["image_embedding"]
             spatial_embedding = model_out["spatial_embedding"]
 
-            all_image_embeddings.append(image_embedding.cpu())
-            all_spatial_embeddings.append(spatial_embedding.cpu())
+            all_image_embeddings.append(image_embedding)
+            all_spatial_embeddings.append(spatial_embedding)
 
-    all_image_embeddings = torch.concat(all_image_embeddings, dim=0).to(device)
-    all_spatial_embeddings = torch.concat(all_spatial_embeddings, dim=0).to(device)
-    loss = InfoNCE()(all_image_embeddings, all_spatial_embeddings)
+    if config.model.name == "hierarchical_img_spatial_graph":
+        num_resolutions = len(all_image_embeddings[0])
+        all_image_embeddings = [torch.concat([all_image_embeddings[i][s] for i in range(len(all_image_embeddings))], dim=0).to(device) for s in range(num_resolutions)]
+        all_spatial_embeddings = [torch.concat([all_spatial_embeddings[i][s] for i in range(len(all_spatial_embeddings))], dim=0).to(device) for s in range(num_resolutions)]
+        loss = 0
+        for s in range(num_resolutions):
+            loss += symmetric_InfoNCE()(all_image_embeddings[s], all_spatial_embeddings[s])
+        loss = loss / num_resolutions
+    else:
+        all_image_embeddings = torch.concat(all_image_embeddings, dim=0).to(device)
+        all_spatial_embeddings = torch.concat(all_spatial_embeddings, dim=0).to(device)
+        loss = symmetric_InfoNCE()(all_image_embeddings, all_spatial_embeddings)
 
     score_matrix_img2spatial, score_matrix_spatial2image = retrieval_score(model, eval_dataloader, eval_dataloader, device, config)
     eval_results = eval_retrieval(score_matrix_img2spatial, score_matrix_spatial2image)

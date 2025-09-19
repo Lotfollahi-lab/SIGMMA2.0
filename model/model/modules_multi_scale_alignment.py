@@ -202,3 +202,13 @@ class hierarchical_img_spatial_graph(nn.Module):
                          "image_embedding": embedding_imgs,
                          "spatial_embedding": embedding_spatial}
         return model_outputs
+
+    def get_image_features(self, x1):
+        with torch.no_grad():
+            transform = Resize((224, 224))
+            x1 = transform(x1)
+            x1_multiple_resolution = self._encode_image_multiscale(x1)
+            x1_multiple_resolution = [self.image_projection(feat) for feat in x1_multiple_resolution]
+            image_embedding = x1_multiple_resolution[-1]
+            image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
+        return image_embedding_norm

@@ -27,7 +27,7 @@ def main(args):
         os.makedirs(config.outdir)
 
     # == Query dataset preparation ==
-    query_dataset = load_dataset(config.query_dataset, test=True)
+    query_dataset = load_dataset(config.query_dataset)
     sequential_sampler = SequentialSampler(query_dataset)
     query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 

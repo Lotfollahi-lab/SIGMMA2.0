@@ -35,12 +35,12 @@ def main(args):
     g.manual_seed(42)
 
     # == Train dataset preparation ==
-    train_dataset = load_dataset(config.train_dataset, test=True) # TODO: Remove test arg
+    train_dataset = load_dataset(config.train_dataset)
     random_sampler = RandomSampler(train_dataset, replacement=False, num_samples=min(len(train_dataset), 10))
     train_dataloader = DataLoader(train_dataset, batch_size=config.test.batch_size, sampler=random_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
     # == Test dataset preparation ==
-    test_dataset = load_dataset(config.test_dataset, test=True) # TODO: Remove test arg
+    test_dataset = load_dataset(config.test_dataset)
     sequential_sampler = SequentialSampler(test_dataset)
     test_dataloader = DataLoader(test_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 

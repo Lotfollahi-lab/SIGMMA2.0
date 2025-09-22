@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 
 import wandb
 
-def load_dataset(config_dataset, test=False):
+def load_dataset(config_dataset):
     """
     Load the training and evaluation datasets based on the configuration.
     """

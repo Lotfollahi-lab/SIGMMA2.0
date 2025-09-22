@@ -207,8 +207,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         # Label
         label = {}
-        raw_exp = self.spatial_anndata.X[mask].toarray().mean(axis=0)
-        label['raw_exp'] = torch.tensor(raw_exp, dtype=torch.float32) # TODO: add gene names
+        topK_exp = mean_exp[np.argsort(mean_exp)[-K:]]
+
+        label['topK_exp'] = torch.tensor(topK_exp, dtype=torch.float32) # TODO: add gene names
+        label['raw_exp'] = torch.tensor(mean_exp, dtype=torch.float32) # TODO: add gene names
         label['cell_type_composition'] = cell_type_composition
 
         return {

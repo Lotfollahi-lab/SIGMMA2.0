@@ -6,6 +6,7 @@ import copy
 import numpy as np
 import pandas as pd
 import collections
+from collections.abc import Mapping, Sequence
 from itertools import product
 
 import scanpy
@@ -234,7 +235,11 @@ def multimodal_collate(batch: collections.abc.MutableMapping):
     return clone
 
 def multimodal_collate_dict(batch_dicts):
-    elem = batch_dicts[0]
+    filtered = [d for d in batch_dicts if not _is_empty_sample(d)]
+    if len(filtered) == 0:
+        return None
+
+    elem = filtered[0]
     out = {}
     for subkey in elem:
         values = [d[subkey] for d in batch_dicts]
@@ -245,3 +250,19 @@ def multimodal_collate_dict(batch_dicts):
         else:
             out[subkey] = values
     return out
+
+def _iter_dgl_graphs(x):
+    if isinstance(x, dgl.DGLGraph):
+        yield x
+    elif isinstance(x, Mapping):
+        for v in x.values():
+            yield from _iter_dgl_graphs(v)
+    elif isinstance(x, (list, tuple)):
+        for v in x:
+            yield from _iter_dgl_graphs(v)
+
+def _is_empty_sample(sample_dict) -> bool:
+    for g in _iter_dgl_graphs(sample_dict):
+        if g.num_nodes() == 0:
+            return True
+    return False

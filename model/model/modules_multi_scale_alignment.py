@@ -200,7 +200,7 @@ class hierarchical_img_spatial_graph(nn.Module):
         model_outputs = {"loss": loss,
                          "loss_kl": loss_kl,
                          "loss_contrastive": loss_contrastive,
-                         "loss_csc_img": loss_csc_img,
+                         "loss_csc_img": loss_csc_img*self.lambda_csc_img,
                          "image_embedding": embedding_imgs,
                          "spatial_embedding": embedding_spatial}
         return model_outputs

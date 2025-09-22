@@ -27,7 +27,7 @@ class InfoNCE(torch.nn.Module):
 
         if len(z_i) == 0:
             print("No valid pairs found. Skipping loss computation.")
-            return torch.tensor(0.0, device=z_i.device, requires_grad=False)
+            return torch.tensor(0.0, device=z_i.device, requires_grad=True)
 
         z_i = torch.nn.functional.normalize(z_i, dim=-1)
         z_j = torch.nn.functional.normalize(z_j, dim=-1)
@@ -61,7 +61,7 @@ class symmetric_InfoNCE(torch.nn.Module):
 
         if len(z_i) == 0:
             print("No valid pairs found. Skipping loss computation.")
-            return torch.tensor(0.0, device=z_i.device, requires_grad=False)
+            return torch.tensor(0.0, device=z_i.device, requires_grad=True)
 
         z_i = torch.nn.functional.normalize(z_i, dim=-1)
         z_j = torch.nn.functional.normalize(z_j, dim=-1)

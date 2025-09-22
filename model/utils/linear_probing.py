@@ -2,6 +2,8 @@ import torch
 import numpy as np
 from scipy.stats import pearsonr
 from sklearn.linear_model import Ridge, SGDRegressor
+import xgboost as xgb
+from sklearn.ensemble import RandomForestClassifier
 
 def linear_probing(train_dataloader, test_dataloader, model, device, seed=42):
     output_predictor_train = gene_exp_prediction(train_dataloader, model, device, train_mode=True, random_state=seed)
@@ -34,12 +36,30 @@ def gene_exp_prediction(dataloader, model, device, train_mode=True, method='ridg
 
     alpha = 100 /(all_embeddings.shape[1] * all_labels.shape[1]) 
     if train_mode:
-        predictor = Ridge(solver='lsqr',
-                            alpha=alpha,
-                            random_state=random_state,
-                            fit_intercept=False,
-                            max_iter=max_iter)
-        predictor.fit(all_embeddings, all_labels)
+        if method == 'ridge':
+            predictor = Ridge(solver='lsqr',
+                                alpha=alpha,
+                                random_state=random_state,
+                                fit_intercept=False,
+                                max_iter=max_iter)
+            predictor.fit(all_embeddings, all_labels)
+        elif method == 'random_forest':
+            predictor = RandomForestClassifier(n_estimators=70,
+                                               random_state=random_state)
+            predictor.fit(all_embeddings, all_labels)
+        elif method == 'xgboost':
+            predictor = xgb.XGBRegressor(n_estimators=100,
+                                   learning_rate=0.1,
+                                   max_depth=3,
+                                   min_child_weight=1,
+                                   subsample=0.8,
+                                   colsample_bytree=0.8,
+                                   gamma=0,
+                                   reg_alpha=0,
+                                   reg_lambda=1,
+                                   random_state=random_state)
+            predictor.fit(all_embeddings, all_labels)
+
         output = {"embeddings": all_embeddings,
                 "labels": all_labels,
                 "predictor": predictor

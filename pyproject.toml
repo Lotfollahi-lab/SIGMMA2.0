@@ -24,7 +24,8 @@ dependencies = ["novae (>=0.2.4,<0.3.0)",
                 "dgl @ https://data.dgl.ai/wheels-test/torch-2.3/cu121/dgl-2.5a241214%2Bcu121-cp311-cp311-manylinux1_x86_64.whl",
                 "nichejepa @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/nichejepa",
                 "loki @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/Loki/src",
-                "shapely (>=2.0,<3.0)"]
+                "shapely (>=2.0,<3.0)",
+                "xgboost (>=3.0.5,<4.0.0)"]
 
 [tool.poetry.dependencies]
 loki = {develop = true}

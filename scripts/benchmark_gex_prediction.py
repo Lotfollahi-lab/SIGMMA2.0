@@ -36,7 +36,7 @@ def main(args):
 
     # == Train dataset preparation ==
     train_dataset = load_dataset(config.train_dataset)
-    random_sampler = RandomSampler(train_dataset, replacement=False, num_samples=min(len(train_dataset), 10))
+    random_sampler = RandomSampler(train_dataset, replacement=False, num_samples=min(len(train_dataset), config.test.get("num_samples", len(train_dataset))), generator=g)
     train_dataloader = DataLoader(train_dataset, batch_size=config.test.batch_size, sampler=random_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
     # == Test dataset preparation ==

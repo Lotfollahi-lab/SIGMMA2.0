@@ -4,19 +4,22 @@ from scipy.stats import pearsonr
 from sklearn.linear_model import Ridge, SGDRegressor
 import xgboost as xgb
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import StandardScaler
+from sklearn.pipeline import Pipeline
 
 def linear_probing(train_dataloader, test_dataloader, model, device, seed=42):
     output_predictor_train = gene_exp_prediction(train_dataloader, model, device, train_mode=True, random_state=seed)
     trained_predictor = output_predictor_train["predictor"]
 
-    output_predictor_test = gene_exp_prediction(test_dataloader, model, device, train_mode=False, predictor=trained_predictor,random_state=seed)
+    output_predictor_test = gene_exp_prediction(test_dataloader, model, device, train_mode=False, predictor=trained_predictor,random_state=seed, pipe=output_predictor_train["preprocessing_pipeline"])
     y = output_predictor_test["labels"]
     y_pred = output_predictor_test['labels_pred']
 
     eval_multimodal = evaluate_gene_exp_prediction(y, y_pred)
     return eval_multimodal
 
-def gene_exp_prediction(dataloader, model, device, train_mode=True, method='ridge', predictor=None, max_iter=1000, random_state=42, predicted_label='topK_exp', log1p_exp_transform=True):
+def gene_exp_prediction(dataloader, model, device, train_mode=True, method='ridge', predictor=None, max_iter=1000, random_state=42, predicted_label='topK_exp', log1p_exp_transform=True, use_pca=True, pipe=None):
     all_embeddings = []
     all_labels = []
     with torch.no_grad():
@@ -30,6 +33,15 @@ def gene_exp_prediction(dataloader, model, device, train_mode=True, method='ridg
             all_labels.append(label)
 
     all_embeddings = np.concatenate(all_embeddings, axis=0)
+    if use_pca:
+        n_feat = all_embeddings.shape[1]
+        n_comp = min(256, n_feat)
+        if train_mode:
+            pipe = Pipeline([('scaler', StandardScaler()), (f'PCA', PCA(n_components=n_comp, random_state=42))])
+            all_embeddings = pipe.fit_transform(all_embeddings)
+        else:
+            assert pipe is not None, "preprocessing pipeline trained on train dataset must be provided in test mode if you want to use PCA"
+            all_embeddings = pipe.transform(all_embeddings)
     all_labels = np.concatenate(all_labels, axis=0)
 
     # If there are NaNs, replace them with 0
@@ -64,7 +76,8 @@ def gene_exp_prediction(dataloader, model, device, train_mode=True, method='ridg
 
         output = {"embeddings": all_embeddings,
                 "labels": all_labels,
-                "predictor": predictor
+                "predictor": predictor,
+                "preprocessing_pipeline": pipe,
                 }
     else:
         assert predictor is not None, "Predictor model must be provided for evaluation mode"

@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import pearsonr
 from sklearn.linear_model import Ridge, SGDRegressor
 import xgboost as xgb
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.pipeline import Pipeline
@@ -58,7 +58,7 @@ def gene_exp_prediction(dataloader, model, device, train_mode=True, method='ridg
                                 max_iter=max_iter)
             predictor.fit(all_embeddings, all_labels)
         elif method == 'random_forest':
-            predictor = RandomForestClassifier(n_estimators=70,
+            predictor = RandomForestRegressor(n_estimators=70,
                                                random_state=random_state)
             predictor.fit(all_embeddings, all_labels)
         elif method == 'xgboost':

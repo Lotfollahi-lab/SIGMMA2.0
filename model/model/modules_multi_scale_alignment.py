@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.transforms import Resize
+from torch.utils.checkpoint import checkpoint
 
 from .layers_graph import GRAPHLayer, READOUTLayer
 
@@ -15,6 +16,8 @@ class hierarchical_img_spatial_graph(nn.Module):
         self.config = config
         assert config.image_encoder_output_dim == config.spatial_encoder_output_dim, "Image and spatial encoder output dimensions must match."
         self.image_encoder = image_encoder
+        if hasattr(self.image_encoder, "set_grad_checkpointing"):
+            self.image_encoder.set_grad_checkpointing(True)
         self.image_projection = nn.Linear(config.image_encoder_input_dim, config.image_encoder_output_dim)
 
         self.encoder_input_size = getattr(config, "encoder_input_size", 224)
@@ -112,7 +115,6 @@ class hierarchical_img_spatial_graph(nn.Module):
         assert x1.dim() == 4, "x1 must be [B, C, H, W]"
         B, C, H, W = x1.shape
         assert H == W, "x1 must be square"
-        device = x1.device
 
         # Patchfying
         crops = []
@@ -142,13 +144,13 @@ class hierarchical_img_spatial_graph(nn.Module):
 
         # Make embeddings
         embeddings = []
-        for im, num_patches in resized:
-            feat = self.image_encoder(im)          # [B, D]
+        for im, num_patches in resized[::-1]:  # from low to high resolution
+            feat = encode_in_microbatches_ckpt(self.image_encoder, im, microbatch=16, amp_dtype=torch.bfloat16)  # [B, D]
             feat = F.normalize(feat, dim=-1)       # L2 norm
             # Mean pooling over patches
             feat = feat.view(B, num_patches, -1).mean(dim=1)
             embeddings.append(feat)
-
+            torch.cuda.empty_cache()
         return embeddings
 
     def forward(self, x1, x2):
@@ -198,7 +200,7 @@ class hierarchical_img_spatial_graph(nn.Module):
         model_outputs = {"loss": loss,
                          "loss_kl": loss_kl,
                          "loss_contrastive": loss_contrastive,
-                         "loss_csc_img": loss_csc_img,
+                         "loss_csc_img": loss_csc_img*self.lambda_csc_img,
                          "image_embedding": embedding_imgs,
                          "spatial_embedding": embedding_spatial}
         return model_outputs
@@ -212,3 +214,17 @@ class hierarchical_img_spatial_graph(nn.Module):
             image_embedding = x1_multiple_resolution[-1]
             image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
         return image_embedding_norm
+
+def encode_in_microbatches_ckpt(encoder, images, microbatch=16, amp_dtype=torch.bfloat16):
+    outs = []
+    N = images.size(0)
+    i = 0
+    while i < N:
+        chunk = images[i:i+microbatch]
+        def fn(x):
+            with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=True):
+                return encoder(x)
+        feat = checkpoint(fn, chunk, use_reentrant=False)
+        outs.append(feat)
+        i += microbatch
+    return torch.cat(outs, dim=0)

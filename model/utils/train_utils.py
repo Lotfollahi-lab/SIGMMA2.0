@@ -214,7 +214,7 @@ def train_one_epoch(
         else:
             with torch.no_grad():
                 # Forward pass
-                with torch.amp.autocast(device.type, enabled=False):
+                with torch.amp.autocast(device.type, enabled=True):
                     model_out = model(*inputs)
 
                 image_embedding = model_out["image_embedding"] # List of Tensors [(B, D), (B, D), ...] or Tensor (B, D)
@@ -240,7 +240,7 @@ def train_one_epoch(
             for j in range(len(accum_images)):
                 image = accum_images[j].to(device)
                 spatial = accum_spatial[j].to(device)
-                with torch.amp.autocast(device.type, enabled=False):
+                with torch.amp.autocast(device.type, enabled=True):
                     model_out = model(image, spatial)
                     inputs_for_loss = {}
                     if config.model.name == "hierarchical_img_spatial_graph":
@@ -253,14 +253,17 @@ def train_one_epoch(
                                 inputs_for_loss[key] = torch.cat(parts)
                             loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
                         loss = loss / num_resolutions
+                        losses = {'contrastive_loss': loss}
+                        total_loss = sum(losses.values()) + model_out["loss_kl"] + model_out["loss_csc_img"]
+                        losses['loss'] = total_loss
                     else:
                         for key in accum_features:
                             accumulated = accum_features[key]
                             inputs_for_loss[key] = torch.cat(accumulated[:j] + [model_out[key]] + accumulated[j+1:])
                         loss = symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
-                    losses = {'contrastive_loss': loss}
-                    total_loss = sum(losses.values())
-                    losses['loss'] = total_loss
+                        losses = {'contrastive_loss': loss}
+                        total_loss = sum(losses.values())
+                        losses['loss'] = total_loss
                     del inputs_for_loss
                 total_loss.backward()
             loss = total_loss.item()
@@ -286,6 +289,11 @@ def train_one_epoch(
             and (global_step + 1) % config.train.eval_every == 0
             ):
             eval_loss, eval_image_embedding, eval_spatial_embedding, score_matrix_img2spatial, score_matrix_spatial2image, eval_results = evaluate(config, model, eval_dataloader, device)
+            if config.model.name == "hierarchical_img_spatial_graph":
+                image_embedding = image_embedding[-1]
+                spatial_embedding = spatial_embedding[-1]
+                eval_image_embedding = eval_image_embedding[-1]
+                eval_spatial_embedding = eval_spatial_embedding[-1]
             fig_eval_umap = UMAP_embeddings(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu())
             fig_eval_img2spatial_heatmap = heatmap(eval_image_embedding.detach().cpu(), eval_spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")
             fig_eval_img2img_heatmap = heatmap(eval_image_embedding.detach().cpu(), eval_image_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Image Embeddings")

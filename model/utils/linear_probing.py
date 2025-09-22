@@ -14,14 +14,13 @@ def linear_probing(train_dataloader, test_dataloader, model, device, seed=42):
     eval_multimodal = evaluate_gene_exp_prediction(y, y_pred)
     return eval_multimodal
 
-def gene_exp_prediction(dataloader, model, device, train_mode=True, predictor=None, max_iter=1000, random_state=42):
+def gene_exp_prediction(dataloader, model, device, train_mode=True, method='ridge', predictor=None, max_iter=1000, random_state=42, predicted_label='topK_exp'):
     all_embeddings = []
     all_labels = []
     with torch.no_grad():
         for batch in dataloader:
             image = batch["image"].to(device)
-            # TODO: add option to select different labels
-            label = batch["label"]['raw_exp']
+            label = batch["label"][predicted_label]
             embeddings = model.get_image_features(image)
             all_embeddings.append(embeddings.cpu())
             all_labels.append(label)

@@ -46,6 +46,12 @@ def load_embeddings(model, dataloader, device, config):
             spatial_embed = model_output["spatial_embedding"]
 
         # Normalize embeddings
+        if config.model.name == "hierarchical_img_spatial_graph":
+            image_embed = image_embed[-1]
+            spatial_embed = spatial_embed[-1]
+        else:
+            image_embed = image_embed
+            spatial_embed = spatial_embed
         image_embed = image_embed / image_embed.norm(dim=-1, keepdim=True)
         spatial_embed = spatial_embed / spatial_embed.norm(dim=-1, keepdim=True)
 

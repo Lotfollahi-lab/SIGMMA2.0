@@ -115,7 +115,6 @@ class hierarchical_img_spatial_graph(nn.Module):
         assert x1.dim() == 4, "x1 must be [B, C, H, W]"
         B, C, H, W = x1.shape
         assert H == W, "x1 must be square"
-        device = x1.device
 
         # Patchfying
         crops = []
@@ -145,7 +144,7 @@ class hierarchical_img_spatial_graph(nn.Module):
 
         # Make embeddings
         embeddings = []
-        for im, num_patches in resized:
+        for im, num_patches in resized[::-1]:  # from low to high resolution
             feat = encode_in_microbatches_ckpt(self.image_encoder, im, microbatch=16, amp_dtype=torch.bfloat16)  # [B, D]
             feat = F.normalize(feat, dim=-1)       # L2 norm
             # Mean pooling over patches

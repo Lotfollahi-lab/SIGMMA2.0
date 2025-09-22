@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.transforms import Resize
+from torch.utils.checkpoint import checkpoint
 
 from .layers_graph import GRAPHLayer, READOUTLayer
 
@@ -15,6 +16,8 @@ class hierarchical_img_spatial_graph(nn.Module):
         self.config = config
         assert config.image_encoder_output_dim == config.spatial_encoder_output_dim, "Image and spatial encoder output dimensions must match."
         self.image_encoder = image_encoder
+        if hasattr(self.image_encoder, "set_grad_checkpointing"):
+            self.image_encoder.set_grad_checkpointing(True)
         self.image_projection = nn.Linear(config.image_encoder_input_dim, config.image_encoder_output_dim)
 
         self.encoder_input_size = getattr(config, "encoder_input_size", 224)

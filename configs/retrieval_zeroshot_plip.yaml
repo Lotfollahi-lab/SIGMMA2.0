@@ -5,12 +5,14 @@ model:
 reference_dataset:
   manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST.csv
   celltype_id_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/cell_type_ids.csv
+  pretrained_cell_embedding: True
   num_cell_types: 84
   fov_size: 256
 
 query_dataset:
   manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_test.csv
   celltype_id_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/cell_type_ids.csv
+  pretrained_cell_embedding: True
   num_cell_types: 84
   fov_size: 256
 

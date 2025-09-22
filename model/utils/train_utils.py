@@ -253,14 +253,17 @@ def train_one_epoch(
                                 inputs_for_loss[key] = torch.cat(parts)
                             loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
                         loss = loss / num_resolutions
+                        losses = {'contrastive_loss': loss}
+                        total_loss = sum(losses.values()) + model_out["loss_kl"] + model_out["loss_csc_img"]
+                        losses['loss'] = total_loss
                     else:
                         for key in accum_features:
                             accumulated = accum_features[key]
                             inputs_for_loss[key] = torch.cat(accumulated[:j] + [model_out[key]] + accumulated[j+1:])
                         loss = symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
-                    losses = {'contrastive_loss': loss}
-                    total_loss = sum(losses.values())
-                    losses['loss'] = total_loss
+                        losses = {'contrastive_loss': loss}
+                        total_loss = sum(losses.values())
+                        losses['loss'] = total_loss
                     del inputs_for_loss
                 total_loss.backward()
             loss = total_loss.item()

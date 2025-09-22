@@ -120,6 +120,8 @@ def evaluate_gene_exp_prediction(y, y_pred, genes=None):
 
     results = {'l2_errors': list(errors), 
                'r2_scores': list(r2_scores),
+               'l2_error_mean': float(np.mean(errors)),
+               'l2_error_std': float(np.std(errors)),
                'pearson_corrs': pearson_genes,
                'pearson_mean': float(np.mean(pearson_corrs)),
                'pearson_std': float(np.std(pearson_corrs)),

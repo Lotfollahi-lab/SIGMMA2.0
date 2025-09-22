@@ -214,7 +214,7 @@ def train_one_epoch(
         else:
             with torch.no_grad():
                 # Forward pass
-                with torch.amp.autocast(device.type, enabled=False):
+                with torch.amp.autocast(device.type, enabled=True):
                     model_out = model(*inputs)
 
                 image_embedding = model_out["image_embedding"] # List of Tensors [(B, D), (B, D), ...] or Tensor (B, D)
@@ -240,7 +240,7 @@ def train_one_epoch(
             for j in range(len(accum_images)):
                 image = accum_images[j].to(device)
                 spatial = accum_spatial[j].to(device)
-                with torch.amp.autocast(device.type, enabled=False):
+                with torch.amp.autocast(device.type, enabled=True):
                     model_out = model(image, spatial)
                     inputs_for_loss = {}
                     if config.model.name == "hierarchical_img_spatial_graph":

@@ -54,7 +54,7 @@ def gene_exp_prediction(dataloader, model, device, train_mode=True, method='ridg
             predictor = Ridge(solver='lsqr',
                                 alpha=alpha,
                                 random_state=random_state,
-                                fit_intercept=False,
+                                fit_intercept=True,
                                 max_iter=max_iter)
             predictor.fit(all_embeddings, all_labels)
         elif method == 'random_forest':

@@ -146,9 +146,10 @@ class hierarchical_img_spatial_graph(nn.Module):
         embeddings = []
         for im, num_patches in resized[::-1]:  # from low to high resolution
             feat = encode_in_microbatches_ckpt(self.image_encoder, im, microbatch=16, amp_dtype=torch.bfloat16)  # [B, D]
-            feat = F.normalize(feat, dim=-1)       # L2 norm
             # Mean pooling over patches
             feat = feat.view(B, num_patches, -1).mean(dim=1)
+            # L2 norm
+            feat = F.normalize(feat, dim=-1)
             embeddings.append(feat)
             torch.cuda.empty_cache()
         return embeddings

@@ -204,7 +204,7 @@ def train_one_epoch(
                 loss = 0
                 for s in range(num_resolutions):
                     loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'][s], inputs_for_loss['spatial_embedding'][s])
-                loss = loss / num_resolutions
+                loss = loss / num_resolutions + model_out["loss_csc_img"] #+ model_out["loss_kl"]
             else:
                 loss = model_out["loss"]
                 image_embedding = model_out["image_embedding"] # Tensor (B, D)
@@ -254,7 +254,7 @@ def train_one_epoch(
                             loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
                         loss = loss / num_resolutions
                         losses = {'contrastive_loss': loss}
-                        total_loss = sum(losses.values()) + model_out["loss_kl"] + model_out["loss_csc_img"]
+                        total_loss = sum(losses.values()) + model_out["loss_csc_img"] #+ model_out["loss_kl"]
                         losses['loss'] = total_loss
                     else:
                         for key in accum_features:

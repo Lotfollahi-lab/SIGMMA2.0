@@ -81,7 +81,7 @@ def main(args):
             continue
         table.add_data(f"unimodal_{metric}", value)
         print(f"{metric}: {value}")
-    wandb_logger.update({f"{model_name}_retrieval_results": table})
+    wandb_logger.update({f"{model_name}_linear_probing_results": table})
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

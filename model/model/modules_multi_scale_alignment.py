@@ -18,7 +18,7 @@ class hierarchical_img_spatial_graph(nn.Module):
         self.image_encoder = image_encoder
         if hasattr(self.image_encoder, "set_grad_checkpointing"):
             self.image_encoder.set_grad_checkpointing(True)
-        self.image_projection = nn.Linear(config.image_encoder_input_dim, config.image_encoder_output_dim)
+        self.image_projection_heads = torch.nn.ModuleList([nn.Linear(config.image_encoder_input_dim, config.image_encoder_output_dim) for _ in range(config.num_resolutions)])
 
         self.encoder_input_size = getattr(config, "encoder_input_size", 224)
         self.use_imagenet_norm = getattr(config, "use_imagenet_norm", False)
@@ -146,9 +146,10 @@ class hierarchical_img_spatial_graph(nn.Module):
         embeddings = []
         for im, num_patches in resized[::-1]:  # from low to high resolution
             feat = encode_in_microbatches_ckpt(self.image_encoder, im, microbatch=16, amp_dtype=torch.bfloat16)  # [B, D]
-            feat = F.normalize(feat, dim=-1)       # L2 norm
             # Mean pooling over patches
             feat = feat.view(B, num_patches, -1).mean(dim=1)
+            # L2 norm
+            feat = F.normalize(feat, dim=-1)
             embeddings.append(feat)
             torch.cuda.empty_cache()
         return embeddings
@@ -163,7 +164,7 @@ class hierarchical_img_spatial_graph(nn.Module):
 
         # Image embeddings
         x1_multiple_resolution = self._encode_image_multiscale(x1)
-        x1_multiple_resolution = [self.image_projection(feat) for feat in x1_multiple_resolution]
+        x1_multiple_resolution = [self.image_projection_heads[i](feat) for i, feat in enumerate(x1_multiple_resolution)]
 
         # Spatial embeddings
         g, h_x2 = x2, x2.ndata['feat']
@@ -210,7 +211,7 @@ class hierarchical_img_spatial_graph(nn.Module):
             transform = Resize((224, 224))
             x1 = transform(x1)
             x1_multiple_resolution = self._encode_image_multiscale(x1)
-            x1_multiple_resolution = [self.image_projection(feat) for feat in x1_multiple_resolution]
+            x1_multiple_resolution = [self.image_projection_heads[i](feat) for i, feat in enumerate(x1_multiple_resolution)]
             image_embedding = x1_multiple_resolution[-1]
             image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
         return image_embedding_norm

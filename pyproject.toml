@@ -16,7 +16,7 @@ dependencies = ["novae (>=0.2.4,<0.3.0)",
                 "zarr (==3.1.0)",
                 "scanpy (>=1.11.2,<2.0.0)",
                 "numcodecs (==0.14)",
-                "wandb (>=0.20.1,<0.21.0)",
+                "wandb (==0.21)",
                 "optuna (>=4.3.0,<5.0.0)",
                 "gseapy (>=1.1.9,<2.0.0)",
                 "xarray-dataclasses (>=1.9.1,<2.0.0)",
@@ -25,8 +25,12 @@ dependencies = ["novae (>=0.2.4,<0.3.0)",
                 "nichejepa @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/nichejepa",
                 "loki @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/Loki/src",
                 "shapely (>=2.0,<3.0)",
-                "xgboost (>=3.0.5,<4.0.0)"]
+                "xgboost (>=3.0.5,<4.0.0)",
+                "hest @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/HEST",
+                "hescape @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/hescape"]
 
 [tool.poetry.dependencies]
 loki = {develop = true}
 nichejepa = {develop = true}
+hest = {develop = true}
+hescape = {develop = true}

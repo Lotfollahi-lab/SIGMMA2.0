@@ -120,7 +120,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         spatial_graph = dgl.from_scipy(sparse_matrix)
 
         spatial_graph.ndata['feat'] = cell_embeddings
-
+        # print('mean, std of cell embeddings', cell_embeddings.mean(), cell_embeddings.std())
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges)
         # Edge mask: -1 (intra-subgraph edges) or 0 (inter-subgraph edges)
         spatial_graph.edata['weight'] = torch.ones(len(spatial_graph.edges()[0]))

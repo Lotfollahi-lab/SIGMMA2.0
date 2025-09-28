@@ -3,6 +3,8 @@ import argparse
 import pickle
 import torch
 from torch.utils.data import random_split, DataLoader, ConcatDataset
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from ml_collections.config_dict import ConfigDict
 import yaml

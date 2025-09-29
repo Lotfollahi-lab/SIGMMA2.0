@@ -259,8 +259,6 @@ class BaseGRAPHLayer(torch.nn.Module):
 
         for layer in self.node_embedding:
             h = layer(h)
-        # self._print_summaries("after_node_embedding",
-        #                           self._summarize_layer(h, g, bins=50))
 
         # Apply GCN/structure learning layers
         g_unbatched = [dgl.add_self_loop(graph) for graph in dgl.unbatch(g)]
@@ -269,59 +267,8 @@ class BaseGRAPHLayer(torch.nn.Module):
         for i in range(self.num_gnn_layers):
             h = self.convs[i](g, h)
             h = self.activation(h)
-            self._print_summaries("after_node_embedding",
-                                  self._summarize_layer(h, g, bins=50))
         return h
 
-    def _summarize_layer(self, h: torch.Tensor, g: dgl.DGLGraph, bins: int = 50):
-        """언배치 기준 분포 요약 (그래프별). 반환값은 프린트/로깅용 dict 리스트."""
-        with torch.no_grad():
-            # batched graph에서 그래프별 노드 수
-            counts = g.batch_num_nodes().tolist()
-            # h를 그래프별로 쪼갬 (노드 순서는 DGL batch 순서 보존)
-            chunks = torch.split(h, counts, dim=0)
-
-            summaries = []
-            for gi, hj in enumerate(chunks):
-                # 노드 임베딩 L2 norm 분포
-                norms = torch.norm(hj, p=2, dim=1)
-                # histc는 min==max면 에러 날 수 있어 방어
-                if len(norms) == 0:
-                    continue
-                nmin = norms.min().item()
-                nmax = norms.max().item()
-                if nmax == nmin:
-                    hist = torch.zeros(bins, device=hj.device)
-                    hist[-1] = norms.numel()
-                else:
-                    hist = torch.histc(norms, bins=bins, min=nmin, max=nmax)
-
-                summaries.append({
-                    "graph_idx": gi,
-                    "num_nodes": hj.size(0),
-                    "feat_mean": hj.mean().item(),
-                    "feat_std": hj.std(unbiased=False).item(),
-                    "feat_min": hj.min().item(),
-                    "feat_max": hj.max().item(),
-                    "norm_mean": norms.mean().item(),
-                    "norm_std": norms.std(unbiased=False).item(),
-                    "norm_min": nmin,
-                    "norm_max": nmax,
-                    "norm_hist_bins": bins,
-                    "norm_hist_counts": hist.detach().cpu().tolist(),
-                })
-            return summaries
-
-    def _print_summaries(self, layer_name: str, summaries):
-        print(f"\n=== [{layer_name}] per-graph embedding stats ===")
-        for s in summaries:
-            print(
-                f"g#{s['graph_idx']:02d} | N={s['num_nodes']:4d} | "
-                f"feat μ={s['feat_mean']:.4f} σ={s['feat_std']:.4f} "
-                f"[{s['feat_min']:.4f},{s['feat_max']:.4f}] | "
-                f"‖h‖₂ μ={s['norm_mean']:.4f} σ={s['norm_std']:.4f} "
-                f"[{s['norm_min']:.4f},{s['norm_max']:.4f}]"
-            )
 
 class READOUTLayer(torch.nn.Module):
     def __init__(self, 

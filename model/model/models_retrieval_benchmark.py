@@ -151,10 +151,11 @@ class OmiCLIP(nn.Module):
             emb = torch.nn.functional.normalize(emb, dim=-1)
         return emb
 
-    def forward(self, image_path, text):
+    def forward(self, image, text):
         # loki.utils.encode_images(model: Module, preprocess: callable, image_paths: List[str], device: str | device)→ Tensor
-        image_embeddings = loki.utils.encode_images(self.model, self.preprocess, image_path, device=self.model.device)
-        text_embeddings = loki.utils.encode_texts(self.model, self.tokenizer, text, device=self.model.device)
+        device = next(self.model.parameters()).device
+        image_embeddings = self._encode_images_flexible(self.model, self.preprocess, image, device=device)
+        text_embeddings = loki.utils.encode_texts(self.model, self.tokenizer, text, device=device)
 
         loss = self.loss_fn(image_embeddings, text_embeddings)
         model_outputs = {"loss": loss,

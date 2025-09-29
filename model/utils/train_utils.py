@@ -189,7 +189,7 @@ def train_one_epoch(
             spatial = batch["spatial"].to(device)
             inputs = [image, spatial]
         elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
-            spatial = batch['spatial_text']
+            spatial = batch['spatial_text'].to(device)
             inputs = [image, spatial]
         else:
             raise NotImplementedError(f"Model {model.name} is not implemented for training.")

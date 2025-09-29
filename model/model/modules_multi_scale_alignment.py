@@ -216,6 +216,19 @@ class hierarchical_img_spatial_graph(nn.Module):
             image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
         return image_embedding_norm
 
+    def get_spatial_features(self, x2):
+        with torch.no_grad():
+            g, h_x2 = x2, x2.ndata['feat']
+            for i in range(self.num_resolutions):
+                # spatial encoder
+                ## (1) graph layer
+                g, h_x2 = self.spatial_encoder[i*2](g, h_x2, layer_id=i)
+                ## (2) graph readout layer
+                h_x2_pooled = self.spatial_encoder[i*2+1](g, h_x2)
+            spatial_embedding = h_x2_pooled
+            spatial_embedding_norm = torch.nn.functional.normalize(spatial_embedding, dim=-1)
+        return spatial_embedding_norm
+
 def encode_in_microbatches_ckpt(encoder, images, microbatch=16, amp_dtype=torch.bfloat16):
     outs = []
     N = images.size(0)

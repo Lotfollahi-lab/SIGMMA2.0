@@ -33,7 +33,7 @@ def load_embeddings(model, dataloader, device, config):
         elif model_name == "single_img_spatial":
             spatial = batch["spatial"].to(device)
             inputs = [image, spatial]
-        elif model_name in ["openAI_CLIP", "PLIP", "OmiCLIP"]:
+        elif model_name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
             spatial = batch["spatial_text"].to(device)
             inputs = [image, spatial]
         else:

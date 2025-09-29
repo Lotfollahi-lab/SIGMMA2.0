@@ -8,18 +8,18 @@ from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.pipeline import Pipeline
 
-def linear_probing(train_dataloader, test_dataloader, model, device, seed=42):
-    output_predictor_train = gene_exp_prediction(train_dataloader, model, device, train_mode=True, random_state=seed)
+def linear_probing(train_dataloader, test_dataloader, model, device, predicted_label, log1p_exp_transform, use_pca, method, seed=42):
+    output_predictor_train = label_prediction(train_dataloader, model, device, train_mode=True, method=method, predictor=None, random_state=seed, predicted_label=predicted_label, log1p_exp_transform=log1p_exp_transform, use_pca=use_pca)
     trained_predictor = output_predictor_train["predictor"]
 
-    output_predictor_test = gene_exp_prediction(test_dataloader, model, device, train_mode=False, predictor=trained_predictor,random_state=seed, pipe=output_predictor_train["preprocessing_pipeline"])
+    output_predictor_test = label_prediction(test_dataloader, model, device, train_mode=False, predictor=trained_predictor, random_state=seed, predicted_label=predicted_label, log1p_exp_transform=log1p_exp_transform, use_pca=use_pca, pipe=output_predictor_train["preprocessing_pipeline"])
     y = output_predictor_test["labels"]
     y_pred = output_predictor_test['labels_pred']
 
     eval_multimodal = evaluate_gene_exp_prediction(y, y_pred)
     return eval_multimodal
 
-def gene_exp_prediction(dataloader, model, device, train_mode=True, method='ridge', predictor=None, max_iter=1000, random_state=42, predicted_label='topK_exp', log1p_exp_transform=True, use_pca=True, pipe=None):
+def label_prediction(dataloader, model, device, train_mode=True, method='ridge', predictor=None, max_iter=1000, random_state=42, predicted_label='topK_exp', log1p_exp_transform=True, use_pca=True, pipe=None):
     all_embeddings = []
     all_labels = []
     with torch.no_grad():

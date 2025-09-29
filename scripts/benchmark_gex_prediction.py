@@ -66,10 +66,10 @@ def main(args):
     
     # === Patch-level gene expression === 
     # Image encoder from multimodal learning model
-    eval_multimodal = linear_probing(train_dataloader, test_dataloader, multimodal_model, device) 
-    
+    eval_multimodal = linear_probing(train_dataloader, test_dataloader, multimodal_model, device, predicted_label="topK_exp", log1p_exp_transform=True, use_pca=True, method='ridge')
+
     # Image encoder only
-    eval_unimodal = linear_probing(train_dataloader, test_dataloader, unimodal_image_encoder, device)
+    eval_unimodal = linear_probing(train_dataloader, test_dataloader, unimodal_image_encoder, device, predicted_label="topK_exp", log1p_exp_transform=True, use_pca=True, method='ridge')
     table = wandb.Table(columns=["metric", "value"])
     for metric, value in eval_multimodal.items():
         if isinstance(value, list):

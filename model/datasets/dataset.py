@@ -171,10 +171,6 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             spatial_graph.edata['mask'] = edge_mask
             spatial_graph.edata['weight'] = torch.where(edge_mask == -1, torch.tensor(1.0), torch.tensor(0.0))
 
-            # print("Disjoint spatial graph:")
-            # print(disjoint_spatial_graph.num_nodes(), disjoint_spatial_graph.num_edges())
-            # print("Spatial graph:")
-            # print(spatial_graph.num_nodes(), spatial_graph.num_edges())
         # 1-3. spatial text (top K ranked genes in this FOV): same logic as loki preprocessing "https://github.com/GuangyuWangLab2021/Loki/blob/main/src/loki/preprocess.py"
         # exclude housekeeping genes
         if self.housekeeping_genes is not None:

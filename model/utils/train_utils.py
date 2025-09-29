@@ -238,8 +238,8 @@ def train_one_epoch(
             optimizer.zero_grad()
             total_loss = None
             for j in range(len(accum_images)):
-                image = accum_images[j].to(device)
-                spatial = accum_spatial[j].to(device)
+                image = to_device_if_tensor(accum_images[j], device)
+                spatial = to_device_if_tensor(accum_spatial[j], device)
                 with torch.amp.autocast(device.type, enabled=True):
                     model_out = model(image, spatial)
                     inputs_for_loss = {}
@@ -256,7 +256,7 @@ def train_one_epoch(
                         losses = {'contrastive_loss': loss}
                         total_loss = sum(losses.values()) #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
                         losses['loss'] = total_loss
-                    else:
+                    elif config.model.name in ["single_img_spatial", "single_img_spatial_graph", "openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
                         for key in accum_features:
                             accumulated = accum_features[key]
                             inputs_for_loss[key] = torch.cat(accumulated[:j] + [model_out[key]] + accumulated[j+1:])
@@ -264,6 +264,8 @@ def train_one_epoch(
                         losses = {'contrastive_loss': loss}
                         total_loss = sum(losses.values())
                         losses['loss'] = total_loss
+                    else:
+                        raise NotImplementedError(f"Model {model.name} is not implemented for training.")
                     del inputs_for_loss
                 total_loss.backward()
             loss = total_loss.item()
@@ -492,3 +494,12 @@ def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
+
+def to_device_if_tensor(x, device):
+    if isinstance(x, torch.Tensor):
+        return x.to(device)
+    if isinstance(x, (list, tuple)):
+        return type(x)(to_device_if_tensor(xx, device) for xx in x)
+    if isinstance(x, dict):
+        return {k: to_device_if_tensor(v, device) for k, v in x.items()}
+    return x

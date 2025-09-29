@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from typing import List, Union
 import timm
 from pathlib import Path
 from PIL import Image
@@ -151,11 +153,30 @@ class OmiCLIP(nn.Module):
             emb = torch.nn.functional.normalize(emb, dim=-1)
         return emb
 
+    def _encode_texts_flexible(
+            self,
+            model: torch.nn.Module,
+            tokenizer: callable,
+            texts: List[str],
+            device: Union[str, torch.device]
+        ) -> torch.Tensor:
+        """
+        Adapted from https://github.com/GuangyuWangLab2021/Loki/blob/main/src/loki/utils.py
+        =================================
+        Batch–encode a list of strings into L2‑normalized embeddings.
+        Returns a tensor of shape (N, D).
+        """
+        # Tokenizer returns a dict of tensors
+        text_inputs = tokenizer(texts)
+        text_inputs = text_inputs.to(device)
+        feats = model.encode_text(text_inputs).to(device)             # (N, D)
+        return F.normalize(feats, p=2, dim=-1)
+
     def forward(self, image, text):
         # loki.utils.encode_images(model: Module, preprocess: callable, image_paths: List[str], device: str | device)→ Tensor
         device = next(self.model.parameters()).device
-        image_embeddings = self._encode_images_flexible(self.model, self.preprocess, image, device=device)
-        text_embeddings = loki.utils.encode_texts(self.model, self.tokenizer, text, device=device)
+        image_embeddings = self._encode_images_flexible(self.model, self.preprocess, image, device)
+        text_embeddings = self._encode_texts_flexible(self.model, self.tokenizer, text, device)
 
         loss = self.loss_fn(image_embeddings, text_embeddings)
         model_outputs = {"loss": loss,

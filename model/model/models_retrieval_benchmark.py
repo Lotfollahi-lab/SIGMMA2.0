@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import timm
 from pathlib import Path
+from PIL import Image
+from torchvision.transforms import Resize
 
 from .losses import symmetric_InfoNCE
 
@@ -70,6 +72,84 @@ class OmiCLIP(nn.Module):
         self.tokenizer = tokenizer
 
         self.loss_fn = symmetric_InfoNCE(temperature=config.model.temperature)
+
+    def _encode_images_flexible(self, model, preprocess, inputs, device=None, *,
+                           mode="auto",  # "auto" | "paths" | "pil" | "tensor" | "embeddings"
+                           normalize_outputs=False):
+        """
+        Flexible encoder:
+        - file path (str or list[str])
+        - PIL.Image (or list[PIL.Image])
+        - image tensor (C,H,W or B,C,H,W)  -> pixel space
+        - precomputed embeddings tensor (D or B,D) -> returns as-is (optionally normalized)
+        """
+        if device is None:
+            device = next(model.parameters()).device
+
+        if mode == "auto":
+            if isinstance(inputs, (str, Path)) or (isinstance(inputs, (list, tuple)) and inputs and isinstance(inputs[0], (str, Path))):
+                mode = "paths"
+            elif isinstance(inputs, Image.Image) or (isinstance(inputs, (list, tuple)) and inputs and isinstance(inputs[0], Image.Image)):
+                mode = "pil"
+            elif torch.is_tensor(inputs):
+                if inputs.dim() in (1, 2) and (inputs.dim()==1 or inputs.size(-1) >= 32) and inputs.dim()==2 and inputs.size(-2) < 64:
+                    pass
+                if inputs.dim() in (3, 4):  # (C,H,W) or (B,C,H,W) -> pixel
+                    mode = "tensor"
+                elif inputs.dim() in (1, 2):  # (D,) or (B,D) -> likely embedding
+                    mode = "embeddings"
+                else:
+                    raise ValueError(f"Unsupported tensor shape for auto mode: {tuple(inputs.shape)}")
+            elif isinstance(inputs, (list, tuple)) and inputs and torch.is_tensor(inputs[0]):
+                # list of tensors
+                t0 = inputs[0]
+                if t0.dim() == 3:
+                    mode = "tensor"
+                elif t0.dim() == 1 or t0.dim() == 2:
+                    mode = "embeddings"
+                else:
+                    raise ValueError(f"Unsupported tensor list shape: {t0.shape}")
+            else:
+                raise ValueError(f"Cannot auto-detect mode for type {type(inputs)}. Specify mode explicitly.")
+
+        if mode == "embeddings":
+            emb = inputs if torch.is_tensor(inputs) else torch.stack(inputs, dim=0)
+            emb = emb.to(device)
+            if normalize_outputs:
+                emb = torch.nn.functional.normalize(emb, dim=-1)
+            return emb
+
+        batch = None
+        if mode == "paths":
+            paths = [inputs] if isinstance(inputs, (str, Path)) else list(inputs)
+            images = [Image.open(p).convert("RGB") for p in paths]
+            tensors = [preprocess(img) for img in images]
+            batch = torch.stack(tensors, dim=0)
+        elif mode == "pil":
+            images = [inputs] if isinstance(inputs, Image.Image) else list(inputs)
+            tensors = [preprocess(img.convert("RGB")) for img in images]
+            batch = torch.stack(tensors, dim=0)
+        elif mode == "tensor":
+            # (C,H,W) or (B,C,H,W)
+            if inputs.dim() == 3:
+                batch = inputs.unsqueeze(0)
+            else:
+                batch = inputs
+            transform = Resize((224, 224))
+            batch = transform(batch)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
+        batch = batch.to(device, non_blocking=True)
+
+        if hasattr(model, "encode_image"):
+            emb = model.encode_image(batch)
+        else:
+            emb = model(batch)
+
+        if normalize_outputs:
+            emb = torch.nn.functional.normalize(emb, dim=-1)
+        return emb
 
     def forward(self, image_path, text):
         # loki.utils.encode_images(model: Module, preprocess: callable, image_paths: List[str], device: str | device)→ Tensor

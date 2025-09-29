@@ -19,6 +19,13 @@ class single_img_spatial_graph(nn.Module):
             out_dim = config.image_encoder_output_dim,
             )
 
+        self.use_imagenet_norm = getattr(config, "use_imagenet_norm", False)
+        if self.use_imagenet_norm:
+            mean = torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1)
+            std  = torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1)
+            self.register_buffer("mean_rgb", mean)
+            self.register_buffer("std_rgb", std)
+
         self.spatial_projection = torch.nn.ModuleList()
         self.spatial_projection.append(BaseGRAPHLayer(config.spatial_encoder_input_dim,
                                                       config.spatial_encoder_output_dim,
@@ -41,6 +48,8 @@ class single_img_spatial_graph(nn.Module):
         # image embedding
         transform = Resize((224, 224))
         x1 = transform(x1)
+        if self.use_imagenet_norm:
+            x1 = (x1 - self.mean_rgb) / self.std_rgb
         image_embedding = self.image_encoder(x1)
         image_embedding = self.image_projection(image_embedding)
 
@@ -68,6 +77,8 @@ class single_img_spatial_graph(nn.Module):
         with torch.no_grad():
             transform = Resize((224, 224))
             x1 = transform(x1)
+            if self.use_imagenet_norm:
+                x1 = (x1 - self.mean_rgb) / self.std_rgb
             image_embedding = self.image_encoder(x1)
             image_embedding = self.image_projection(image_embedding)
             image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)
@@ -93,6 +104,13 @@ class single_img_spatial(nn.Module):
             out_dim = config.image_encoder_output_dim,
             )
 
+        self.use_imagenet_norm = getattr(config, "use_imagenet_norm", False)
+        if self.use_imagenet_norm:
+            mean = torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1)
+            std  = torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1)
+            self.register_buffer("mean_rgb", mean)
+            self.register_buffer("std_rgb", std)
+
         self.spatial_projection = DINOHead(
             in_dim = config.spatial_encoder_input_dim,
             out_dim = config.spatial_encoder_output_dim,
@@ -108,6 +126,8 @@ class single_img_spatial(nn.Module):
         # image embedding
         transform = Resize((224, 224))
         x1 = transform(x1)
+        if self.use_imagenet_norm:
+            x1 = (x1 - self.mean_rgb) / self.std_rgb
         image_embedding = self.image_encoder(x1)
         image_embedding = self.image_projection(image_embedding)
 
@@ -132,6 +152,8 @@ class single_img_spatial(nn.Module):
         with torch.no_grad():
             transform = Resize((224, 224))
             x1 = transform(x1)
+            if self.use_imagenet_norm:
+                x1 = (x1 - self.mean_rgb) / self.std_rgb
             image_embedding = self.image_encoder(x1)
             image_embedding = self.image_projection(image_embedding)
             image_embedding_norm= torch.nn.functional.normalize(image_embedding, dim=-1)

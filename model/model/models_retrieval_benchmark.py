@@ -30,7 +30,7 @@ class openAI_CLIP(nn.Module):
         text_embeds = outputs.text_embeds
         model_outputs = {"loss": outputs.loss,
                          "image_embedding": image_embeds,
-                         "text_embedding": text_embeds}
+                         "spatial_embedding": text_embeds}
         return model_outputs
 
 class PLIP(nn.Module):
@@ -57,7 +57,7 @@ class PLIP(nn.Module):
 
         model_outputs = {"loss": outputs.loss,
                          "image_embedding": image_embeds,
-                         "text_embedding": text_embeds}
+                         "spatial_embedding": text_embeds}
         return model_outputs
 
 
@@ -79,7 +79,7 @@ class OmiCLIP(nn.Module):
         loss = self.loss_fn(image_embeddings, text_embeddings)
         model_outputs = {"loss": loss,
                          "image_embedding": image_embeddings,
-                         "text_embedding": text_embeddings}
+                         "spatial_embedding": text_embeddings}
         return model_outputs
 
 class UNI(nn.Module):

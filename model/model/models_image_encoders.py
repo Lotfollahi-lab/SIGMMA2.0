@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torchvision import models
 import timm
 from pathlib import Path
 
@@ -43,6 +44,18 @@ class H_optimus_zero(nn.Module):
                 strict=True,
             )
         self.model = H_optimus_zero_model
+
+    def get_image_features(self, x):
+        with torch.inference_mode():
+            image_embedding = self.model(x)
+        return image_embedding
+
+class ResNet50(nn.Module):
+    def __init__(self):
+        super(ResNet50, self).__init__()
+        resnet50 = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
+        model = nn.Sequential(*list(resnet50.children())[:-1])
+        self.model = model
 
     def get_image_features(self, x):
         with torch.inference_mode():

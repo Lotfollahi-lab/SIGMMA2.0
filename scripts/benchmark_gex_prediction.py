@@ -15,8 +15,10 @@ from ml_collections.config_dict import ConfigDict
 import yaml
 
 from model.utils import load_dataset, load_model, linear_probing, WandbLogger
-from model.model import UNI
+from model.model import UNI, H_optimus_zero, ResNet50
 from model.datasets import multimodal_collate
+
+from huggingface_hub import login
 
 from scipy.stats import pearsonr
 
@@ -60,29 +62,52 @@ def main(args):
     multimodal_model = load_model(config, device, pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
     multimodal_model.eval()
 
-    unimodal_image_encoder = UNI(checkpoint_path=config.model.pretrained_image_encoder_ckpt_path)
-    unimodal_image_encoder.to(device)
-    unimodal_image_encoder.eval()
-    
-    # === Patch-level gene expression === 
-    # Image encoder from multimodal learning model
-    eval_multimodal = linear_probing(train_dataloader, test_dataloader, multimodal_model, device, predicted_label="topK_exp", log1p_exp_transform=True, use_pca=True, method='ridge')
+    unimodal_image_encoder_UNI = UNI(checkpoint_path="/nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/")
+    unimodal_image_encoder_UNI.to(device)
+    unimodal_image_encoder_UNI.eval()
 
+    unimodal_image_encoder_H_optimus_zero = H_optimus_zero()
+    unimodal_image_encoder_H_optimus_zero.to(device)
+    unimodal_image_encoder_H_optimus_zero.eval()
+
+    unimodal_image_encoder_ResNet50 = ResNet50()
+    unimodal_image_encoder_ResNet50.to(device)
+    unimodal_image_encoder_ResNet50.eval()
+
+    # === Patch-level gene expression ===
     # Image encoder only
-    eval_unimodal = linear_probing(train_dataloader, test_dataloader, unimodal_image_encoder, device, predicted_label="topK_exp", log1p_exp_transform=True, use_pca=True, method='ridge')
+    eval_unimodal_UNI = linear_probing(train_dataloader, test_dataloader, unimodal_image_encoder_UNI, device, predicted_label="topK_exp", norm='log1p', use_pca=True, method='ridge')
+    eval_unimodal_H_optimus_zero = linear_probing(train_dataloader, test_dataloader, unimodal_image_encoder_H_optimus_zero, device, predicted_label="topK_exp", norm='log1p', use_pca=True, method='ridge')
+    eval_unimodal_ResNet50 = linear_probing(train_dataloader, test_dataloader, unimodal_image_encoder_ResNet50, device, predicted_label="topK_exp", norm='log1p', use_pca=True, method='ridge')
     table = wandb.Table(columns=["metric", "value"])
-    for metric, value in eval_multimodal.items():
+
+    for metric, value in eval_unimodal_UNI.items():
+        print("uni-modal image encoder: UNI")
         if isinstance(value, list):
             continue
-        table.add_data(f"multimodal_{metric}", value)
+        table.add_data(f"unimodal_UNI_{metric}", value)
         print(f"{metric}: {value}")
-    for metric, value in eval_unimodal.items():
+    for metric, value in eval_unimodal_H_optimus_zero.items():
+        print("uni-modal image encoder: H-optimus_zero")
         if isinstance(value, list):
             continue
-        table.add_data(f"unimodal_{metric}", value)
+        table.add_data(f"unimodal_H_optimus_zero_{metric}", value)
+        print(f"{metric}: {value}")
+    for metric, value in eval_unimodal_ResNet50.items():
+        print("uni-modal image encoder: ResNet50")
+        if isinstance(value, list):
+            continue
+        table.add_data(f"unimodal_ResNet50_{metric}", value)
         print(f"{metric}: {value}")
     wandb_logger.update({f"{model_name}_linear_probing_results": table})
 
+    # Image encoder from multimodal learning model
+    eval_multimodal = linear_probing(train_dataloader, test_dataloader, multimodal_model, device, predicted_label="topK_exp", norm='log1p', use_pca=True, method='ridge')
+    for metric, value in eval_multimodal.items():
+            if isinstance(value, list):
+                continue
+            table.add_data(f"multimodal_{metric}", value)
+            print(f"{metric}: {value}")
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-config_file")

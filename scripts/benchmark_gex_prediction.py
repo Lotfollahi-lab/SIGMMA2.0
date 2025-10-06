@@ -82,16 +82,19 @@ def main(args):
     table = wandb.Table(columns=["metric", "value"])
 
     for metric, value in eval_unimodal_UNI.items():
+        print("uni-modal image encoder: UNI")
         if isinstance(value, list):
             continue
         table.add_data(f"unimodal_UNI_{metric}", value)
         print(f"{metric}: {value}")
     for metric, value in eval_unimodal_H_optimus_zero.items():
+        print("uni-modal image encoder: H-optimus_zero")
         if isinstance(value, list):
             continue
         table.add_data(f"unimodal_H_optimus_zero_{metric}", value)
         print(f"{metric}: {value}")
     for metric, value in eval_unimodal_ResNet50.items():
+        print("uni-modal image encoder: ResNet50")
         if isinstance(value, list):
             continue
         table.add_data(f"unimodal_ResNet50_{metric}", value)

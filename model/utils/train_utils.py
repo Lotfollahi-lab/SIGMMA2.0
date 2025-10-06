@@ -9,7 +9,10 @@ from ml_collections.config_dict import ConfigDict
 import pickle
 import timm
 from model.datasets.dataset import MultiSectionDataset
-from model.model import hierarchical_img_spatial_graph, single_img_spatial, single_img_spatial_graph, openAI_CLIP, PLIP, OmiCLIP, symmetric_InfoNCE
+from model.model import hierarchical_img_spatial_graph, single_img_spatial, single_img_spatial_graph
+from model.model import UNI, H_optimus_zero, ResNet50
+from model.model import openAI_CLIP, PLIP, OmiCLIP
+from model.model import symmetric_InfoNCE
 from .evaluate_retrieval import retrieval_score, eval_retrieval
 from transformers import CLIPProcessor, CLIPModel
 import loki.utils
@@ -26,74 +29,41 @@ def load_dataset(config_dataset):
     """
     dataset = MultiSectionDataset(manifest_path=Path(config_dataset.manifest_path),
                                   num_cell_types=config_dataset.num_cell_types,
-                                  pretrained_cell_embedding=config_dataset.pretrained_cell_embedding)
+                                  pretrained_cell_embedding=config_dataset.pretrained_cell_embedding,
+                                  type_pretrained_cell_embedding=config_dataset.type_pretrained_cell_embedding)
 
     return dataset
 
 
 def load_model(config:ConfigDict, 
                device:Optional[str]="cuda",
+               pretrained_image_encoder:str="UNI",
                pretrained_ckpt_path:Optional[str]=None,
                train: Optional[bool]=True):
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
-    if config.model.name == "hierarchical_img_spatial_graph":
-        pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
-        assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
-        pretrained_image_encoder = timm.create_model(
-            "vit_large_patch16_224",
-            img_size=224,
-            patch_size=16,
-            init_values=1e-5,
-            num_classes=0,
-            dynamic_img_size=True,
-        )
-        pretrained_image_encoder.load_state_dict(
-            torch.load(
-                Path(pretrained_ckpt_dir, "pytorch_model.bin"), map_location="cpu"
-            ),
-            strict=True,
-        )
-        model = hierarchical_img_spatial_graph(config.model, pretrained_image_encoder)
+    if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial", "single_img_spatial_graph"]:
+        if pretrained_image_encoder == "UNI":
+            pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
+            assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
+            pretrained_image_encoder = UNI(checkpoint_path=pretrained_ckpt_dir)
+        elif pretrained_image_encoder == "H_optimus_zero":
+            pretrained_image_encoder = H_optimus_zero()
+        elif pretrained_image_encoder == "ResNet50":
+            pretrained_image_encoder = ResNet50()
+        else:
+            raise NotImplementedError(f"Pretrained image encoder {pretrained_image_encoder} is not implemented.")
 
-    elif config.model.name == "single_img_spatial":
-        pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
-        assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
-        pretrained_image_encoder = timm.create_model(
-            "vit_large_patch16_224",
-            img_size=224,
-            patch_size=16,
-            init_values=1e-5,
-            num_classes=0,
-            dynamic_img_size=True,
-        )
-        pretrained_image_encoder.load_state_dict(
-            torch.load(
-                Path(pretrained_ckpt_dir, "pytorch_model.bin"), map_location="cpu"
-            ),
-            strict=True,
-        )
-        model = single_img_spatial(config.model, pretrained_image_encoder)
+        if config.model.name == "hierarchical_img_spatial_graph":
+            model = hierarchical_img_spatial_graph(config.model, pretrained_image_encoder)
+        elif config.model.name == "single_img_spatial":
+            model = single_img_spatial(config.model, pretrained_image_encoder)
+        elif config.model.name == "single_img_spatial_graph":
+            model = single_img_spatial_graph(config.model, pretrained_image_encoder)
+        else:
+            raise NotImplementedError(f"Model {config.model.name} is not implemented.")
 
-    elif config.model.name == "single_img_spatial_graph":
-        pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
-        assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
-        pretrained_image_encoder = timm.create_model(
-            "vit_large_patch16_224",
-            img_size=224,
-            patch_size=16,
-            init_values=1e-5,
-            num_classes=0,
-            dynamic_img_size=True,
-        )
-        pretrained_image_encoder.load_state_dict(
-            torch.load(
-                Path(pretrained_ckpt_dir, "pytorch_model.bin"), map_location="cpu"
-            ),
-            strict=True,
-        )
-        model = single_img_spatial_graph(config.model, pretrained_image_encoder)
     elif config.model.name == "openAI_CLIP":
         model_raw = CLIPModel.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
         processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)

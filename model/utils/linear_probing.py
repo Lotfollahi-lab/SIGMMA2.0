@@ -8,26 +8,30 @@ from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.pipeline import Pipeline
 
-def linear_probing(train_dataloader, test_dataloader, model, device, predicted_label, log1p_exp_transform, use_pca, method, seed=42):
-    output_predictor_train = label_prediction(train_dataloader, model, device, train_mode=True, method=method, predictor=None, random_state=seed, predicted_label=predicted_label, log1p_exp_transform=log1p_exp_transform, use_pca=use_pca)
+def linear_probing(train_dataloader, test_dataloader, model, device, predicted_label, norm, use_pca, method, seed=42):
+    output_predictor_train = label_prediction(train_dataloader, model, device, train_mode=True, method=method, predictor=None, random_state=seed, predicted_label=predicted_label, norm=norm, use_pca=use_pca)
     trained_predictor = output_predictor_train["predictor"]
 
-    output_predictor_test = label_prediction(test_dataloader, model, device, train_mode=False, predictor=trained_predictor, random_state=seed, predicted_label=predicted_label, log1p_exp_transform=log1p_exp_transform, use_pca=use_pca, pipe=output_predictor_train["preprocessing_pipeline"])
+    output_predictor_test = label_prediction(test_dataloader, model, device, train_mode=False, predictor=trained_predictor, random_state=seed, predicted_label=predicted_label, norm=norm, use_pca=use_pca, pipe=output_predictor_train["preprocessing_pipeline"])
     y = output_predictor_test["labels"]
     y_pred = output_predictor_test['labels_pred']
 
     eval_multimodal = evaluate_gene_exp_prediction(y, y_pred)
     return eval_multimodal
 
-def label_prediction(dataloader, model, device, train_mode=True, method='ridge', predictor=None, max_iter=1000, random_state=42, predicted_label='topK_exp', log1p_exp_transform=True, use_pca=True, pipe=None):
+def label_prediction(dataloader, model, device, train_mode=True, method='ridge', predictor=None, max_iter=1000, random_state=42, predicted_label='topK_exp', norm='log1p', use_pca=True, pipe=None):
     all_embeddings = []
     all_labels = []
     with torch.no_grad():
         for batch in dataloader:
             image = batch["image"].to(device)
             label = batch["label"][predicted_label]
-            if log1p_exp_transform:
+            if norm == 'log1p':
                 label = torch.log1p(label)
+            elif norm == 'standard':
+                label = label / label.sum(dim=1, keepdim=True)
+            else:
+                raise NotImplementedError
             embeddings = model.get_image_features(image)
             all_embeddings.append(embeddings.cpu())
             all_labels.append(label)

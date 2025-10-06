@@ -46,6 +46,8 @@ class H_optimus_zero(nn.Module):
         self.model = H_optimus_zero_model
 
     def get_image_features(self, x):
+        if x.shape[-1] != 224 or x.shape[-2] != 224:
+            x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
         with torch.inference_mode():
             image_embedding = self.model(x)
         return image_embedding

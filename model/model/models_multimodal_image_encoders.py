@@ -9,7 +9,6 @@ from torchvision.transforms import Resize
 
 from .losses import symmetric_InfoNCE
 
-import loki
 
 class openAI_CLIP(nn.Module):
     def __init__(self, config, model, processor):
@@ -37,6 +36,12 @@ class openAI_CLIP(nn.Module):
                          "spatial_embedding": text_embeds}
         return model_outputs
 
+    @torch.no_grad()
+    def get_image_features(self, x):
+        with torch.inference_mode():
+            image_embedding = self.model.get_image_features(x)
+        return image_embedding
+
 class PLIP(nn.Module):
     def __init__(self, config, model, processor):
         super(PLIP, self).__init__()
@@ -63,6 +68,20 @@ class PLIP(nn.Module):
                          "image_embedding": image_embeds,
                          "spatial_embedding": text_embeds}
         return model_outputs
+
+    @torch.no_grad()
+    def get_image_features(self, x):
+        x = x.clamp(0, 1)
+
+        inputs = self.processor(images=x, return_tensors="pt", padding=True, do_rescale=False, truncation=True, max_length=77)
+
+        pixel_values = inputs["pixel_values"].to(self.model.device)
+
+        self.model.eval()
+        with torch.inference_mode():
+            image_embedding = self.model.get_image_features(pixel_values=pixel_values)
+
+        return image_embedding
 
 
 class OmiCLIP(nn.Module):
@@ -184,28 +203,9 @@ class OmiCLIP(nn.Module):
                          "spatial_embedding": text_embeddings}
         return model_outputs
 
-class UNI(nn.Module):
-    def __init__(self, checkpoint_path=None):
-        super(UNI, self).__init__()
-        uni_model = timm.create_model(
-            "vit_large_patch16_224",
-            img_size=224,
-            patch_size=16,
-            init_values=1e-5,
-            num_classes=0,
-            dynamic_img_size=True,
-        )
-
-        if checkpoint_path:
-            uni_model.load_state_dict(
-                torch.load(
-                    Path(checkpoint_path, "pytorch_model.bin"), map_location="cpu"
-                ),
-                strict=True,
-            )
-        self.model = uni_model
-
+    @torch.no_grad()
     def get_image_features(self, x):
-        with torch.inference_mode():
-            image_embedding = self.model(x)
+        x = x.clamp(0, 1)
+        device = next(self.model.parameters()).device
+        image_embedding = self._encode_images_flexible(self.model, self.preprocess, x, device)
         return image_embedding

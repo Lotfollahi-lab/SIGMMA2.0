@@ -26,6 +26,7 @@ class UNI(nn.Module):
             )
         self.model = uni_model
 
+    @torch.no_grad()
     def get_image_features(self, x):
         with torch.inference_mode():
             image_embedding = self.model(x)
@@ -48,6 +49,7 @@ class H_optimus_zero(nn.Module):
             )
         self.model = H_optimus_zero_model
 
+    @torch.no_grad()
     def get_image_features(self, x):
         if x.shape[-1] != 224 or x.shape[-2] != 224:
             x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
@@ -68,6 +70,7 @@ class ResNet50(nn.Module):
         model = nn.Sequential(*list(resnet50.children())[:-1])
         self.model = model
 
+    @torch.no_grad()
     def get_image_features(self, x):
         with torch.inference_mode():
             image_embedding = self.model(x)

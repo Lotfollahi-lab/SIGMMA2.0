@@ -29,7 +29,8 @@ class MultiSectionDataset(torch.utils.data.Dataset):
     def __init__(self,
                  manifest_path: Path | str,
                  num_cell_types: int = 84,
-                 pretrained_cell_embedding: bool = True):
+                 pretrained_cell_embedding: bool = True,
+                 type_pretrained_cell_embedding: str = 'nemo'): # 'nemo' or 'novae'
         manifest =  pd.read_csv(manifest_path)
         slides = manifest['sample_name']
         li_datsets = []
@@ -43,6 +44,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                 indices_file=Path(index_file),
                 num_cell_types=num_cell_types,
                 pretrained_cell_embedding=pretrained_cell_embedding,
+                type_pretrained_cell_embedding=type_pretrained_cell_embedding
             )
             li_datsets.append(dataset)
         self.modality_datasets = torch.utils.data.ConcatDataset(li_datsets)
@@ -68,6 +70,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         hierarchical_graph: bool = True,
         tissue_filtering_threshold: float = 20000,
         pretrained_cell_embedding: bool = True,
+        type_pretrained_cell_embedding: str = 'nemo' # 'nemo' or 'novae'
     ):
         self.image_file = str(image_file)
         self.indices_file = str(indices_file)
@@ -93,6 +96,9 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.housekeeping_genes = housekeeping_genes
         self.hierarchical_graph = hierarchical_graph
         self.pretrained_cell_embedding = pretrained_cell_embedding
+        if self.pretrained_cell_embedding == True:
+            assert type_pretrained_cell_embedding in ['nemo', 'novae'], "type_pretrained_cell_embedding must be either 'nemo' or 'novae'"
+            self.type_pretrained_cell_embedding = type_pretrained_cell_embedding
 
 
     def __getitem__(self, idx):
@@ -109,7 +115,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         )
 
         if self.pretrained_cell_embedding == True:
-            cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
+            if self.type_pretrained_cell_embedding == "nemo":
+                cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
+            elif self.type_pretrained_cell_embedding == "novae":
+                cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask])
         else:
             cell_embeddings = torch.Tensor(self.spatial_anndata.X[mask].toarray())
         spatial_embedding = cell_embeddings.mean(dim=0)

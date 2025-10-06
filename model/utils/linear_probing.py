@@ -26,8 +26,12 @@ def label_prediction(dataloader, model, device, train_mode=True, method='ridge',
         for batch in dataloader:
             image = batch["image"].to(device)
             label = batch["label"][predicted_label]
-            if log1p_exp_transform:
+            if norm == 'log1p':
                 label = torch.log1p(label)
+            elif norm == 'standard':
+                label = label / label.sum(dim=1, keepdim=True)
+            else:
+                raise NotImplementedError
             embeddings = model.get_image_features(image)
             all_embeddings.append(embeddings.cpu())
             all_labels.append(label)

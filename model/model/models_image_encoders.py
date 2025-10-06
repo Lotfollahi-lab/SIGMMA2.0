@@ -30,7 +30,10 @@ class UNI(nn.Module):
         with torch.inference_mode():
             image_embedding = self.model(x)
         return image_embedding
-    
+
+    def forward(self, x):
+        return self.model(x)
+
 class H_optimus_zero(nn.Module):
     def __init__(self, checkpoint_path=None):
         super(H_optimus_zero, self).__init__()
@@ -52,6 +55,12 @@ class H_optimus_zero(nn.Module):
             image_embedding = self.model(x)
         return image_embedding
 
+    def forward(self, x):
+        if x.shape[-1] != 224 or x.shape[-2] != 224:
+            x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
+        x = self.model(x)
+        return x
+
 class ResNet50(nn.Module):
     def __init__(self):
         super(ResNet50, self).__init__()
@@ -64,3 +73,8 @@ class ResNet50(nn.Module):
             image_embedding = self.model(x)
             image_embedding = image_embedding.flatten(1)
         return image_embedding
+
+    def forward(self, x):
+        x = self.model(x)
+        x = x.flatten(1)
+        return x

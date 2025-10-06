@@ -62,4 +62,5 @@ class ResNet50(nn.Module):
     def get_image_features(self, x):
         with torch.inference_mode():
             image_embedding = self.model(x)
+            image_embedding = image_embedding.flatten(1)
         return image_embedding

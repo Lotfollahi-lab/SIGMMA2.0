@@ -81,20 +81,22 @@ def main(args):
     eval_unimodal_ResNet50 = linear_probing(train_dataloader, test_dataloader, unimodal_image_encoder_ResNet50, device, predicted_label="topK_exp", norm='log1p', use_pca=True, method='ridge')
     table = wandb.Table(columns=["metric", "value"])
 
+    print("uni-modal image encoder: UNI")
     for metric, value in eval_unimodal_UNI.items():
-        print("uni-modal image encoder: UNI")
         if isinstance(value, list):
             continue
         table.add_data(f"unimodal_UNI_{metric}", value)
         print(f"{metric}: {value}")
+
+    print("uni-modal image encoder: H-optimus_zero")
     for metric, value in eval_unimodal_H_optimus_zero.items():
-        print("uni-modal image encoder: H-optimus_zero")
         if isinstance(value, list):
             continue
         table.add_data(f"unimodal_H_optimus_zero_{metric}", value)
         print(f"{metric}: {value}")
+
+    print("uni-modal image encoder: ResNet50")
     for metric, value in eval_unimodal_ResNet50.items():
-        print("uni-modal image encoder: ResNet50")
         if isinstance(value, list):
             continue
         table.add_data(f"unimodal_ResNet50_{metric}", value)
@@ -103,11 +105,13 @@ def main(args):
 
     # Image encoder from multimodal learning model
     eval_multimodal = linear_probing(train_dataloader, test_dataloader, multimodal_model, device, predicted_label="topK_exp", norm='log1p', use_pca=True, method='ridge')
+
+    print(f"multi-modal model image encoder: {model_name}")
     for metric, value in eval_multimodal.items():
-            if isinstance(value, list):
-                continue
-            table.add_data(f"multimodal_{metric}", value)
-            print(f"{metric}: {value}")
+        if isinstance(value, list):
+            continue
+        table.add_data(f"multimodal_{metric}", value)
+        print(f"{metric}: {value}")
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-config_file")

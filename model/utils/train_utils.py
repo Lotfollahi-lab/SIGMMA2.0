@@ -369,7 +369,8 @@ def evaluate(config, model, eval_dataloader, device):
             else:
                 raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
-            model_out = model(*inputs)
+            with torch.amp.autocast(device.type, enabled=False):
+                model_out = model(*inputs)
             image_embedding = model_out["image_embedding"]
             spatial_embedding = model_out["spatial_embedding"]
 

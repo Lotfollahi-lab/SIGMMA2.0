@@ -48,7 +48,7 @@ def load_model(config:ConfigDict,
             pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
             assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
             pretrained_image_encoder = UNI(checkpoint_path=pretrained_ckpt_dir)
-        elif pretrained_image_encoder == "H_optimus_zero":
+        elif pretrained_image_encoder == "H-optimus_zero":
             pretrained_image_encoder = H_optimus_zero()
         elif pretrained_image_encoder == "ResNet50":
             pretrained_image_encoder = ResNet50()
@@ -369,7 +369,8 @@ def evaluate(config, model, eval_dataloader, device):
             else:
                 raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
-            model_out = model(*inputs)
+            with torch.amp.autocast(device.type, enabled=False):
+                model_out = model(*inputs)
             image_embedding = model_out["image_embedding"]
             spatial_embedding = model_out["spatial_embedding"]
 

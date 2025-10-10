@@ -168,7 +168,7 @@ def train_one_epoch(
         # Gradient accumulation code adapted from OpenCLIP (https://github.com/mlfoundations/open_clip/blob/main/src/open_clip_train/train.py)
         if accum_freq == 1:
             # Forward pass
-            with torch.amp.autocast(device.type, enabled=False):
+            with torch.amp.autocast(device.type, enabled=True):
                 model_out = model(*inputs)
             if config.model.name == "hierarchical_img_spatial_graph":
                 loss = 0
@@ -369,7 +369,7 @@ def evaluate(config, model, eval_dataloader, device):
             else:
                 raise NotImplementedError(f"Model {model.name} is not implemented for training.")
 
-            with torch.amp.autocast(device.type, enabled=False):
+            with torch.amp.autocast(device.type, enabled=True):
                 model_out = model(*inputs)
             image_embedding = model_out["image_embedding"]
             spatial_embedding = model_out["spatial_embedding"]

@@ -19,6 +19,7 @@ import optuna
 # def objective(trial):
 def objective(args):
     fix_seed(42)
+    dataset_name = args.config_file.split('/')[-1].split('_')[0]
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
 
@@ -61,7 +62,7 @@ def objective(args):
         "project": "img-spatial-alignment",
         "group": None,
         # "name": f"{model_name}_trail_{trial.number}",
-        "name": f"{model_name}_trial_beacon",
+        "name": f"{model_name}_trial_{dataset_name}_{config.model.pretrained_image_encoder}",
         "tags": None,
         "mode": "online",
     }

@@ -259,6 +259,8 @@ class BaseGRAPHLayer(torch.nn.Module):
 
         for layer in self.node_embedding:
             h = layer(h)
+        # self._print_summaries("after_node_embedding",
+        #                           self._summarize_layer(h, g, bins=50))
 
         # Apply GCN/structure learning layers
         g_unbatched = [dgl.add_self_loop(graph) for graph in dgl.unbatch(g)]
@@ -267,6 +269,8 @@ class BaseGRAPHLayer(torch.nn.Module):
         for i in range(self.num_gnn_layers):
             h = self.convs[i](g, h)
             h = self.activation(h)
+            self._print_summaries("after_node_embedding",
+                                  self._summarize_layer(h, g, bins=50))
         return h
 
 

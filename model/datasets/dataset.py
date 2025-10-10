@@ -87,7 +87,6 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         )
         assert 'nemo_latent' in self.spatial_anndata.obsm, "'nemo_latent' embedding is required in the spatial anndata obsm, please run the preprocessing script first."
         assert 'spatial_connectivities' in self.spatial_anndata.obsp, "'spatial_connectivities' is required in the spatial anndata obsp, please run the preprocessing script first."
-        assert 'Annotation' in self.spatial_anndata.obs, "'Annotation' is required in the spatial anndata obs, please run the preprocessing script first."
 
         self.fov_size = fov_size
         self.number_of_genes = number_of_genes
@@ -192,14 +191,16 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         spatial_text = " ".join(filtered_spatial_anndata.var.index[np.argsort(mean_exp)[-K:][::-1]]) # TODO: exclude empty strings
 
         # 2. cell type composition
-
-        cell_type_ids = self.spatial_anndata.obs["Annotation"][mask]
-        cell_type_ids_tensor = torch.tensor(cell_type_ids.tolist(), dtype=torch.int8)
-        if len(cell_type_ids_tensor) != 0:
-            cell_type_composition = torch.bincount(cell_type_ids_tensor, minlength=self.num_cell_types).long()
-        else:
-            cell_type_composition = torch.zeros(self.num_cell_types)
-        cell_type_composition = cell_type_composition.float() / cell_type_composition.sum() if cell_type_composition.sum() > 0 else cell_type_composition
+        try:
+            cell_type_ids = self.spatial_anndata.obs["Annotation"][mask]
+            cell_type_ids_tensor = torch.tensor(cell_type_ids.tolist(), dtype=torch.int8)
+            if len(cell_type_ids_tensor) != 0:
+                cell_type_composition = torch.bincount(cell_type_ids_tensor, minlength=self.num_cell_types).long()
+            else:
+                cell_type_composition = torch.zeros(self.num_cell_types)
+            cell_type_composition = cell_type_composition.float() / cell_type_composition.sum() if cell_type_composition.sum() > 0 else cell_type_composition
+        except Exception as e:
+            print(f"[Warning]: Cell type composition skipped {e}")
 
         # 3. cropped image
         fov_image = self.image_array[
@@ -216,7 +217,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         label['topK_exp'] = torch.tensor(topK_exp, dtype=torch.float32) # TODO: add gene names
         label['raw_exp'] = torch.tensor(mean_exp, dtype=torch.float32) # TODO: add gene names
-        label['cell_type_composition'] = cell_type_composition
+        try:
+            label['cell_type_composition'] = cell_type_composition
+        except Exception as e:
+            print(f"[Warning]: Cell type composition information is not available in the spatial anndata. Please make sure cell type information is included in the spatial anndata. {e}")
 
         return {
             "image": image,

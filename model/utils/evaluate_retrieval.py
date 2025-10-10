@@ -41,7 +41,8 @@ def load_embeddings(model, dataloader, device, config):
         
         # Forward pass through the model
         with torch.no_grad():
-            model_output = model(*inputs)
+            with torch.amp.autocast(device.type, enabled=True):
+                model_output = model(*inputs)
             image_embed = model_output["image_embedding"]
             spatial_embed = model_output["spatial_embedding"]
 

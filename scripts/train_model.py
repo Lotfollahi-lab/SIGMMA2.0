@@ -1,15 +1,10 @@
 import os
 import argparse
-import pickle
 import torch
-from torch.utils.data import random_split, DataLoader, ConcatDataset
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import random_split, DataLoader
 
 from ml_collections.config_dict import ConfigDict
 import yaml
-
-import timm
 
 from model.utils import train_one_epoch, load_dataset, load_model, evaluate, fix_seed, seed_worker, WandbLogger
 from model.datasets import multimodal_collate

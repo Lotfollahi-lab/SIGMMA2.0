@@ -3,6 +3,9 @@ import argparse
 import torch
 from torch.utils.data import random_split, DataLoader
 
+import numpy as np
+from pathlib import Path
+
 from ml_collections.config_dict import ConfigDict
 import yaml
 
@@ -33,14 +36,28 @@ def objective(args):
     elif config.dataset.split_type == "pooled_FOV_split":
         dataset = load_dataset(config.dataset)
         total = len(dataset)
-        train_len = int(0.8 * total)
-        val_len = total - train_len
 
-        train_dataset, eval_dataset = random_split(
-            dataset,
-            [train_len, val_len],
-            generator=torch.Generator().manual_seed(42),
+        # Split ratio: 8:1:1
+        train_ratio = 0.8
+        val_ratio = 0.1
+        test_ratio = 0.1
+        assert abs(train_ratio + val_ratio + test_ratio - 1.0) < 1e-6
+
+        train_len = int(total * train_ratio)
+        val_len = int(total * val_ratio)
+        test_len = total - train_len - val_len
+
+        generator = torch.Generator().manual_seed(42)
+        train_dataset, eval_dataset, test_dataset = random_split(
+            dataset, [train_len, val_len, test_len], generator=generator
         )
+
+        np.save(f"{dataset_name}_train_indices.npy", train_dataset.indices)
+        np.save(f"{dataset_name}_val_indices.npy", eval_dataset.indices)
+        np.save(f"{dataset_name}_test_indices.npy", test_dataset.indices)
+
+    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Eval dataset size: {len(eval_dataset)}")
 
     g = torch.Generator()
     g.manual_seed(42)

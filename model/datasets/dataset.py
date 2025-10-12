@@ -28,7 +28,13 @@ collate_fn_map[bytes] = collate_str_fn
 class MultiSectionDataset(torch.utils.data.Dataset):
     def __init__(self,
                  manifest_path: Path | str,
+                 fov_size: int = 256,
+                 number_of_genes: int = 50,
+                 num_resolutions: int = 3,
                  num_cell_types: int = 84,
+                 housekeeping_genes: Optional[Sequence[str]] = None,
+                 hierarchical_graph: bool = True,
+                 tissue_filtering_threshold: float = 20000,
                  pretrained_cell_embedding: bool = True,
                  type_pretrained_cell_embedding: str = 'nemo'): # 'nemo' or 'novae'
         manifest =  pd.read_csv(manifest_path)
@@ -42,9 +48,15 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                 image_file=Path(image_file),
                 spatial_file=Path(spatial_file),
                 indices_file=Path(index_file),
+                fov_size=fov_size,
+                number_of_genes=number_of_genes,
+                num_resolutions=num_resolutions,
                 num_cell_types=num_cell_types,
+                housekeeping_genes=housekeeping_genes,
+                hierarchical_graph=hierarchical_graph,
+                tissue_filtering_threshold=tissue_filtering_threshold,
                 pretrained_cell_embedding=pretrained_cell_embedding,
-                type_pretrained_cell_embedding=type_pretrained_cell_embedding
+                type_pretrained_cell_embedding=type_pretrained_cell_embedding,
             )
             li_datsets.append(dataset)
         self.modality_datasets = torch.utils.data.ConcatDataset(li_datsets)

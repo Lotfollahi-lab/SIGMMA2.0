@@ -29,6 +29,12 @@ def load_dataset(config_dataset):
     """
     dataset = MultiSectionDataset(manifest_path=Path(config_dataset.manifest_path),
                                   num_cell_types=config_dataset.num_cell_types,
+                                  fov_size=config_dataset.get("fov_size", 256),
+                                  number_of_genes=config_dataset.get("number_of_genes", 50),
+                                  num_resolutions=config_dataset.get("num_resolutions", 3),
+                                  hierarchical_graph=config_dataset.get("hierarchical_graph", True),
+                                  housekeeping_genes=config_dataset.get("housekeeping_genes", None),
+                                  tissue_filtering_threshold=config_dataset.get("tissue_filtering_threshold", 20000),
                                   pretrained_cell_embedding=config_dataset.pretrained_cell_embedding,
                                   type_pretrained_cell_embedding=config_dataset.type_pretrained_cell_embedding)
 

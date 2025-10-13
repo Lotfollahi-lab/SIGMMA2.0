@@ -12,7 +12,7 @@ model:
   activation: 'leaky_relu'
 
 reference_dataset:
-  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST.csv
+  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_beacon_MANIFEST.csv
   celltype_id_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/cell_type_ids.csv
   pretrained_cell_embedding: True
   type_pretrained_cell_embedding: 'nemo'
@@ -20,7 +20,7 @@ reference_dataset:
   fov_size: 256
 
 query_dataset:
-  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_test.csv
+  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_beacon_MANIFEST_test.csv
   celltype_id_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/cell_type_ids.csv
   pretrained_cell_embedding: True
   type_pretrained_cell_embedding: 'nemo'

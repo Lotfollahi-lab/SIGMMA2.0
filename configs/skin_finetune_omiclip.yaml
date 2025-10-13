@@ -6,13 +6,15 @@ model:
 dataset:
   split_type: 'section_split'
   train:
-    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_train.csv
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_beacon_MANIFEST_train.csv
     pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: 'nemo'
     num_cell_types: 84
     fov_size: 256
   validation:
-    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/MANIFEST_val.csv
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_beacon_MANIFEST_val.csv
     pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: 'nemo'
     num_cell_types: 84
     fov_size: 256
 

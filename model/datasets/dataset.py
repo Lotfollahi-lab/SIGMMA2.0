@@ -260,6 +260,7 @@ def multimodal_collate(batch: collections.abc.MutableMapping):
     return clone
 
 def multimodal_collate_dict(batch_dicts):
+    # Filter out samples without any cells
     filtered = [d for d in batch_dicts if not _is_empty_sample(d)]
     if len(filtered) == 0:
         return None
@@ -287,6 +288,7 @@ def _iter_dgl_graphs(x):
             yield from _iter_dgl_graphs(v)
 
 def _is_empty_sample(sample_dict) -> bool:
+    # Check if any of the DGL graphs in the sample_dict has zero nodes
     for g in _iter_dgl_graphs(sample_dict):
         if g.num_nodes() == 0:
             return True

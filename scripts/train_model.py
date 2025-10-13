@@ -23,6 +23,7 @@ def objective(args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    print(f"dataset_name: {dataset_name}")
     model_name = config.get("model.name")
     print(f"Training model: {model_name}")
     config.outdir = config.get("out_dir") if args.out_dir is None else args.out_dir

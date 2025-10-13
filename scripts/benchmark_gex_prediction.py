@@ -2,11 +2,7 @@
 
 import os
 import argparse
-from pathlib import Path
-import pandas as pd
-import pickle
-import copy
-import timm
+import numpy as np
 
 import torch
 from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
@@ -37,14 +33,28 @@ def main(args):
     g.manual_seed(42)
 
     # == Train dataset preparation ==
-    train_dataset = load_dataset(config.train_dataset)
-    random_sampler = RandomSampler(train_dataset, replacement=False, num_samples=min(len(train_dataset), config.test.get("num_samples", len(train_dataset))), generator=g)
-    train_dataloader = DataLoader(train_dataset, batch_size=config.test.batch_size, sampler=random_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+    if config.dataset.split_type == "section_split":
+        train_dataset = load_dataset(config.dataset.train)
+        random_sampler = RandomSampler(train_dataset, replacement=False, num_samples=min(len(train_dataset), config.test.get("num_samples", len(train_dataset))), generator=g)
+        train_dataloader = DataLoader(train_dataset, batch_size=config.test.batch_size, sampler=random_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
-    # == Test dataset preparation ==
-    test_dataset = load_dataset(config.test_dataset)
-    sequential_sampler = SequentialSampler(test_dataset)
-    test_dataloader = DataLoader(test_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+        # == Test dataset preparation ==
+        test_dataset = load_dataset(config.dataset.test)
+        sequential_sampler = SequentialSampler(test_dataset)
+        test_dataloader = DataLoader(test_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+
+    elif config.dataset.split_type == "pooled_FOV_split":
+        dataset = load_dataset(config.dataset)
+        train_indices = np.load(config.dataset.train.indices, allow_pickle=True)
+        test_indices = np.load(config.dataset.test.indices, allow_pickle=True)
+
+        train_dataset = torch.utils.data.Subset(dataset, train_indices)
+        random_sampler = RandomSampler(train_dataset, replacement=False, num_samples=min(len(train_dataset), config.test.get("num_samples", len(train_dataset))), generator=g)
+        train_dataloader = DataLoader(train_dataset, batch_size=config.test.batch_size, sampler=random_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+
+        test_dataset = torch.utils.data.Subset(dataset, test_indices)
+        sequential_sampler = SequentialSampler(test_dataset)
+        test_dataloader = DataLoader(test_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
     # Add wandb logging
     wandb_config = {"entity": None,

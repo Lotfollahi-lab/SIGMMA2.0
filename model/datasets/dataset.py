@@ -229,7 +229,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         topK_exp = mean_exp[np.argsort(mean_exp)[-K:]]
 
         label['topK_exp'] = torch.tensor(topK_exp, dtype=torch.float32) # TODO: add gene names
-        label['raw_exp'] = torch.tensor(mean_exp, dtype=torch.float32) # TODO: add gene names
+        # label['raw_exp'] = torch.tensor(mean_exp, dtype=torch.float32) # TODO: add gene names
         try:
             label['cell_type_composition'] = cell_type_composition
         except Exception as e:

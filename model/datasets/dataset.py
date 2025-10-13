@@ -31,7 +31,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                  fov_size: int = 256,
                  number_of_genes: int = 50,
                  num_resolutions: int = 3,
-                 num_cell_types: int = 84,
+                 num_cell_types: Optional[int] = None,
                  housekeeping_genes: Optional[Sequence[str]] = None,
                  hierarchical_graph: bool = True,
                  tissue_filtering_threshold: float = 20000,
@@ -77,7 +77,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         fov_size: int = 256,
         number_of_genes: int = 50,
         num_resolutions: int = 3,
-        num_cell_types: int = 84,
+        num_cell_types: Optional[int] = None,
         housekeeping_genes: Optional[Sequence[str]] = None,
         hierarchical_graph: bool = True,
         tissue_filtering_threshold: float = 20000,
@@ -212,7 +212,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                 cell_type_composition = torch.zeros(self.num_cell_types)
             cell_type_composition = cell_type_composition.float() / cell_type_composition.sum() if cell_type_composition.sum() > 0 else cell_type_composition
         except Exception as e:
-            print(f"[Warning]: Cell type composition skipped {e}")
+            pass
+            # print(f"[Warning]: Cell type composition skipped {e}")
 
         # 3. cropped image
         fov_image = self.image_array[
@@ -232,7 +233,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         try:
             label['cell_type_composition'] = cell_type_composition
         except Exception as e:
-            print(f"[Warning]: Cell type composition information is not available in the spatial anndata. Please make sure cell type information is included in the spatial anndata. {e}")
+            pass
+            # print(f"[Warning]: Cell type composition information is not available in the spatial anndata. Please make sure cell type information is included in the spatial anndata. {e}")
 
         return {
             "image": image,

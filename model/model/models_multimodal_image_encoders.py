@@ -22,6 +22,9 @@ class openAI_CLIP(nn.Module):
         x: PIL image
         y: list of text descriptions
         """
+        if x.shape[-1] != 224 or x.shape[-2] != 224:
+            x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
+
         x = x.clamp(0, 1)  # Ensure image tensor is in the range [0, 1]
         inputs = self.processor(text=y, images=x, return_tensors="pt", padding=True, do_rescale=False, truncation=True)
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
@@ -38,6 +41,8 @@ class openAI_CLIP(nn.Module):
 
     @torch.no_grad()
     def get_image_features(self, x):
+        if x.shape[-1] != 224 or x.shape[-2] != 224:
+            x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
         with torch.inference_mode():
             image_embedding = self.model.get_image_features(x)
         return image_embedding
@@ -54,6 +59,8 @@ class PLIP(nn.Module):
         x: PIL image
         y: list of text descriptions
         """
+        if x.shape[-1] != 224 or x.shape[-2] != 224:
+            x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
         x = x.clamp(0, 1)  # Ensure image tensor is in the range [0, 1]
         inputs = self.processor(text=y, images=x, return_tensors="pt", padding=True, do_rescale=False, truncation=True, max_length=77)
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
@@ -71,6 +78,8 @@ class PLIP(nn.Module):
 
     @torch.no_grad()
     def get_image_features(self, x):
+        if x.shape[-1] != 224 or x.shape[-2] != 224:
+            x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
         x = x.clamp(0, 1)
 
         inputs = self.processor(images=x, return_tensors="pt", padding=True, do_rescale=False, truncation=True, max_length=77)
@@ -205,6 +214,8 @@ class OmiCLIP(nn.Module):
 
     @torch.no_grad()
     def get_image_features(self, x):
+        if x.shape[-1] != 224 or x.shape[-2] != 224:
+            x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
         x = x.clamp(0, 1)
         device = next(self.model.parameters()).device
         image_embedding = self._encode_images_flexible(self.model, self.preprocess, x, device)

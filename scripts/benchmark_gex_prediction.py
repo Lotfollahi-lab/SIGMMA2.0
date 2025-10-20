@@ -21,6 +21,7 @@ from scipy.stats import pearsonr
 import wandb
 
 def main(args):
+    dataset_name = args.config_file.split('/')[-1].split('_')[0]
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -29,6 +30,7 @@ def main(args):
     if os.path.exists(config.outdir) == False:
         os.makedirs(config.outdir)
 
+    print(f"dataset_name: {dataset_name}")
     g = torch.Generator()
     g.manual_seed(42)
 
@@ -117,6 +119,7 @@ def main(args):
     eval_multimodal = linear_probing(train_dataloader, test_dataloader, multimodal_model, device, predicted_label="topK_exp", norm='log1p', use_pca=True, method='ridge')
 
     print(f"multi-modal model image encoder: {model_name}")
+    print("pretrained_image_encoder:", config.model.get("pretrained_image_encoder", "None"))
     for metric, value in eval_multimodal.items():
         if isinstance(value, list):
             continue

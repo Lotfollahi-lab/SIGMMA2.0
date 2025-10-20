@@ -26,6 +26,7 @@ dataset:
   type_pretrained_cell_embedding: 'nemo'
   num_cell_types: 84
   fov_size: 256
+  tissue_filtering_threshold: 0
 
 test:
   batch_size: 256

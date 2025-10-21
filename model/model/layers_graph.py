@@ -269,8 +269,8 @@ class BaseGRAPHLayer(torch.nn.Module):
         for i in range(self.num_gnn_layers):
             h = self.convs[i](g, h)
             h = self.activation(h)
-            self._print_summaries("after_node_embedding",
-                                  self._summarize_layer(h, g, bins=50))
+            # self._print_summaries("after_node_embedding",
+            #                       self._summarize_layer(h, g, bins=50))
         return h
 
 

@@ -2,10 +2,7 @@
 
 import os
 import argparse
-from pathlib import Path
-import pandas as pd
-import pickle
-import copy
+import numpy as np
 import torch
 from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 
@@ -18,6 +15,7 @@ from model.datasets import multimodal_collate
 import wandb
 
 def main(args):
+    dataset_name = args.config_file.split('/')[-1].split('_')[0]
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

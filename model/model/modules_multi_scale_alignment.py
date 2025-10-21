@@ -118,6 +118,7 @@ class hierarchical_img_spatial_graph(nn.Module):
 
         # Patchfying
         crops = []
+        # From coarse to fine grid (2x2, 4x4, ...)
         for s in range(self.num_resolutions):
             grid = 2 ** s
             step = H // grid

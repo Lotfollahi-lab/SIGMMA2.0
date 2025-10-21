@@ -31,7 +31,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                  fov_size: int = 256,
                  number_of_genes: int = 50,
                  num_resolutions: int = 3,
-                 num_cell_types: int = 84,
+                 num_cell_types: Optional[int] = None,
                  housekeeping_genes: Optional[Sequence[str]] = None,
                  hierarchical_graph: bool = True,
                  tissue_filtering_threshold: float = 20000,
@@ -77,7 +77,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         fov_size: int = 256,
         number_of_genes: int = 50,
         num_resolutions: int = 3,
-        num_cell_types: int = 84,
+        num_cell_types: Optional[int] = None,
         housekeeping_genes: Optional[Sequence[str]] = None,
         hierarchical_graph: bool = True,
         tissue_filtering_threshold: float = 20000,
@@ -212,7 +212,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                 cell_type_composition = torch.zeros(self.num_cell_types)
             cell_type_composition = cell_type_composition.float() / cell_type_composition.sum() if cell_type_composition.sum() > 0 else cell_type_composition
         except Exception as e:
-            print(f"[Warning]: Cell type composition skipped {e}")
+            pass
+            # print(f"[Warning]: Cell type composition skipped {e}")
 
         # 3. cropped image
         fov_image = self.image_array[
@@ -220,7 +221,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                     y_start : y_start + self.fov_size,
                     x_start : x_start + self.fov_size,
                     ]
-        # → Resize image for ViT input
+        # Normalize to [0, 1] 
         image = torch.tensor(fov_image) / 255.0
 
         # Label
@@ -228,11 +229,12 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         topK_exp = mean_exp[np.argsort(mean_exp)[-K:]]
 
         label['topK_exp'] = torch.tensor(topK_exp, dtype=torch.float32) # TODO: add gene names
-        label['raw_exp'] = torch.tensor(mean_exp, dtype=torch.float32) # TODO: add gene names
+        # label['raw_exp'] = torch.tensor(mean_exp, dtype=torch.float32) # TODO: add gene names
         try:
             label['cell_type_composition'] = cell_type_composition
         except Exception as e:
-            print(f"[Warning]: Cell type composition information is not available in the spatial anndata. Please make sure cell type information is included in the spatial anndata. {e}")
+            pass
+            # print(f"[Warning]: Cell type composition information is not available in the spatial anndata. Please make sure cell type information is included in the spatial anndata. {e}")
 
         return {
             "image": image,
@@ -258,6 +260,7 @@ def multimodal_collate(batch: collections.abc.MutableMapping):
     return clone
 
 def multimodal_collate_dict(batch_dicts):
+    # Filter out samples without any cells
     filtered = [d for d in batch_dicts if not _is_empty_sample(d)]
     if len(filtered) == 0:
         return None
@@ -285,6 +288,7 @@ def _iter_dgl_graphs(x):
             yield from _iter_dgl_graphs(v)
 
 def _is_empty_sample(sample_dict) -> bool:
+    # Check if any of the DGL graphs in the sample_dict has zero nodes
     for g in _iter_dgl_graphs(sample_dict):
         if g.num_nodes() == 0:
             return True

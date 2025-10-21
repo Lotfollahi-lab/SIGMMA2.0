@@ -28,7 +28,7 @@ def load_dataset(config_dataset):
     Load the training and evaluation datasets based on the configuration.
     """
     dataset = MultiSectionDataset(manifest_path=Path(config_dataset.manifest_path),
-                                  num_cell_types=config_dataset.num_cell_types,
+                                  num_cell_types=config_dataset.get("num_cell_types", None),
                                   fov_size=config_dataset.get("fov_size", 256),
                                   number_of_genes=config_dataset.get("number_of_genes", 50),
                                   num_resolutions=config_dataset.get("num_resolutions", 3),

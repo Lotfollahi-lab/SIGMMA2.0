@@ -2,11 +2,7 @@
 
 import os
 import argparse
-from pathlib import Path
-import pandas as pd
-import pickle
-import copy
-import timm
+import numpy as np
 
 import torch
 from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
@@ -25,6 +21,7 @@ from scipy.stats import pearsonr
 import wandb
 
 def main(args):
+    dataset_name = args.config_file.split('/')[-1].split('_')[0]
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -33,18 +30,33 @@ def main(args):
     if os.path.exists(config.outdir) == False:
         os.makedirs(config.outdir)
 
+    print(f"dataset_name: {dataset_name}")
     g = torch.Generator()
     g.manual_seed(42)
 
     # == Train dataset preparation ==
-    train_dataset = load_dataset(config.train_dataset)
-    random_sampler = RandomSampler(train_dataset, replacement=False, num_samples=min(len(train_dataset), config.test.get("num_samples", len(train_dataset))), generator=g)
-    train_dataloader = DataLoader(train_dataset, batch_size=config.test.batch_size, sampler=random_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+    if config.dataset.split_type == "section_split":
+        train_dataset = load_dataset(config.dataset.train)
+        random_sampler = RandomSampler(train_dataset, replacement=False, num_samples=min(len(train_dataset), config.test.get("num_samples", len(train_dataset))), generator=g)
+        train_dataloader = DataLoader(train_dataset, batch_size=config.test.batch_size, sampler=random_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
-    # == Test dataset preparation ==
-    test_dataset = load_dataset(config.test_dataset)
-    sequential_sampler = SequentialSampler(test_dataset)
-    test_dataloader = DataLoader(test_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+        # == Test dataset preparation ==
+        test_dataset = load_dataset(config.dataset.test)
+        sequential_sampler = SequentialSampler(test_dataset)
+        test_dataloader = DataLoader(test_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+
+    elif config.dataset.split_type == "pooled_FOV_split":
+        dataset = load_dataset(config.dataset)
+        train_indices = np.load(config.dataset.train.indices, allow_pickle=True)
+        test_indices = np.load(config.dataset.test.indices, allow_pickle=True)
+
+        train_dataset = torch.utils.data.Subset(dataset, train_indices)
+        random_sampler = RandomSampler(train_dataset, replacement=False, num_samples=min(len(train_dataset), config.test.get("num_samples", len(train_dataset))), generator=g)
+        train_dataloader = DataLoader(train_dataset, batch_size=config.test.batch_size, sampler=random_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+
+        test_dataset = torch.utils.data.Subset(dataset, test_indices)
+        sequential_sampler = SequentialSampler(test_dataset)
+        test_dataloader = DataLoader(test_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
     # Add wandb logging
     wandb_config = {"entity": None,
@@ -59,7 +71,7 @@ def main(args):
     wandb_logger.set_step(0)
 
     model_name = config.model.get("name")
-    multimodal_model = load_model(config, device, pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
+    multimodal_model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
     multimodal_model.eval()
 
     unimodal_image_encoder_UNI = UNI(checkpoint_path="/nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/")
@@ -107,6 +119,7 @@ def main(args):
     eval_multimodal = linear_probing(train_dataloader, test_dataloader, multimodal_model, device, predicted_label="topK_exp", norm='log1p', use_pca=True, method='ridge')
 
     print(f"multi-modal model image encoder: {model_name}")
+    print("pretrained_image_encoder:", config.model.get("pretrained_image_encoder", "None"))
     for metric, value in eval_multimodal.items():
         if isinstance(value, list):
             continue

@@ -55,9 +55,20 @@ def objective(args):
             dataset, [train_len, val_len, test_len], generator=generator
         )
 
-        np.save(f"{dataset_name}_train_indices.npy", train_dataset.indices)
-        np.save(f"{dataset_name}_val_indices.npy", eval_dataset.indices)
-        np.save(f"{dataset_name}_test_indices.npy", test_dataset.indices)
+        indices_file = path_to_dataset/f"{dataset_name}_train_indices.npy"
+        if indices_file.exists():
+            print(f"Loading pre-saved dataset split indices from {indices_file.parent}")
+            train_indices = np.load(path_to_dataset/f"{dataset_name}_train_indices.npy").tolist()
+            val_indices = np.load(path_to_dataset/f"{dataset_name}_val_indices.npy").tolist()
+            test_indices = np.load(path_to_dataset/f"{dataset_name}_test_indices.npy").tolist()
+
+            train_dataset = torch.utils.data.Subset(dataset, train_indices)
+            eval_dataset = torch.utils.data.Subset(dataset, val_indices)
+            test_dataset = torch.utils.data.Subset(dataset, test_indices)
+        else:
+            np.save(path_to_dataset/f"{dataset_name}_train_indices.npy", train_dataset.indices)
+            np.save(path_to_dataset/f"{dataset_name}_val_indices.npy", eval_dataset.indices)
+            np.save(path_to_dataset/f"{dataset_name}_test_indices.npy", test_dataset.indices)
 
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Eval dataset size: {len(eval_dataset)}")

@@ -113,7 +113,6 @@ def main(args):
             continue
         table.add_data(f"unimodal_ResNet50_{metric}", value)
         print(f"{metric}: {value}")
-    wandb_logger.update({f"{model_name}_linear_probing_results": table})
 
     # Image encoder from multimodal learning model
     eval_multimodal = linear_probing(train_dataloader, test_dataloader, multimodal_model, device, predicted_label="topK_exp", norm='log1p', use_pca=True, method='ridge')
@@ -125,6 +124,7 @@ def main(args):
             continue
         table.add_data(f"multimodal_{metric}", value)
         print(f"{metric}: {value}")
+    wandb_logger.update({f"{model_name}_linear_probing_results": table})
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-config_file")

@@ -77,7 +77,7 @@ def main(args):
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
-    model = load_model(config, device, pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
+    model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
     model_name = config.model.get("name")
     model.eval()
     

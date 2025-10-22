@@ -26,6 +26,7 @@ def objective(args):
     print(f"dataset_name: {dataset_name}")
     model_name = config.get("model.name")
     print(f"Training model: {model_name}")
+    print(f"image_encoder: {config.model.pretrained_image_encoder}")
     config.outdir = config.get("out_dir") if args.out_dir is None else args.out_dir
 
     if os.path.exists(config.outdir) == False:
@@ -38,6 +39,7 @@ def objective(args):
         dataset = load_dataset(config.dataset)
         total = len(dataset)
 
+        path_to_dataset = Path(config.dataset.manifest_path).parent
         # Split ratio: 8:1:1
         train_ratio = 0.8
         val_ratio = 0.1

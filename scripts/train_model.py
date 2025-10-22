@@ -26,6 +26,7 @@ def objective(args):
     print(f"dataset_name: {dataset_name}")
     model_name = config.get("model.name")
     print(f"Training model: {model_name}")
+    print(f"image_encoder: {config.model.pretrained_image_encoder}")
     config.outdir = config.get("out_dir") if args.out_dir is None else args.out_dir
 
     if os.path.exists(config.outdir) == False:
@@ -38,6 +39,7 @@ def objective(args):
         dataset = load_dataset(config.dataset)
         total = len(dataset)
 
+        path_to_dataset = Path(config.dataset.manifest_path).parent
         # Split ratio: 8:1:1
         train_ratio = 0.8
         val_ratio = 0.1
@@ -53,9 +55,20 @@ def objective(args):
             dataset, [train_len, val_len, test_len], generator=generator
         )
 
-        np.save(f"{dataset_name}_train_indices.npy", train_dataset.indices)
-        np.save(f"{dataset_name}_val_indices.npy", eval_dataset.indices)
-        np.save(f"{dataset_name}_test_indices.npy", test_dataset.indices)
+        indices_file = path_to_dataset/f"{dataset_name}_train_indices.npy"
+        if indices_file.exists():
+            print(f"Loading pre-saved dataset split indices from {indices_file.parent}")
+            train_indices = np.load(path_to_dataset/f"{dataset_name}_train_indices.npy").tolist()
+            val_indices = np.load(path_to_dataset/f"{dataset_name}_val_indices.npy").tolist()
+            test_indices = np.load(path_to_dataset/f"{dataset_name}_test_indices.npy").tolist()
+
+            train_dataset = torch.utils.data.Subset(dataset, train_indices)
+            eval_dataset = torch.utils.data.Subset(dataset, val_indices)
+            test_dataset = torch.utils.data.Subset(dataset, test_indices)
+        else:
+            np.save(path_to_dataset/f"{dataset_name}_train_indices.npy", train_dataset.indices)
+            np.save(path_to_dataset/f"{dataset_name}_val_indices.npy", eval_dataset.indices)
+            np.save(path_to_dataset/f"{dataset_name}_test_indices.npy", test_dataset.indices)
 
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Eval dataset size: {len(eval_dataset)}")

@@ -112,9 +112,16 @@ class StructureLearning(torch.nn.Module):
             x_pos = g.ndata['x_pos']
             y_pos = g.ndata['y_pos']
 
-            dx = (x_pos[u] - x_pos[v]).abs()
-            dy = (y_pos[u] - y_pos[v]).abs()
-            non_neighbor_edge_mask = (dx >= 2) | (dy >= 2)
+            BLOCK = 2
+            bx = torch.div(x_pos, BLOCK, rounding_mode='floor')
+            by = torch.div(y_pos, BLOCK, rounding_mode='floor')
+
+            bx_u, bx_v = bx[u], bx[v]
+            by_u, by_v = by[u], by[v]
+
+            same_block = (bx_u == bx_v) & (by_u == by_v)
+            non_neighbor_edge_mask = ~same_block
+
             # Update edge weights for inter-subgraph edges only
             g.edata['weight'][inter_mask & non_neighbor_edge_mask] = y[inter_mask & non_neighbor_edge_mask]
             print(f"the number of {layer_id}th-step rescued edges: {g.edata['weight'].sum()} / {g.num_edges()}")

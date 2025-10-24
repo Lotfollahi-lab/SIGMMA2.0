@@ -60,7 +60,7 @@ def main(args):
 
     # Add wandb logging
     wandb_config = {"entity": None,
-                    "project": "img-spatial-alignment",
+                    "project": f"img-spatial-alignment_{dataset_name}",
                     "group": None,
                     "name": "benchmark_gex_prediction",
                     "tags": None,

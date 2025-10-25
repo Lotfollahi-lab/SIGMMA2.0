@@ -97,6 +97,9 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
         )
+        self.section_id = Path(spatial_file).parts[-2]
+        self.tissue_type = Path(spatial_file).parts[-3]
+
         assert 'nemo_latent' in self.spatial_anndata.obsm, "'nemo_latent' embedding is required in the spatial anndata obsm, please run the preprocessing script first."
         assert 'spatial_connectivities' in self.spatial_anndata.obsp, "'spatial_connectivities' is required in the spatial anndata obsp, please run the preprocessing script first."
 
@@ -243,7 +246,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             "spatial": spatial_embedding,
             "spatial_graph": spatial_graph,
             "spatial_text": spatial_text,
-            "label": label
+            "label": label,
+            "metadata": {"section_id": self.section_id, "tissue_type": self.tissue_type}
         }
 
     def __len__(self) -> int:

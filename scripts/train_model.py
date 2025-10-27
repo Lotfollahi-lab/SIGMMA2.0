@@ -85,7 +85,7 @@ def objective(args):
     # Add wandb logging
     wandb_config = {
         "entity": None,
-        "project": "img-spatial-alignment",
+        "project": f"img-spatial-alignment_{dataset_name}",
         "group": None,
         # "name": f"{model_name}_trail_{trial.number}",
         "name": f"{model_name}_trial_{dataset_name}_{config.model.pretrained_image_encoder}",

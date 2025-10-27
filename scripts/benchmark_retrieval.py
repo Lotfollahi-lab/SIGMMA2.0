@@ -58,7 +58,7 @@ def main(args):
     if args.zeroshot:
         wandb_config = {
             "entity": None,
-            "project": "img-spatial-alignment",
+            "project": f"img-spatial-alignment_{dataset_name}",
             "group": None,
             "name": "benchmark_zeroshot",
             "tags": None,
@@ -67,7 +67,7 @@ def main(args):
     else:
         wandb_config = {
             "entity": None,
-            "project": "img-spatial-alignment",
+            "project": f"img-spatial-alignment_{dataset_name}",
             "group": None,
             "name": "benchmark",
             "tags": None,

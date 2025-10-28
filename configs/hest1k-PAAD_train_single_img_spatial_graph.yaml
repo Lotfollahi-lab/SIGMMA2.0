@@ -16,7 +16,7 @@ model:
   spatial_encoder_output_dim: 512
   num_cell_types: 84
   temperature: 0.01
-  dropout: 0.3
+  dropout: 0.1
   activation: 'leaky_relu'
   aggregate: 'attn_pool'
   num_graph_layers: 2
@@ -33,7 +33,7 @@ dataset:
 train:
   batch_size: 128
   epochs: 100
-  learning_rate: 0.0001
+  learning_rate: 0.00001
   weight_decay: 0.0001
   lr_scheduler: "step"
   lr_step_size: 50

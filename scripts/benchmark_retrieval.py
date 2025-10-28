@@ -54,25 +54,24 @@ def main(args):
         sequential_sampler = SequentialSampler(query_dataset)
         query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
+    model_name = config.model.get("name")
     # Add wandb logging
-    if args.zeroshot:
-        wandb_config = {
-            "entity": None,
-            "project": f"img-spatial-alignment_{dataset_name}",
-            "group": None,
-            "name": "benchmark_zeroshot",
-            "tags": None,
-            "mode": "online",
-        }
+    if config.get("model.checkpoint_path", None) is None:
+        wandb_config = {"entity": None,
+                        "project": f"img-spatial-alignment_{dataset_name}",
+                        "group": None,
+                        "name": f"benchmark_zeroshot_retrieval_{model_name}",
+                        "tags": None,
+                        "mode": "online",
+                        }
     else:
-        wandb_config = {
-            "entity": None,
-            "project": f"img-spatial-alignment_{dataset_name}",
-            "group": None,
-            "name": "benchmark",
-            "tags": None,
-            "mode": "online",
-        }
+        wandb_config = {"entity": None,
+                        "project": f"img-spatial-alignment_{dataset_name}",
+                        "group": None,
+                        "name": f"benchmark_retrieval_{model_name}",
+                        "tags": None,
+                        "mode": "online",
+                        }
 
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)

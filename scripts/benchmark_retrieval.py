@@ -31,14 +31,14 @@ def main(args):
     if config.dataset.split_type == "section_split":
         # == Query dataset preparation ==
         query_dataset = load_dataset(config.dataset.query_dataset)
-        sequential_sampler = SequentialSampler(query_dataset)
-        query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
+        query_sampler = SequentialSampler(query_dataset)
+        query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=query_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
         # == Reference dataset preparation ==
         target_dataset = load_dataset(config.dataset.reference_dataset)
-        reference_dataset = torch.utils.data.ConcatDataset([target_dataset, query_dataset])
-        sequential_sampler = SequentialSampler(reference_dataset)
-        reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
+        reference_dataset = torch.utils.data.ConcatDataset([query_dataset, target_dataset])
+        reference_sampler = SequentialSampler(reference_dataset)
+        reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=reference_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
     elif config.dataset.split_type == "pooled_FOV_split":
         dataset = load_dataset(config.dataset)

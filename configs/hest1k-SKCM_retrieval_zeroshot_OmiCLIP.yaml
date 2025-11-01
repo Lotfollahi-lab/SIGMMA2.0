@@ -1,0 +1,20 @@
+model:
+  name: loki_OmiCLIP
+  pretrained_omiclip_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/loki/
+  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
+  temperature: 0.01
+
+dataset:
+  split_type: 'pooled_FOV_split'
+  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/public_xenium/MANIFEST_hest_1k_SKCM.csv
+  test:
+    indices: /lustre/scratch126/cellgen/lotfollahi/dj16/data/public_xenium/hest1k-SKCM_test_indices.npy
+  pretrained_cell_embedding: True
+  type_pretrained_cell_embedding: 'nemo'
+  num_cell_types: 84
+  fov_size: 256
+  tissue_filtering_threshold: 0
+
+test:
+  batch_size: 256
+  num_workers: 16

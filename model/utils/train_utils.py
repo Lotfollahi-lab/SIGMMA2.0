@@ -299,6 +299,12 @@ def train_one_epoch(
                                  "(eval)spatial recall@5percent": eval_results["spatial_recall@5percent"],
                                  "(eval)spatial recall@10percent": eval_results["spatial_recall@10percent"],
                                  "(eval)spatial recall@15percent": eval_results["spatial_recall@15percent"],
+                                 "(eval)image recall@1": eval_results["image_recall@1"],
+                                 "(eval)image recall@5": eval_results["image_recall@5"],
+                                 "(eval)image recall@10": eval_results["image_recall@10"],
+                                 "(eval)spatial recall@1": eval_results["spatial_recall@1"],
+                                 "(eval)spatial recall@5": eval_results["spatial_recall@5"],
+                                 "(eval)spatial recall@10": eval_results["spatial_recall@10"],
                                  "epoch": epoch_index + 1})
             torch.save({"eval_image_embeddings": eval_image_embedding,
                         "eval_spatial_embeddings": eval_spatial_embedding},

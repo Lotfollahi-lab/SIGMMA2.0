@@ -1,6 +1,6 @@
 model:
   name: PLIP
-  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs/hest1k-PAAD_finetune_PLIP_167032/checkpoint-epoch84.pth
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs/hest1k-PAAD_finetune_PLIP_494875/checkpoint-epoch100.pth
   pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
   temperature: 0.01
 

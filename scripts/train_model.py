@@ -23,6 +23,9 @@ def objective(args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    if config.get("model.pretrained_image_encoder") is None:
+        config.model.pretrained_image_encoder = ""
+
     print(f"dataset_name: {dataset_name}")
     model_name = config.get("model.name")
     print(f"Training model: {model_name}")

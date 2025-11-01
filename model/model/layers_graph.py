@@ -112,7 +112,7 @@ class StructureLearning(torch.nn.Module):
             x_pos = g.ndata['x_pos']
             y_pos = g.ndata['y_pos']
 
-            BLOCK = 2
+            BLOCK = 2*(layer_id+1)  # Assuming each block is of size 2x2, 4x4, 6x6, ...
             bx = torch.div(x_pos, BLOCK, rounding_mode='floor')
             by = torch.div(y_pos, BLOCK, rounding_mode='floor')
 
@@ -120,7 +120,7 @@ class StructureLearning(torch.nn.Module):
             by_u, by_v = by[u], by[v]
 
             same_block = (bx_u == bx_v) & (by_u == by_v)
-            non_neighbor_edge_mask = ~same_block
+            non_neighbor_edge_mask = same_block
 
             # Update edge weights for inter-subgraph edges only
             g.edata['weight'][inter_mask & non_neighbor_edge_mask] = y[inter_mask & non_neighbor_edge_mask]

@@ -25,7 +25,8 @@ dependencies = ["novae (>=0.2.4,<0.3.0)",
                 "nichejepa @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/nichejepa",
                 "loki @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/Loki/src",
                 "shapely (>=2.0,<3.0)",
-                "xgboost (>=3.0.5,<4.0.0)"]
+                "xgboost (>=3.0.5,<4.0.0)",
+                "gdown (>=5.2.0,<6.0.0)"]
 
 [tool.poetry.dependencies]
 loki = {develop = true}

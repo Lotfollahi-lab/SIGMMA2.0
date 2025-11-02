@@ -43,7 +43,6 @@ def main(args):
     elif config.dataset.split_type == "pooled_FOV_split":
         dataset = load_dataset(config.dataset)
         query_indices = np.load(config.dataset.test.indices, allow_pickle=True)
-        target_indices = [i for i in range(len(dataset)) if i not in query_indices]
 
         # == Query dataset preparation ==
         query_dataset = torch.utils.data.Subset(dataset, query_indices)

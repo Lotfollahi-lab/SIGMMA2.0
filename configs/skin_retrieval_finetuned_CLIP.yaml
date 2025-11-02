@@ -1,10 +1,10 @@
 model:
   name: openAI_CLIP
-  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs/finetune_clip_834230/checkpoint-epoch14.pth
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs/hest1k-PAAD_finetune_CLIP_904659/checkpoint-epoch100.pth
   temperature: 0.01
 
 reference_dataset:
-  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_beacon_MANIFEST.csv
+  manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_beacon_MANIFEST_train.csv
   celltype_id_file: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/cell_type_ids.csv
   pretrained_cell_embedding: True
   type_pretrained_cell_embedding: 'nemo'

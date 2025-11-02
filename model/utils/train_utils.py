@@ -290,9 +290,9 @@ def train_one_epoch(
                                  "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),
                                  "(eval)loss": eval_loss,
                                  "(eval)UMAP_embeddings": wandb.Image(fig_eval_umap),
-                                 "(eval)img2spatial heatmap": wandb.Image(fig_eval_img2spatial_heatmap),
-                                 "(eval)img2img heatmap": wandb.Image(fig_eval_img2img_heatmap),
-                                 "(eval)spatial2spatial heatmap": wandb.Image(fig_eval_spatial2spatial_heatmap),
+                                #  "(eval)img2spatial heatmap": wandb.Image(fig_eval_img2spatial_heatmap),
+                                #  "(eval)img2img heatmap": wandb.Image(fig_eval_img2img_heatmap),
+                                #  "(eval)spatial2spatial heatmap": wandb.Image(fig_eval_spatial2spatial_heatmap),
                                  "(eval)image recall@5percent": eval_results["image_recall@5percent"],
                                  "(eval)image recall@10percent": eval_results["image_recall@10percent"],
                                  "(eval)image recall@15percent": eval_results["image_recall@15percent"],
@@ -306,9 +306,9 @@ def train_one_epoch(
                                  "(eval)spatial recall@5": eval_results["spatial_recall@5"],
                                  "(eval)spatial recall@10": eval_results["spatial_recall@10"],
                                  "epoch": epoch_index + 1})
-            torch.save({"eval_image_embeddings": eval_image_embedding,
-                        "eval_spatial_embeddings": eval_spatial_embedding},
-                       f"{config.outdir}/embeddings-{global_step + 1}.pt")
+            # torch.save({"eval_image_embeddings": eval_image_embedding,
+            #             "eval_spatial_embeddings": eval_spatial_embedding},
+            #            f"{config.outdir}/embeddings-{global_step + 1}.pt")
 
         wandb_logger.update({"(train)loss": loss,
                              "(train)lr": lr_scheduler.get_last_lr()[0],

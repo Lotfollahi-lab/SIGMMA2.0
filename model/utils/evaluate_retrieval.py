@@ -71,9 +71,9 @@ def eval_retrieval(scores_img2spatial, scores_spatial2img):
         inds = np.argsort(score)[::-1]
         ranks[index] = np.where(inds == gt_indices[index])[0][0]
     # == Top@percent Recall ==
-    img_r_5percent = 100 *len(np.where(ranks < int(num_reference*0.05))[0]) / len(ranks)
-    img_r_10percent = 100 *len(np.where(ranks < int(num_reference*0.1))[0]) / len(ranks)
-    img_r_15percent = 100 *len(np.where(ranks < int(num_reference*0.15))[0]) / len(ranks)
+    img_r_5percent = len(np.where(ranks < int(num_reference*0.05))[0]) / len(ranks)
+    img_r_10percent = len(np.where(ranks < int(num_reference*0.1))[0]) / len(ranks)
+    img_r_15percent = len(np.where(ranks < int(num_reference*0.15))[0]) / len(ranks)
 
     # == Top@k Recall ==
     img_r1 = np.mean(ranks == 0)
@@ -85,9 +85,9 @@ def eval_retrieval(scores_img2spatial, scores_spatial2img):
         ranks[index] = np.where(inds == gt_indices[index])[0][0]
     
     # === Top@percent Recall ===
-    spatial_r_5percent = 100 *len(np.where(ranks < int(num_reference*0.05))[0]) / len(ranks)
-    spatial_r_10percent = 100 *len(np.where(ranks < int(num_reference*0.1))[0]) / len(ranks)
-    spatial_r_15percent = 100 *len(np.where(ranks < int(num_reference*0.15))[0]) / len(ranks)
+    spatial_r_5percent = len(np.where(ranks < int(num_reference*0.05))[0]) / len(ranks)
+    spatial_r_10percent = len(np.where(ranks < int(num_reference*0.1))[0]) / len(ranks)
+    spatial_r_15percent = len(np.where(ranks < int(num_reference*0.15))[0]) / len(ranks)
 
     # == Top@k Recall ==
     spatial_r1 = np.mean(ranks == 0)

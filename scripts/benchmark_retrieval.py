@@ -1,5 +1,6 @@
 # Retrieval evaluation logic adapted from BLIP (https://github.com/salesforce/BLIP/blob/main/eval_retrieval_video.py)
 
+import copy
 import os
 import argparse
 import numpy as np
@@ -35,8 +36,7 @@ def main(args):
         query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=query_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
         # == Reference dataset preparation ==
-        target_dataset = load_dataset(config.dataset.reference_dataset)
-        reference_dataset = torch.utils.data.ConcatDataset([query_dataset, target_dataset])
+        reference_dataset = copy.deepcopy(query_dataset)
         reference_sampler = SequentialSampler(reference_dataset)
         reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=reference_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
@@ -47,13 +47,12 @@ def main(args):
 
         # == Query dataset preparation ==
         query_dataset = torch.utils.data.Subset(dataset, query_indices)
-        target_dataset = torch.utils.data.Subset(dataset, target_indices)
 
         query_sampler = SequentialSampler(query_dataset)
         query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=query_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
-        # == Reference dataset preparation ==
-        reference_dataset = torch.utils.data.ConcatDataset([query_dataset, target_dataset]) 
+        # # == Reference dataset preparation ==
+        reference_dataset = copy.deepcopy(query_dataset)
         reference_sampler = SequentialSampler(reference_dataset) 
         reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=reference_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 

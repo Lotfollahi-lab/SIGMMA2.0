@@ -1,3 +1,5 @@
+# Code adapted from HEST-1k benchmarking codebase (https://github.com/mahmoodlab/HEST/blob/main/src/hest/bench/trainer.py)
+
 import torch
 import numpy as np
 from scipy.stats import pearsonr
@@ -5,7 +7,7 @@ from sklearn.linear_model import Ridge, SGDRegressor
 import xgboost as xgb
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.decomposition import PCA
-from sklearn.discriminant_analysis import StandardScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
 def linear_probing(train_dataloader, test_dataloader, model, device, predicted_label, norm, use_pca, method, seed=42):
@@ -104,6 +106,9 @@ def evaluate_gene_exp_prediction(y, y_pred, genes=None):
     for target in range(y.shape[1]):
         preds = y_pred[:, target]
         target_vals = y[:, target]
+        var = np.var(target_vals)
+        if var < 1e-8:
+            continue
         l2_error = float(np.mean((preds - target_vals)**2))
         # compute r2 score
         r2_score = float(1 - np.sum((target_vals - preds)**2) / np.sum((target_vals - np.mean(target_vals))**2))

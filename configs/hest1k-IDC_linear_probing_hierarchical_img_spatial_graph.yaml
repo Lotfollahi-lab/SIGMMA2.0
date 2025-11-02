@@ -1,6 +1,6 @@
 model:
   name: hierarchical_img_spatial_graph
-  checkpoint_path: TODO
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs/hest1k-IDC_hierarchical_img_spatial_graph_850447/checkpoint-epoch24.pth 
   pretrained_image_encoder: UNI
   pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
   image_encoder_input_dim: 1024

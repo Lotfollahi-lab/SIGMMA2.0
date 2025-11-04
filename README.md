@@ -1,4 +1,4 @@
-# SIGMMA
+# SIGMMA, σ
 Spatial transcriptome–histology Image representation learning via hierarchical Graph-based Multi-scale Multi-modal Alignment
 
 ## Installation

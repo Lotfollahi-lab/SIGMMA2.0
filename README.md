@@ -1,9 +1,7 @@
-Image-spatial alignment project
+SIGMMA
 ------------
 
-This project aims to combine Image and Spatial transcriptomics data to create
-a representation capable of downstream tasks like cellular composition
-prediction, etc.
+Spatial transcriptome–histology Image representation learning via hierarchical Graph-based Multi-scale Multi-modal Alignment
 
 
 INSTALLATION
@@ -21,15 +19,19 @@ Install the project
 * You can also use [uv](https://github.com/astral-sh/uv)
 `uv pip install -r pyproject.toml`
 
-MAINTAINERS
------------
+DATA PREPARATION
+------------
+TBA
 
-This repository was initiated by Dabin Jeong on 2025-06-03.
 
-Current maintainers:
+MODEL TRAINING
+------------
+TBA
 
-* Dabin Jeong (dj16@sanger.ac.uk)
-* Ciro Ramírez-Suástegui (cs59@sanger.ac.uk)
+
+DOWNSTREAM TASKS
+------------
+TBA
 
 CITATION
 -----------

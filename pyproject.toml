@@ -2,9 +2,7 @@
 name = "model"
 version = "0.1.0"
 description = ""
-authors = [
-    {name = "Dabin Jeong", email = "dj16@sanger.ac.uk"},
-]
+
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = ["novae (>=0.2.4,<0.3.0)",

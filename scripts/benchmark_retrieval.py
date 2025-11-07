@@ -1,5 +1,6 @@
 # Retrieval evaluation logic adapted from BLIP (https://github.com/salesforce/BLIP/blob/main/eval_retrieval_video.py)
 
+import copy
 import os
 import argparse
 import numpy as np
@@ -31,48 +32,48 @@ def main(args):
     if config.dataset.split_type == "section_split":
         # == Query dataset preparation ==
         query_dataset = load_dataset(config.dataset.query_dataset)
-        sequential_sampler = SequentialSampler(query_dataset)
-        query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
+        query_sampler = SequentialSampler(query_dataset)
+        query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=query_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
         # == Reference dataset preparation ==
-        target_dataset = load_dataset(config.dataset.reference_dataset)
-        reference_dataset = torch.utils.data.ConcatDataset([target_dataset, query_dataset])
-        sequential_sampler = SequentialSampler(reference_dataset)
-        reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
+        reference_dataset = copy.deepcopy(query_dataset)
+        reference_sampler = SequentialSampler(reference_dataset)
+        reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=reference_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
     elif config.dataset.split_type == "pooled_FOV_split":
         dataset = load_dataset(config.dataset)
         query_indices = np.load(config.dataset.test.indices, allow_pickle=True)
-
-        # == Reference dataset preparation ==
-        reference_dataset = dataset
-        random_sampler = RandomSampler(reference_dataset, replacement=False, num_samples=min(len(reference_dataset), config.test.get("num_samples", len(reference_dataset))), generator=g)
-        reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=random_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+        target_indices = [i for i in range(len(dataset)) if i not in query_indices]
 
         # == Query dataset preparation ==
         query_dataset = torch.utils.data.Subset(dataset, query_indices)
-        sequential_sampler = SequentialSampler(query_dataset)
-        query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
+        query_sampler = SequentialSampler(query_dataset)
+        query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=query_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+
+        # # == Reference dataset preparation ==
+        reference_dataset = copy.deepcopy(query_dataset)
+        reference_sampler = SequentialSampler(reference_dataset) 
+        reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=reference_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
+
+    model_name = config.model.get("name")
     # Add wandb logging
-    if args.zeroshot:
-        wandb_config = {
-            "entity": None,
-            "project": "img-spatial-alignment",
-            "group": None,
-            "name": "benchmark_zeroshot",
-            "tags": None,
-            "mode": "online",
-        }
+    if config.get("model.checkpoint_path", None) is None:
+        wandb_config = {"entity": None,
+                        "project": f"img-spatial-alignment_{dataset_name}",
+                        "group": None,
+                        "name": f"benchmark_zeroshot_retrieval_{model_name}",
+                        "tags": None,
+                        "mode": "online",
+                        }
     else:
-        wandb_config = {
-            "entity": None,
-            "project": "img-spatial-alignment",
-            "group": None,
-            "name": "benchmark",
-            "tags": None,
-            "mode": "online",
-        }
+        wandb_config = {"entity": None,
+                        "project": f"img-spatial-alignment_{dataset_name}",
+                        "group": None,
+                        "name": f"benchmark_retrieval_{model_name}",
+                        "tags": None,
+                        "mode": "online",
+                        }
 
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)

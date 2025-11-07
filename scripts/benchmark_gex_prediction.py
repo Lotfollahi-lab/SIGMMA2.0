@@ -58,19 +58,28 @@ def main(args):
         sequential_sampler = SequentialSampler(test_dataset)
         test_dataloader = DataLoader(test_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
+    model_name = config.model.get("name")
     # Add wandb logging
-    wandb_config = {"entity": None,
-                    "project": "img-spatial-alignment",
-                    "group": None,
-                    "name": "benchmark_gex_prediction",
-                    "tags": None,
-                    "mode": "online",
-                }
+    if config.get("model.checkpoint_path", None) is None:
+        wandb_config = {"entity": None,
+                        "project": f"img-spatial-alignment_{dataset_name}",
+                        "group": None,
+                        "name": f"benchmark_gex_prediction_zeroshot_{model_name}",
+                        "tags": None,
+                        "mode": "online",
+                       }
+    else:
+        wandb_config = {"entity": None,
+                        "project": f"img-spatial-alignment_{dataset_name}",
+                        "group": None,
+                        "name": f"benchmark_gex_prediction_{model_name}",
+                        "tags": None,
+                        "mode": "online",
+    }
 
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
-    model_name = config.model.get("name")
     multimodal_model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
     multimodal_model.eval()
 

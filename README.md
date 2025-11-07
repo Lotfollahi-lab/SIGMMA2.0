@@ -1,36 +1,26 @@
-Image-spatial alignment project
-------------
+# SIGMMA, σ
+Spatial transcriptome–histology Image representation learning via hierarchical Graph-based Multi-scale Multi-modal Alignment
 
-This project aims to combine Image and Spatial transcriptomics data to create
-a representation capable of downstream tasks like cellular composition
-prediction, etc.
+## Installation
+Environments needed for data analysis can be installed like so:
 
-
-INSTALLATION
-------------
-
-Environments needed for data analsyis can be installed like so:
-
-`find envs -name "*yaml" -exec conda env create -f {} ;\`
+`find envs -name "*yaml" -exec conda env create -f {} \;`
 
 Install the project
 
-* You can install the requirements with
-[poetry](https://github.com/python-poetry/poetry) `poetry install`
+- You can install the requirements with [poetry](https://github.com/python-poetry/poetry):  
+  `poetry install`
 
-* You can also use [uv](https://github.com/astral-sh/uv)
-`uv pip install -r pyproject.toml`
+- You can also use [uv](https://github.com/astral-sh/uv):  
+  `uv pip install -r pyproject.toml`
 
-MAINTAINERS
------------
+## Data Preparation
+TBA
 
-This repository was initiated by Dabin Jeong on 2025-06-03.
+## Model Training
+TBA
 
-Current maintainers:
+## Downstream Tasks
+TBA
 
-* Dabin Jeong (dj16@sanger.ac.uk)
-* Ciro Ramírez-Suástegui (cs59@sanger.ac.uk)
-
-CITATION
------------
-Please cite this work as TBA
+## Citation

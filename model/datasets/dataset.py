@@ -97,6 +97,9 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.spatial_anndata = scanpy.read_h5ad(
             spatial_file
         )
+        self.section_id = Path(spatial_file).parts[-2]
+        self.tissue_type = Path(spatial_file).parts[-3]
+
         assert 'nemo_latent' in self.spatial_anndata.obsm, "'nemo_latent' embedding is required in the spatial anndata obsm, please run the preprocessing script first."
         assert 'spatial_connectivities' in self.spatial_anndata.obsp, "'spatial_connectivities' is required in the spatial anndata obsp, please run the preprocessing script first."
 
@@ -171,6 +174,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                 subgraph_grid.ndata['feat'] = node_features_grid
                 subgraph_grid.ndata['x_pos'] = torch.full((subgraph_grid.num_nodes(),), x_start_grid // grid_size)
                 subgraph_grid.ndata['y_pos'] = torch.full((subgraph_grid.num_nodes(),), y_start_grid // grid_size)
+                subgraph_grid.ndata['cell_coordinates']=torch.Tensor(self.spatial_anndata[mask_grid,:].obsm['spatial'])
                 subgraphs.append(subgraph_grid)
             
             disjoint_spatial_graph = dgl.batch(subgraphs)
@@ -187,6 +191,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
             spatial_graph.ndata['x_pos'] = disjoint_spatial_graph.ndata['x_pos']
             spatial_graph.ndata['y_pos'] = disjoint_spatial_graph.ndata['y_pos']
+            spatial_graph.ndata['cell_coordinates'] = disjoint_spatial_graph.ndata['cell_coordinates']
 
             spatial_graph.edata['mask'] = edge_mask
             spatial_graph.edata['weight'] = torch.where(edge_mask == -1, torch.tensor(1.0), torch.tensor(0.0))
@@ -241,7 +246,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             "spatial": spatial_embedding,
             "spatial_graph": spatial_graph,
             "spatial_text": spatial_text,
-            "label": label
+            "label": label,
+            "metadata": {"section_id": self.section_id, "tissue_type": self.tissue_type}
         }
 
     def __len__(self) -> int:

@@ -73,6 +73,8 @@ share/
 src
 tables
 R/
+runs_bleep/run_*
+runs_bleep/wandb
 
 # 🖥️ Operating System Files
 # System-generated metadata and indexing files (mostly macOS).

@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 
 class InfoNCE(torch.nn.Module):
@@ -78,3 +79,12 @@ class symmetric_InfoNCE(torch.nn.Module):
         loss_yx = torch.nn.functional.cross_entropy(logits_yx, labels)
 
         return (loss_xy + loss_yx) / 2
+    
+    
+def bleep_cross_entropy(preds, targets, reduction='none'):
+    log_softmax = nn.LogSoftmax(dim=-1)
+    loss = (-targets * log_softmax(preds)).sum(1)
+    if reduction == "none":
+        return loss
+    elif reduction == "mean":
+        return loss.mean()

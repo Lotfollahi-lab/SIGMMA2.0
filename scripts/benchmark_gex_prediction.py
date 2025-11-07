@@ -80,7 +80,8 @@ def main(args):
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
-    multimodal_model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
+    # Pass dataset to load_model for BLEEP to determine spot_embedding dynamically
+    multimodal_model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False, dataset=dataset)
     multimodal_model.eval()
 
     unimodal_image_encoder_UNI = UNI(checkpoint_path="/nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/")

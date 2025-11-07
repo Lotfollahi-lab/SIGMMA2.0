@@ -11,7 +11,7 @@ import timm
 from model.datasets.dataset import MultiSectionDataset
 from model.model import hierarchical_img_spatial_graph, single_img_spatial, single_img_spatial_graph
 from model.model import UNI, H_optimus_zero, ResNet50
-from model.model import openAI_CLIP, PLIP, OmiCLIP
+from model.model import openAI_CLIP, PLIP, OmiCLIP, BLEEP
 from model.model import symmetric_InfoNCE
 from .evaluate_retrieval import retrieval_score, eval_retrieval
 from transformers import CLIPProcessor, CLIPModel
@@ -36,7 +36,8 @@ def load_dataset(config_dataset):
                                   housekeeping_genes=config_dataset.get("housekeeping_genes", None),
                                   tissue_filtering_threshold=config_dataset.get("tissue_filtering_threshold", 20000),
                                   pretrained_cell_embedding=config_dataset.pretrained_cell_embedding,
-                                  type_pretrained_cell_embedding=config_dataset.type_pretrained_cell_embedding)
+                                  type_pretrained_cell_embedding=config_dataset.type_pretrained_cell_embedding,
+                                  genes_to_keep=config_dataset.get("genes_to_keep", None))
 
     return dataset
 
@@ -45,7 +46,8 @@ def load_model(config:ConfigDict,
                device:Optional[str]="cuda",
                pretrained_image_encoder:str="UNI",
                pretrained_ckpt_path:Optional[str]=None,
-               train: Optional[bool]=True):
+               train: Optional[bool]=True,
+               dataset=None):
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
@@ -86,6 +88,18 @@ def load_model(config:ConfigDict,
         model_raw_path = config.model.pretrained_omiclip_ckpt_path + "/checkpoint.pt"
         model_raw, preprocess, tokenizer = loki.utils.load_model(model_raw_path, device)
         model = OmiCLIP(config, model_raw, preprocess, tokenizer)
+    elif config.model.name == "BLEEP":
+        # Determine spot_embedding size from dataset
+        if dataset is not None and hasattr(dataset, 'get_num_genes'):
+            spot_embedding = dataset.get_num_genes()
+            print(f"Using dynamic spot_embedding size from dataset: {spot_embedding} genes")
+        else:
+            # Fallback to config value
+            spot_embedding = config.dataset.get("spot_embedding")
+            if spot_embedding is None:
+                raise ValueError("spot_embedding must be provided in config or dataset must have get_num_genes() method")
+            print(f"Using spot_embedding size from config: {spot_embedding} genes")
+        model = BLEEP(spot_embedding=spot_embedding)
     else:
         raise NotImplementedError(f"Model {config.model.name} is not implemented.")
 
@@ -155,6 +169,8 @@ def train_one_epoch(
     accum_freq = config.get("train.gradient_accumulation_steps", 1)
     if accum_freq > 1:
         accum_images, accum_spatial, accum_features = [], [], {}
+        
+    print('\n Training dataloader length:', len(train_dataloader), '\n')
 
     for i, batch in enumerate(train_dataloader):
         image = batch["image"].to(device)
@@ -166,6 +182,9 @@ def train_one_epoch(
             inputs = [image, spatial]
         elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
             spatial = batch['spatial_text']
+            inputs = [image, spatial]
+        elif config.model.name == "BLEEP":
+            spatial = batch['spatial'].to(device)
             inputs = [image, spatial]
         else:
             raise NotImplementedError(f"Model {model.name} is not implemented for training.")
@@ -182,6 +201,7 @@ def train_one_epoch(
                     loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'][s], inputs_for_loss['spatial_embedding'][s])
                 loss = loss / num_resolutions #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
             else:
+                print('Loss', model_out['loss'])
                 loss = model_out["loss"]
                 image_embedding = model_out["image_embedding"] # Tensor (B, D)
                 spatial_embedding = model_out["spatial_embedding"] # Tensor (B, D)

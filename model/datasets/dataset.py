@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
+import random
 
 import copy
 import numpy as np
@@ -15,6 +16,8 @@ import torch
 from torchvision.transforms import ToTensor, Resize, Compose
 import dgl
 from torch.utils.data._utils.collate import collate, collate_tensor_fn, collate_float_fn, collate_int_fn, collate_str_fn
+import torchvision.transforms.functional as TF
+from PIL import Image
 
 collate_fn_map: dict[Union[type, tuple[type, ...]], Callable] = {
     torch.Tensor: collate_tensor_fn
@@ -36,11 +39,15 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                  hierarchical_graph: bool = True,
                  tissue_filtering_threshold: float = 20000,
                  pretrained_cell_embedding: bool = True,
-                 type_pretrained_cell_embedding: str = 'nemo'): # 'nemo' or 'novae'
+                 type_pretrained_cell_embedding: str = 'nemo', # 'nemo' or 'novae'
+                 genes_to_keep: Optional[str] = None,
+                 is_train: bool = False,
+                 model_name: Optional[str] = None):
         manifest =  pd.read_csv(manifest_path)
         slides = manifest['sample_name']
         li_datsets = []
         for slide in slides:
+            print(f"Loading slide {slide}...")
             image_file = manifest.loc[manifest['sample_name'] == slide, 'hematoxylin_eosin_image'].values[0]
             spatial_file = manifest.loc[manifest['sample_name'] == slide, 'spatial_preprocessed'].values[0]
             index_file = manifest.loc[manifest['sample_name'] == slide, 'index'].values[0]
@@ -57,15 +64,31 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                 tissue_filtering_threshold=tissue_filtering_threshold,
                 pretrained_cell_embedding=pretrained_cell_embedding,
                 type_pretrained_cell_embedding=type_pretrained_cell_embedding,
+                genes_to_keep=genes_to_keep,
+                is_train=is_train,
+                model_name=model_name,
             )
-            li_datsets.append(dataset)
+            if len(dataset) > 0:
+                li_datsets.append(dataset)
+            else:
+                print(f"Warning: Skipping slide {slide} as it has no valid patches after filtering.")
+        
+        if len(li_datsets) == 0:
+            raise ValueError("No valid datasets found after filtering. All slides were empty.")
+        
         self.modality_datasets = torch.utils.data.ConcatDataset(li_datsets)
+        # Store the first dataset to access gene count
+        self.first_dataset = li_datsets[0]
 
     def __getitem__(self, idx: int):
         return self.modality_datasets[idx]
 
     def __len__(self):
         return len(self.modality_datasets)
+    
+    def get_num_genes(self):
+        """Returns the number of genes in the dataset after filtering."""
+        return self.first_dataset.spatial_anndata.n_vars
 
 
 class SpatialPatchDataset(torch.utils.data.Dataset):
@@ -82,7 +105,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         hierarchical_graph: bool = True,
         tissue_filtering_threshold: float = 20000,
         pretrained_cell_embedding: bool = True,
-        type_pretrained_cell_embedding: str = 'nemo' # 'nemo' or 'novae'
+        type_pretrained_cell_embedding: str = 'nemo', # 'nemo' or 'novae'
+        genes_to_keep: Optional[str] = None,
+        is_train: bool = False,
+        model_name: Optional[str] = None,
     ):
         self.image_file = str(image_file)
         self.indices_file = str(indices_file)
@@ -110,9 +136,16 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.housekeeping_genes = housekeeping_genes
         self.hierarchical_graph = hierarchical_graph
         self.pretrained_cell_embedding = pretrained_cell_embedding
+        self.is_train = is_train
+        self.model_name = model_name
         if self.pretrained_cell_embedding == True:
             assert type_pretrained_cell_embedding in ['nemo', 'novae'], "type_pretrained_cell_embedding must be either 'nemo' or 'novae'"
             self.type_pretrained_cell_embedding = type_pretrained_cell_embedding
+        if genes_to_keep is not None:
+            genes_df = pd.read_csv(genes_to_keep)
+            genes_list = genes_df['gene'].tolist()
+            self.genes_to_keep = genes_list
+            self.spatial_anndata = self.spatial_anndata[:, self.genes_to_keep]
 
 
     def __getitem__(self, idx):
@@ -202,7 +235,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             filtered_spatial_anndata = self.spatial_anndata[:, ~self.spatial_anndata.var.index.isin(self.housekeeping_genes)]
         else:
             filtered_spatial_anndata = self.spatial_anndata
-
+        
         mean_exp = filtered_spatial_anndata.X[mask].toarray().mean(axis=0)
         K = self.number_of_genes
         spatial_text = " ".join(filtered_spatial_anndata.var.index[np.argsort(mean_exp)[-K:][::-1]]) # TODO: exclude empty strings
@@ -226,8 +259,15 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                     y_start : y_start + self.fov_size,
                     x_start : x_start + self.fov_size,
                     ]
-        # Normalize to [0, 1] 
-        image = torch.tensor(fov_image) / 255.0
+        
+        # Apply BLEEP-specific transform if training with BLEEP model
+        if self.is_train and self.model_name == 'BLEEP':
+            # For BLEEP, apply augmentations and ImageNet normalization
+            # fov_image is (C, H, W) with values in [0, 255]
+            image = self.transform(fov_image)
+        else:
+            # For other models, just normalize to [0, 1] 
+            image = torch.tensor(fov_image) / 255.0
 
         # Label
         label = {}
@@ -252,6 +292,40 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
     def __len__(self) -> int:
         return len(self.index_array)
+    
+    def transform(self, image):
+        """
+        from https://github.com/bowang-lab/BLEEP/blob/main/dataset.py
+        Apply data augmentations and normalization to the input image.
+        When training BLEEP
+        
+        Args:
+            image: numpy array of shape (C, H, W) with values in [0, 255]
+        
+        Returns:
+            torch.Tensor: Transformed image with ImageNet normalization
+        """
+        # Convert from (C, H, W) to (H, W, C) for PIL
+        image = np.transpose(image, (1, 2, 0)).astype(np.uint8)
+        image = Image.fromarray(image)
+        
+        if self.is_train:    
+            # Random flipping and rotations
+            if random.random() > 0.5:
+                image = TF.hflip(image)
+            if random.random() > 0.5:
+                image = TF.vflip(image)
+            
+            angle = random.choice([180, 90, 0, -90])
+            image = TF.rotate(image, angle)
+            
+        # Convert to tensor (this also converts to [0, 1] range)
+        image = TF.to_tensor(image)
+        
+        # Normalize using ImageNet mean and std
+        image = TF.normalize(image, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        
+        return image
 
 def multimodal_collate(batch: collections.abc.MutableMapping):
     elem = batch[0]

@@ -103,7 +103,8 @@ def objective(args):
     wandb_logger = WandbLogger(config=dict(config.model)|dict(config.train), **wandb_config)
     wandb_logger.set_step(0)
 
-    model, optimizer, lr_scheduler = load_model(config, device, pretrained_image_encoder=config.model.pretrained_image_encoder)
+    # Pass dataset to load_model for BLEEP to determine spot_embedding dynamically
+    model, optimizer, lr_scheduler = load_model(config, device, pretrained_image_encoder=config.model.pretrained_image_encoder, dataset=dataset)
 
     global_step, first_epoch, num_train_epochs = (
         0,

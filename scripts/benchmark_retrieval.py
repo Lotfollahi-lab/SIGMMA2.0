@@ -78,7 +78,8 @@ def main(args):
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
-    model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
+    # Pass dataset to load_model for BLEEP to determine spot_embedding dynamically
+    model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False, dataset=dataset)
     model_name = config.model.get("name")
     model.eval()
     

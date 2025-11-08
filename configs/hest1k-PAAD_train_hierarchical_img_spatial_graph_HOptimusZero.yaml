@@ -1,6 +1,6 @@
 model:
   name: hierarchical_img_spatial_graph
-  # -------
+  # image encoder dim: 1024 for UNI, 1536 for H-optimus_zero, 2048 for ResNet50
   # pretrained_image_encoder: ResNet50
   # image_encoder_input_dim: 2048
   # --------
@@ -34,7 +34,7 @@ dataset:
 train:
   batch_size: 128
   epochs: 100
-  learning_rate: 0.0001
+  learning_rate: 0.00001
   weight_decay: 0.0001
   lr_scheduler: "step"
   lr_step_size: 50

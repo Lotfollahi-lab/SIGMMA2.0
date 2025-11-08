@@ -1,6 +1,6 @@
 model:
   name: openAI_CLIP
-  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs/hest1k-PAAD_finetune_CLIP_904659/checkpoint-epoch100.pth
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs/hest1k-PAAD_finetune_CLIP_494868/checkpoint-epoch100.pth 
   temperature: 0.01
 
 dataset:
@@ -18,5 +18,4 @@ dataset:
 
 test:
   batch_size: 256
-  num_samples: 1000
   num_workers: 16

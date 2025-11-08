@@ -116,8 +116,14 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
 
     def __getitem__(self, idx):
+        # 0. image slice
         slice_args = self.index_array[idx]
         y_start, x_start, _ = np.uint32(slice_args)
+
+        cell_ids = self.spatial_anndata.obs.index.to_numpy()
+        cell_ids_to_num = [i for i, cell_id in enumerate(cell_ids)]
+        self.spatial_anndata.obs['cell_id_to_num'] = cell_ids_to_num
+
         # 1-1. spatial embedding (cells inside this FOV)
         points = self.spatial_anndata.obsm["spatial"]
 
@@ -138,10 +144,12 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         spatial_embedding = cell_embeddings.mean(dim=0)
         if torch.isnan(spatial_embedding).any():
             spatial_embedding = spatial_embedding.nan_to_num(0.0)
+
         # 1-2. spatial graph
         sparse_matrix = self.spatial_anndata[mask,:].obsp["spatial_connectivities"]
         spatial_graph = dgl.from_scipy(sparse_matrix)
 
+        spatial_graph.ndata['cell_id'] = torch.Tensor(self.spatial_anndata.obs['cell_id_to_num'][mask].to_numpy().astype("int64"))
         spatial_graph.ndata['feat'] = cell_embeddings
         # print('mean, std of cell embeddings', cell_embeddings.mean(), cell_embeddings.std())
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges)

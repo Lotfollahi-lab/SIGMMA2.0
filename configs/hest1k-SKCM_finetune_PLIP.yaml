@@ -1,6 +1,6 @@
 model:
   name: PLIP
-  temperature: 0.01
+  temperature: 0.05
 
 dataset:
   split_type: 'pooled_FOV_split'
@@ -14,7 +14,7 @@ dataset:
 train:
   batch_size: 128
   epochs: 100
-  learning_rate: 0.0001
+  learning_rate: 0.000001
   weight_decay: 0.00001
   lr_scheduler: "step"
   lr_step_size: 100

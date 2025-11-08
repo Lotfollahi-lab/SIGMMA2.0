@@ -33,7 +33,7 @@ def label_prediction(dataloader, model, device, train_mode=True, method='ridge',
             elif norm == 'standard':
                 label = label / label.sum(dim=1, keepdim=True)
             else:
-                raise NotImplementedError
+                label = label
             with torch.amp.autocast(device.type, enabled=True):
                 embeddings = model.get_image_features(image)
             all_embeddings.append(embeddings.cpu())

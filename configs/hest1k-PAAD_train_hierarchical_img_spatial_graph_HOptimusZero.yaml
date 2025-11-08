@@ -1,6 +1,6 @@
 model:
   name: hierarchical_img_spatial_graph
-    # image encoder dim: 1024 for UNI, 1536 for H-optimus_zero, 2048 for ResNet50
+  # image encoder dim: 1024 for UNI, 1536 for H-optimus_zero, 2048 for ResNet50
   # pretrained_image_encoder: ResNet50
   # image_encoder_input_dim: 2048
   # --------

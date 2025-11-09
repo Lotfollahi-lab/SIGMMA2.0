@@ -13,6 +13,8 @@
 **out
 **archive/
 **ipynb.py
+**ckpt
+ckpt/
 
 # ⚙️ Environment & Configuration
 # These define local or project-specific environment settings.

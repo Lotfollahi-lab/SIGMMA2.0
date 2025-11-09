@@ -36,10 +36,10 @@ def objective(args):
         os.makedirs(config.outdir)
 
     if config.dataset.split_type == "section_split":
-        train_dataset = load_dataset(config.dataset.train)
-        eval_dataset = load_dataset(config.dataset.validation)
+        train_dataset = load_dataset(config.dataset.train, is_train=True, model_name=model_name)
+        eval_dataset = load_dataset(config.dataset.validation, is_train=False, model_name=model_name)
     elif config.dataset.split_type == "pooled_FOV_split":
-        dataset = load_dataset(config.dataset)
+        dataset = load_dataset(config.dataset, is_train=True, model_name=model_name)
         total = len(dataset)
 
         path_to_dataset = Path(config.dataset.manifest_path).parent

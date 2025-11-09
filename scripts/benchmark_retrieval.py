@@ -26,12 +26,14 @@ def main(args):
         os.makedirs(config.outdir)
 
     print(f"dataset_name: {dataset_name}")
+    model_name = config.model.get("name")
+    print(f"Benchmarking model: {model_name}")
     g = torch.Generator()
     g.manual_seed(42)
 
     if config.dataset.split_type == "section_split":
         # == Query dataset preparation ==
-        query_dataset = load_dataset(config.dataset.query_dataset)
+        query_dataset = load_dataset(config.dataset.query_dataset, is_train=False, model_name=model_name)
         query_sampler = SequentialSampler(query_dataset)
         query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=query_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
@@ -41,7 +43,7 @@ def main(args):
         reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=reference_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
     elif config.dataset.split_type == "pooled_FOV_split":
-        dataset = load_dataset(config.dataset)
+        dataset = load_dataset(config.dataset, is_train=False, model_name=model_name)
         query_indices = np.load(config.dataset.test.indices, allow_pickle=True)
         target_indices = [i for i in range(len(dataset)) if i not in query_indices]
 

@@ -36,6 +36,9 @@ def load_embeddings(model, dataloader, device, config):
         elif model_name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
             spatial = batch["spatial_text"]
             inputs = [image, spatial]
+        elif model_name == "BLEEP":
+            spatial = batch["spatial"].to(device)
+            inputs = [image, spatial]
         else:
             raise ValueError(f"Unknown model name: {model_name}")
         

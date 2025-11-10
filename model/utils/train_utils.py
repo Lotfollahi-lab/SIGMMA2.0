@@ -11,7 +11,7 @@ import timm
 from model.datasets.dataset import MultiSectionDataset
 from model.model import hierarchical_img_spatial_graph, single_img_spatial, single_img_spatial_graph
 from model.model import UNI, H_optimus_zero, ResNet50
-from model.model import openAI_CLIP, PLIP, OmiCLIP
+from model.model import openAI_CLIP, PLIP, OmiCLIP, BLEEP
 from model.model import symmetric_InfoNCE
 from .evaluate_retrieval import retrieval_score, eval_retrieval
 from transformers import CLIPProcessor, CLIPModel
@@ -23,9 +23,14 @@ import matplotlib.pyplot as plt
 
 import wandb
 
-def load_dataset(config_dataset):
+def load_dataset(config_dataset, is_train=False, model_name=None):
     """
     Load the training and evaluation datasets based on the configuration.
+    
+    Args:
+        config_dataset: Configuration for the dataset
+        is_train: Whether this is a training dataset (for data augmentation)
+        model_name: Name of the model being used (e.g., 'BLEEP')
     """
     dataset = MultiSectionDataset(manifest_path=Path(config_dataset.manifest_path),
                                   num_cell_types=config_dataset.get("num_cell_types", None),
@@ -36,7 +41,9 @@ def load_dataset(config_dataset):
                                   housekeeping_genes=config_dataset.get("housekeeping_genes", None),
                                   tissue_filtering_threshold=config_dataset.get("tissue_filtering_threshold", 20000),
                                   pretrained_cell_embedding=config_dataset.pretrained_cell_embedding,
-                                  type_pretrained_cell_embedding=config_dataset.type_pretrained_cell_embedding)
+                                  type_pretrained_cell_embedding=config_dataset.type_pretrained_cell_embedding,
+                                  is_train=is_train,
+                                  model_name=model_name)
 
     return dataset
 
@@ -45,7 +52,8 @@ def load_model(config:ConfigDict,
                device:Optional[str]="cuda",
                pretrained_image_encoder:str="UNI",
                pretrained_ckpt_path:Optional[str]=None,
-               train: Optional[bool]=True):
+               train: Optional[bool]=True,
+               dataset=None):
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
@@ -86,6 +94,21 @@ def load_model(config:ConfigDict,
         model_raw_path = config.model.pretrained_omiclip_ckpt_path + "/checkpoint.pt"
         model_raw, preprocess, tokenizer = loki.utils.load_model(model_raw_path, device)
         model = OmiCLIP(config, model_raw, preprocess, tokenizer)
+    elif config.model.name == "BLEEP":
+        # Determine spot_embedding size from dataset
+        if dataset is not None and hasattr(dataset, 'get_num_genes'):
+            spot_embedding = dataset.get_num_genes()
+            if config.dataset.pretrained_cell_embedding:
+                print(f"Using pretrained cell embedding ({config.dataset.type_pretrained_cell_embedding}) with dimension: {spot_embedding}")
+            else:
+                print(f"Using gene expression with {spot_embedding} genes")
+        else:
+            # Fallback to config value
+            spot_embedding = config.dataset.get("spot_embedding")
+            if spot_embedding is None:
+                raise ValueError("spot_embedding must be provided in config or dataset must have get_num_genes() method")
+            print(f"Using spot_embedding size from config: {spot_embedding}")
+        model = BLEEP(temperature=config.model.temperature, spot_embedding=spot_embedding)
     else:
         raise NotImplementedError(f"Model {config.model.name} is not implemented.")
 
@@ -155,7 +178,7 @@ def train_one_epoch(
     accum_freq = config.get("train.gradient_accumulation_steps", 1)
     if accum_freq > 1:
         accum_images, accum_spatial, accum_features = [], [], {}
-
+        
     for i, batch in enumerate(train_dataloader):
         image = batch["image"].to(device)
         if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph"]:
@@ -167,8 +190,33 @@ def train_one_epoch(
         elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
             spatial = batch['spatial_text']
             inputs = [image, spatial]
+        elif config.model.name == "BLEEP":
+            spatial = batch['spatial'].to(device)
+            inputs = [image, spatial]
         else:
-            raise NotImplementedError(f"Model {model.name} is not implemented for training.")
+            raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
+        
+        # 1a) Are pairs aligned?
+        with torch.no_grad():
+            import torch.nn.functional as F
+            img = model.get_image_features(image)                   # normalized
+            sp  = F.normalize(model.spot_projection(spatial), -1)
+
+            # Pair check
+            true = torch.cosine_similarity(img, sp, dim=-1)
+            rand = torch.cosine_similarity(img, sp[torch.randperm(len(sp))], dim=-1)
+
+            # Spread
+            eye = torch.eye(img.size(0), device=img.device).bool()
+            img_sim = img @ img.T
+            sp_sim  = sp  @ sp.T
+            img_off = img_sim[~eye]; sp_off = sp_sim[~eye]
+
+            print(f"pair med {true.median():.3f} vs rand {rand.median():.3f} | "
+                f"img_off mean {img_off.mean():.3f} std {img_off.std():.3f} | "
+                f"sp_off mean {sp_off.mean():.3f} std {sp_off.std():.3f} | "
+                f"logit_scale {model.logit_scale.exp().item():.2f}")
+
 
         optimizer.zero_grad()
         # Gradient accumulation code adapted from OpenCLIP (https://github.com/mlfoundations/open_clip/blob/main/src/open_clip_train/train.py)
@@ -182,11 +230,20 @@ def train_one_epoch(
                     loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'][s], inputs_for_loss['spatial_embedding'][s])
                 loss = loss / num_resolutions #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
             else:
+                print('Loss', model_out['loss'])
                 loss = model_out["loss"]
                 image_embedding = model_out["image_embedding"] # Tensor (B, D)
                 spatial_embedding = model_out["spatial_embedding"] # Tensor (B, D)
             # Backward pass
             loss.backward()
+            
+            # 1b) Do image encoder params get gradients?
+            def gnorm(m): 
+                ps=[p.grad for p in m.parameters() if p.grad is not None]
+                return torch.sqrt(sum((p**2).sum() for p in ps)) if ps else torch.tensor(0.)
+            print('∥grad(image_encoder)∥:', gnorm(model.image_encoder).item())
+            print('∥grad(image_projection)∥:', gnorm(model.image_projection).item())
+            
         else:
             with torch.no_grad():
                 # Forward pass
@@ -239,9 +296,9 @@ def train_one_epoch(
                         loss = symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
                         losses = {'contrastive_loss': loss}
                         total_loss = sum(losses.values())
-                        losses['loss'] = total_loss
+                        losses['loss'] = total_loss                        
                     else:
-                        raise NotImplementedError(f"Model {model.name} is not implemented for training.")
+                        raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
                     del inputs_for_loss
                 total_loss.backward()
             loss = total_loss.item()
@@ -377,6 +434,9 @@ def evaluate(config, model, eval_dataloader, device):
                 inputs = [image, spatial]
             elif config.model.name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
                 spatial = batch['spatial_text']
+                inputs = [image, spatial]
+            elif config.model.name == "BLEEP":
+                spatial = batch['spatial'].to(device)
                 inputs = [image, spatial]
             else:
                 raise NotImplementedError(f"Model {model.name} is not implemented for training.")

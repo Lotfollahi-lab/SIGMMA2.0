@@ -264,15 +264,6 @@ class BLEEP(nn.Module):
     ):
         super().__init__()
         self.image_encoder = ResNet50()
-        
-        # freeze parameters for ResNet50
-        for n, p in self.image_encoder.named_parameters():
-            if 'layer4' in n:
-                p.requires_grad = True
-            elif 'bn' in n:
-                p.requires_grad = True  # let BNs adapt
-            else:
-                p.requires_grad = False
             
         self.image_projection = BleepProjectionHead(embedding_dim=image_embedding) # input dim, 2048 for resnet50
         self.spot_projection = BleepProjectionHead(embedding_dim=spot_embedding) # number of shared hvgs
@@ -287,6 +278,8 @@ class BLEEP(nn.Module):
         spot_embeddings  = self.spot_projection(spot_features)              # [B, D]
 
         # ==== Normalize ====
+        # /!\ this is not in the original BLEEP code
+        # but otherwise the similarity range is off
         image_embeddings = F.normalize(image_embeddings, dim=-1)
         spot_embeddings  = F.normalize(spot_embeddings, dim=-1)
 

@@ -180,10 +180,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         else:
             cell_embeddings = torch.Tensor(self.spatial_anndata.X[mask].toarray())
         
-        if self.type_pretrained_cell_embedding == "X_pca_harmony":
-            spatial_embedding = cell_embeddings.sum(dim=0)
-        else:
-            spatial_embedding = cell_embeddings.mean(dim=0)
+        spatial_embedding = cell_embeddings.mean(dim=0)
+        
         if torch.isnan(spatial_embedding).any():
             spatial_embedding = spatial_embedding.nan_to_num(0.0)
             
@@ -325,7 +323,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         """
         # Convert from (C, H, W) to (H, W, C) for PIL
         image = np.transpose(image, (1, 2, 0)).astype(np.uint8)
-        image = Image.fromarray(image)
+        image = Image.fromarray(image) # size (256, 256)
         
         if self.is_train:    
             # Random flipping and rotations
@@ -336,68 +334,111 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             
             angle = random.choice([180, 90, 0, -90])
             image = TF.rotate(image, angle)
-            
-        # Convert to tensor (this also converts to [0, 1] range)
-        image = TF.to_tensor(image)
         
+        # Convert to tensor (this also converts to [0, 1] range)
+        # output shape (C, H, W)
+        image = TF.to_tensor(image)
+                
         # Normalize using ImageNet mean and std
         image = TF.normalize(image, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        
+                
         return image
 
-# --------- below is bandaid for BLEEP ---------
-# --------- dont merge with main branch ---------
+# -------------------- Fix to handle None (low gex samples) --------------------
+import copy
+from collections.abc import Mapping
 
-def _has_empty_graph(sample) -> bool:
-    # returns True if any DGL graph inside sample has zero nodes
-    def _iter_dgl(x):
-        if isinstance(x, dgl.DGLGraph):
-            yield x
-        elif isinstance(x, Mapping):
-            for v in x.values():
-                yield from _iter_dgl(v)
-        elif isinstance(x, (list, tuple)):
-            for v in x:
-                yield from _iter_dgl(v)
-
-    for g in _iter_dgl(sample):
-        if g.num_nodes() == 0:
-            return True
-    return False
+def _empty_batch_like(template: Mapping):
+    """Return an empty-but-well-formed batch matching `template`'s structure."""
+    out = {}
+    for k, v in template.items():
+        if isinstance(v, Mapping):
+            out[k] = _empty_batch_like(v)
+        elif isinstance(v, dgl.DGLGraph):
+            # An empty batched graph: batch() on [] raises, so make a 0-node graph
+            out[k] = dgl.graph(([], []))
+        else:
+            # Fallback: empty list; your downstream code may stack later
+            out[k] = []
+    return out
 
 def multimodal_collate(batch):
-    # 1) Drop None
-    batch = [b for b in batch if b is not None]
-    if len(batch) == 0:
-        return None
+    # 0) Strip None samples early (your Dataset might yield None to “skip”)
+    batch = [b for b in batch if b is not None and isinstance(b, Mapping)]
+    if not batch:
+        # No usable samples: return a safe empty structure
+        # If you can, keep a global/template example to mirror shapes more precisely.
+        return {}
 
-    # 2) Optionally drop samples with empty graphs (same decision for all keys)
-    keep = [not _has_empty_graph(b) for b in batch]
-    if not any(keep):
-        return None
-    batch = [b for b, k in zip(batch, keep) if k]
+    # 1) Drop samples that contain None/empty DGL graphs anywhere inside
+    filtered = [b for b in batch if not _is_empty_sample(b)]
+    if not filtered:
+        # Build an empty structure keyed like the first non-None original sample
+        return _empty_batch_like(batch[0])
 
-    # 3) Now collate each key consistently
-    def collate_value(vals):
-        v0 = vals[0]
-        if isinstance(v0, torch.Tensor):
-            from torch.utils.data._utils.collate import default_collate as torch_default_collate
-            return torch_default_collate(vals)
-        if isinstance(v0, dgl.DGLGraph):
-            return dgl.batch(vals)
-        if isinstance(v0, Mapping):
-            # recurse: collate each subkey using the same batch order (no extra filtering here!)
-            out = {}
-            for sk in v0.keys():
-                out[sk] = collate_value([v[sk] for v in vals])
-            return out
-        if isinstance(v0, (list, tuple)):
-            # keep as list to preserve metadata if heterogeneous
-            return [v for v in vals]
-        # fall back: return as-is list
-        return vals
+    elem = filtered[0]
+    out = {}
 
-    # Build output dict
-    keys = batch[0].keys()
-    out = {k: collate_value([b[k] for b in batch]) for k in keys}
+    for key in elem:
+        values = [d.get(key) for d in filtered]
+
+        if type(elem[key]) in collate_fn_map:
+            out[key] = collate(values, collate_fn_map=collate_fn_map)
+
+        elif isinstance(elem[key], dgl.DGLGraph):
+            graphs = [v for v in values if isinstance(v, dgl.DGLGraph) and v.num_nodes() > 0]
+            if not graphs:
+                out[key] = dgl.graph(([], []))  # safe empty graph
+            else:
+                out[key] = dgl.batch(graphs)
+
+        elif isinstance(elem[key], Mapping):
+            out[key] = multimodal_collate_dict(values)
+
+        else:
+            out[key] = values
+
     return out
+
+def multimodal_collate_dict(batch_dicts):
+    # Handle None subdicts
+    batch_dicts = [d for d in batch_dicts if d is not None and isinstance(d, Mapping)]
+    if not batch_dicts:
+        return {}
+
+    # Drop dicts that contain None/empty graphs
+    filtered = [d for d in batch_dicts if not _is_empty_sample(d)]
+    if not filtered:
+        return _empty_batch_like(batch_dicts[0])
+
+    elem = filtered[0]
+    out = {}
+    for subkey in elem:
+        values = [d.get(subkey) for d in filtered]
+        if type(elem[subkey]) in collate_fn_map:
+            out[subkey] = collate(values, collate_fn_map=collate_fn_map)
+        elif isinstance(elem[subkey], Mapping):
+            out[subkey] = multimodal_collate_dict(values)
+        elif isinstance(elem[subkey], dgl.DGLGraph):
+            graphs = [v for v in values if isinstance(v, dgl.DGLGraph) and v.num_nodes() > 0]
+            out[subkey] = dgl.batch(graphs) if graphs else dgl.graph(([], []))
+        else:
+            out[subkey] = values
+    return out
+
+def _iter_dgl_graphs(x):
+    if isinstance(x, dgl.DGLGraph):
+        yield x
+    elif isinstance(x, Mapping):
+        for v in x.values():
+            yield from _iter_dgl_graphs(v)
+    elif isinstance(x, (list, tuple)):
+        for v in x:
+            yield from _iter_dgl_graphs(v)
+
+def _is_empty_sample(sample_dict) -> bool:
+    # Treat None or zero-node graphs as “empty”
+    for g in _iter_dgl_graphs(sample_dict):
+        if g is None or g.num_nodes() == 0:
+            return True
+    return False

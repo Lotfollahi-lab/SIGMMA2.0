@@ -196,28 +196,6 @@ def train_one_epoch(
         else:
             raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
         
-        # 1a) Are pairs aligned?
-        with torch.no_grad():
-            import torch.nn.functional as F
-            img = model.get_image_features(image)                   # normalized
-            sp  = F.normalize(model.spot_projection(spatial), -1)
-
-            # Pair check
-            true = torch.cosine_similarity(img, sp, dim=-1)
-            rand = torch.cosine_similarity(img, sp[torch.randperm(len(sp))], dim=-1)
-
-            # Spread
-            eye = torch.eye(img.size(0), device=img.device).bool()
-            img_sim = img @ img.T
-            sp_sim  = sp  @ sp.T
-            img_off = img_sim[~eye]; sp_off = sp_sim[~eye]
-
-            print(f"pair med {true.median():.3f} vs rand {rand.median():.3f} | "
-                f"img_off mean {img_off.mean():.3f} std {img_off.std():.3f} | "
-                f"sp_off mean {sp_off.mean():.3f} std {sp_off.std():.3f} | "
-                f"logit_scale {model.logit_scale.exp().item():.2f}")
-
-
         optimizer.zero_grad()
         # Gradient accumulation code adapted from OpenCLIP (https://github.com/mlfoundations/open_clip/blob/main/src/open_clip_train/train.py)
         if accum_freq == 1:

@@ -2,6 +2,7 @@ import os
 import random
 import numpy as np
 import torch
+import torch.nn.functional as F
 from pathlib import Path
 from typing import Optional
 from ml_collections.config_dict import ConfigDict
@@ -215,12 +216,25 @@ def train_one_epoch(
             # Backward pass
             loss.backward()
             
-            # 1b) Do image encoder params get gradients?
-            def gnorm(m): 
-                ps=[p.grad for p in m.parameters() if p.grad is not None]
-                return torch.sqrt(sum((p**2).sum() for p in ps)) if ps else torch.tensor(0.)
-            print('∥grad(image_encoder)∥:', gnorm(model.image_encoder).item())
-            print('∥grad(image_projection)∥:', gnorm(model.image_projection).item())
+            # # 1b) Do image encoder params get gradients?
+            # def gnorm(m): 
+            #     ps=[p.grad for p in m.parameters() if p.grad is not None]
+            #     return torch.sqrt(sum((p**2).sum() for p in ps)) if ps else torch.tensor(0.)
+            # print('∥grad(image_encoder)∥:', gnorm(model.image_encoder).item())
+            # print('∥grad(image_projection)∥:', gnorm(model.image_projection).item())
+            
+            # # Compute total grad norm (L2)
+            # total_norm = 0
+            # for p in model.parameters():
+            #     if p.grad is not None:
+            #         param_norm = p.grad.data.norm(2)
+            #         total_norm += param_norm.item() ** 2
+            # total_norm = total_norm ** 0.5
+            # print('∥grad(total)∥:', total_norm)
+            # # track with wandb
+            # wandb_logger.update({"(train)∥grad(total)∥": total_norm,
+            #                      "(train)∥grad(image_encoder)∥": gnorm(model.image_encoder).item(),
+            #                      "(train)∥grad(image_projection)∥": gnorm(model.image_projection).item()})
             
         else:
             with torch.no_grad():
@@ -266,6 +280,31 @@ def train_one_epoch(
                         loss = loss / num_resolutions
                         losses = {'contrastive_loss': loss}
                         total_loss = sum(losses.values()) #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
+                        losses['loss'] = total_loss
+                    elif config.model.name == "BLEEP":
+                        # For BLEEP, use its native loss calculation with accumulated features
+                        from model.model import bleep_cross_entropy
+                        
+                        # Concatenate all accumulated features
+                        for key in accum_features:
+                            accumulated = accum_features[key]
+                            inputs_for_loss[key] = torch.cat(accumulated[:j] + [model_out[key]] + accumulated[j+1:])
+                        
+                        image_embeddings = inputs_for_loss['image_embedding']
+                        spot_embeddings = inputs_for_loss['spatial_embedding']
+                        
+                        # Calculate loss as in BLEEP's forward pass
+                        logits = (spot_embeddings @ image_embeddings.T) / model.temperature
+                        images_similarity = image_embeddings @ image_embeddings.T
+                        spots_similarity = spot_embeddings @ spot_embeddings.T
+                        targets = F.softmax(((images_similarity + spots_similarity) / 2) / model.temperature, dim=-1)
+                        
+                        spots_loss = bleep_cross_entropy(logits, targets, reduction='none')
+                        images_loss = bleep_cross_entropy(logits.T, targets.T, reduction='none')
+                        loss = (spots_loss + images_loss) / 2.0
+                        
+                        losses = {'contrastive_loss': loss.mean()}
+                        total_loss = sum(losses.values())
                         losses['loss'] = total_loss
                     elif config.model.name in ["single_img_spatial", "single_img_spatial_graph", "openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
                         for key in accum_features:

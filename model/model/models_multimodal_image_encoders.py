@@ -221,18 +221,20 @@ class OmiCLIP(nn.Module):
         image_embedding = self._encode_images_flexible(self.model, self.preprocess, x, device)
         return image_embedding
     
+import torch
+from torch import nn
+
 class BleepProjectionHead(nn.Module):
     def __init__(
         self,
         embedding_dim,
-        projection_dim=64,
+        projection_dim=256,
         dropout=0.1,
     ):
         '''
         Adapted from https://github.com/bowang-lab/BLEEP/blob/main/modules.py
         Config parameters from https://github.com/bowang-lab/BLEEP/blob/main/config.py
-        Accessed November 2025
-        
+        Modified to match CLIP-style initialization (OpenAI CLIP, 2021)
         '''
         super().__init__()
         self.projection = nn.Linear(embedding_dim, projection_dim)
@@ -240,15 +242,28 @@ class BleepProjectionHead(nn.Module):
         self.fc = nn.Linear(projection_dim, projection_dim)
         self.dropout = nn.Dropout(dropout)
         self.layer_norm = nn.LayerNorm(projection_dim)
-    
+
+        self._init_weights()
+
+    def _init_weights(self):
+        # CLIP-style initialization
+        nn.init.normal_(self.projection.weight, std=0.02)
+        nn.init.normal_(self.fc.weight, std=0.02)
+        nn.init.zeros_(self.projection.bias)
+        nn.init.zeros_(self.fc.bias)
+
+        nn.init.ones_(self.layer_norm.weight)
+        nn.init.zeros_(self.layer_norm.bias)
+
     def forward(self, x):
         projected = self.projection(x)
         x = self.gelu(projected)
         x = self.fc(x)
         x = self.dropout(x)
-        x = x + projected
+        x = x + projected  # residual connection
         x = self.layer_norm(x)
         return x
+
     
 class BLEEP(nn.Module):
     '''
@@ -272,7 +287,7 @@ class BLEEP(nn.Module):
     def forward(self, image_features, spot_features):
         # ==== Embed ====
         image_features = self.image_encoder(image_features)  # [B, 2048]
-        
+                
         # ==== Project ====
         image_embeddings = self.image_projection(image_features)            # [B, D]
         spot_embeddings  = self.spot_projection(spot_features)              # [B, D]
@@ -291,31 +306,30 @@ class BLEEP(nn.Module):
         spots_similarity  = spot_embeddings  @ spot_embeddings.T
 
         # ==== Targets (soft or one-hot) ====
-        with torch.no_grad():
-            targets = F.softmax(((images_similarity + spots_similarity) / 2) / self.temperature, dim=-1)
+        targets = F.softmax(((images_similarity + spots_similarity) / 2) / self.temperature, dim=-1)
 
-        # ==== Debug diagnostics ====
-        B = logits.size(0)
-        eye = torch.eye(B, dtype=torch.bool, device=logits.device)
-        off = ~eye
+        # # ==== Debug diagnostics ====
+        # B = logits.size(0)
+        # eye = torch.eye(B, dtype=torch.bool, device=logits.device)
+        # off = ~eye
 
-        diag_mean = logits.diag().mean().item()
-        off_mean = logits[off].mean().item()
-        pos_gap = diag_mean - off_mean
-        top1 = (logits.argmax(1) == torch.arange(B, device=logits.device)).float().mean().item()
+        # diag_mean = logits.diag().mean().item()
+        # off_mean = logits[off].mean().item()
+        # pos_gap = diag_mean - off_mean
+        # top1 = (logits.argmax(1) == torch.arange(B, device=logits.device)).float().mean().item()
 
-        print(f"\n[BLEEP Alignment] pos_gap={pos_gap:.4f} | diag={diag_mean:.4f} | off_diag={off_mean:.4f} | top1={top1*100:.1f}%")
-        print(f"[BLEEP Img_Sim] off_diag={images_similarity[off].mean().item():.4f} | std={images_similarity[off].std().item():.4f}")
-        print(f"[BLEEP Spot_Sim] off_diag={spots_similarity[off].mean().item():.4f} | std={spots_similarity[off].std().item():.4f}")
-        print(f"[BLEEP Targets] diag_mean={targets.diag().mean().item():.6f} | off_mean={targets[off].mean().item():.6e}")
+        # print(f"\n[BLEEP Alignment] pos_gap={pos_gap:.4f} | diag={diag_mean:.4f} | off_diag={off_mean:.4f} | top1={top1*100:.1f}%")
+        # print(f"[BLEEP Img_Sim] off_diag={images_similarity[off].mean().item():.4f} | std={images_similarity[off].std().item():.4f}")
+        # print(f"[BLEEP Spot_Sim] off_diag={spots_similarity[off].mean().item():.4f} | std={spots_similarity[off].std().item():.4f}")
+        # print(f"[BLEEP Targets] diag_mean={targets.diag().mean().item():.6f} | off_mean={targets[off].mean().item():.6e}")
         
-        with torch.no_grad():
-            img_off = (image_embeddings @ image_embeddings.T)
-            spot_off = (spot_embeddings  @ spot_embeddings.T)
-            eye = torch.eye(B, device=img_off.device).bool()
-            print(f"[Spread] img_off mean={img_off[~eye].mean():.3f} std={img_off[~eye].std():.3f} | "
-                f"spot_off mean={spot_off[~eye].mean():.3f} std={spot_off[~eye].std():.3f} | "
-                f"logit_scale={self.temperature}")
+        # with torch.no_grad():
+        #     img_off = (image_embeddings @ image_embeddings.T)
+        #     spot_off = (spot_embeddings  @ spot_embeddings.T)
+        #     eye = torch.eye(B, device=img_off.device).bool()
+        #     print(f"[Spread] img_off mean={img_off[~eye].mean():.3f} std={img_off[~eye].std():.3f} | "
+        #         f"spot_off mean={spot_off[~eye].mean():.3f} std={spot_off[~eye].std():.3f} | "
+        #         f"logit_scale={self.temperature}")
 
         # ==== Symmetric contrastive loss ====
         spots_loss  = bleep_cross_entropy(logits, targets, reduction='none')

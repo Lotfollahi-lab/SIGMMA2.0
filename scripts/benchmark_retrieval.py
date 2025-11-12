@@ -41,6 +41,9 @@ def main(args):
         reference_dataset = copy.deepcopy(query_dataset)
         reference_sampler = SequentialSampler(reference_dataset)
         reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=reference_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
+        
+        # Set dataset for load_model to determine spot_embedding
+        dataset = query_dataset
 
     elif config.dataset.split_type == "pooled_FOV_split":
         dataset = load_dataset(config.dataset, is_train=False, model_name=model_name)

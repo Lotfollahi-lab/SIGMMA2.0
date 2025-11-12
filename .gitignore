@@ -95,3 +95,5 @@ assets/*
 wandb/*
 .vscode/*
 .ipynb_checkpoints/*
+*.pt
+*.pth

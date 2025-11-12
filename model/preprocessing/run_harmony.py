@@ -22,7 +22,7 @@ print(f"Found {len(tissue_dirs)} tissue directories: {tissue_dirs}")
 for tissue_dir in tissue_dirs:
     # Extract tissue name (e.g., "IDC" from "hest_1k_IDC")
     tissue_name = tissue_dir.replace("hest_1k_", "")
-    if tissue_name == 'IDC':
+    if tissue_name != 'IDC':
         continue
     print(f"\nProcessing tissue: {tissue_name}")
     
@@ -39,6 +39,9 @@ for tissue_dir in tissue_dirs:
     sample_data = []
     
     for sample_name in sample_dirs:
+        if 'v2' in sample_name:
+            print(f"  Skipping {sample_name} (v2 sample)")
+            continue
         h5_file_path = os.path.join(tissue_path, sample_name, "spatial_data_processed.h5")
         
         if not os.path.exists(h5_file_path):

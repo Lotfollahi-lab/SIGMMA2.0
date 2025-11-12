@@ -35,8 +35,10 @@ def objective(args):
     if os.path.exists(config.outdir) == False:
         os.makedirs(config.outdir)
 
+    dataset = None  # Initialize dataset variable
     if config.dataset.split_type == "section_split":
-        train_dataset = load_dataset(config.dataset.train, is_train=True, model_name=model_name)
+        dataset = load_dataset(config.dataset.train, is_train=True, model_name=model_name)
+        train_dataset = dataset
         eval_dataset = load_dataset(config.dataset.validation, is_train=False, model_name=model_name)
     elif config.dataset.split_type == "pooled_FOV_split":
         dataset = load_dataset(config.dataset, is_train=True, model_name=model_name)

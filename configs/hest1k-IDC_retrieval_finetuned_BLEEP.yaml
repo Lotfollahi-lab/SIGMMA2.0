@@ -1,0 +1,19 @@
+model:
+  name: BLEEP
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/img_spatial_alignment/runs_bleep/output_IDC/checkpoint-epoch8.pth
+  temperature: 0.01
+
+dataset:
+  split_type: 'pooled_FOV_split'
+  manifest_path: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/public_xenium/hest_1k_IDC/MANIFEST_hest_1k_IDC.csv 
+  test:
+    indices: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/public_xenium/hest_1k_IDC/hest1k-IDC_test_indices.npy
+  pretrained_cell_embedding: True
+  type_pretrained_cell_embedding: X_pca_harmony
+  num_cell_types: 84
+  fov_size: 256
+  tissue_filtering_threshold: 0
+  
+test:
+  batch_size: 256
+  num_workers: 8

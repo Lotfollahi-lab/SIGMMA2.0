@@ -15,6 +15,6 @@ source /software/cellgen/team292/mm58/venvs/cvpr_env/bin/activate
 
 python ../scripts/benchmark_retrieval.py \
     -config_file ../configs/hest1k-PAAD_retrieval_finetuned_BLEEP.yaml \
-    -out_dir output_PAAD 
+    -out_dir output_PAAD_temperature_01 
 
 echo "Finished PAAD eval"

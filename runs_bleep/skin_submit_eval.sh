@@ -15,6 +15,6 @@ source /software/cellgen/team292/mm58/venvs/cvpr_env/bin/activate
 
 python ../scripts/benchmark_retrieval.py \
     -config_file ../configs/skin_retrieval_finetuned_BLEEP.yaml \
-    -out_dir output_skin 
+    -out_dir output_skin_temperature_01 
 
 echo "Finished skin eval"

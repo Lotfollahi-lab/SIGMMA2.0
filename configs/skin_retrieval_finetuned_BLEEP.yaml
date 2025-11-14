@@ -1,7 +1,9 @@
 model:
   name: BLEEP
-  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/img_spatial_alignment/runs_bleep/output_skin/checkpoint-epoch26.pth
-  temperature: 0.01
+  # checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/img_spatial_alignment/runs_bleep/output_skin/checkpoint-epoch26.pth
+  # temperature: 0.01
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/img_spatial_alignment/runs_bleep/output_skin_temperature_01/checkpoint-epoch100.pth
+  temperature: 0.1
 
 dataset:
   split_type: 'section_split'

@@ -15,6 +15,6 @@ source /software/cellgen/team292/mm58/venvs/cvpr_env/bin/activate
 
 python ../scripts/train_model.py \
     -config_file ../configs/hest1k-IDC_finetune_BLEEP.yaml \
-    -out_dir output_IDC 
+    -out_dir output_IDC_temperature_01 
 
 echo "Finished IDC"

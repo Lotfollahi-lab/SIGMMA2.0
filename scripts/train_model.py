@@ -9,8 +9,8 @@ from pathlib import Path
 from ml_collections.config_dict import ConfigDict
 import yaml
 
-from model.utils import train_one_epoch, load_dataset, load_model, evaluate, fix_seed, seed_worker, WandbLogger
-from model.datasets import multimodal_collate
+from sigmma.utils import train_one_epoch, load_dataset, load_model, evaluate, fix_seed, seed_worker, WandbLogger
+from sigmma.datasets import multimodal_collate
 
 
 def objective(args):

@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 from ml_collections.config_dict import ConfigDict
 import yaml
 
-from model.utils import load_dataset, load_model, retrieval_score, eval_retrieval, WandbLogger
-from model.datasets import multimodal_collate
+from sigmma.utils import load_dataset, load_model, retrieval_score, eval_retrieval, WandbLogger
+from sigmma.datasets import multimodal_collate
 
 import wandb
 

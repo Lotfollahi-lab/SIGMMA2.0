@@ -10,9 +10,9 @@ from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 from ml_collections.config_dict import ConfigDict
 import yaml
 
-from model.utils import load_dataset, load_model, linear_probing, WandbLogger
-from model.model import UNI, H_optimus_zero, ResNet50
-from model.datasets import multimodal_collate
+from sigmma.utils import load_dataset, load_model, linear_probing, WandbLogger
+from sigmma.model import UNI, H_optimus_zero, ResNet50
+from sigmma.datasets import multimodal_collate
 
 from huggingface_hub import login
 

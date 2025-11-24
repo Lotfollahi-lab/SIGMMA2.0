@@ -1,0 +1,32 @@
+model:
+  name: BLEEP
+  # checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/img_spatial_alignment/runs_bleep/output_skin/checkpoint-epoch26.pth
+  # temperature: 0.01
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/img_spatial_alignment/runs_bleep/output_skin_temperature_01/checkpoint-epoch100.pth
+  temperature: 0.1
+
+dataset:
+  split_type: 'section_split'
+  pretrained_cell_embedding: True
+  type_pretrained_cell_embedding: X_pca_harmony
+  num_cell_types: 84
+  fov_size: 256
+  query_dataset:
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/sanger_in_house_xenium/sanger_beacon_MANIFEST_test.csv
+    celltype_id_file: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/sanger_in_house_xenium/cell_type_ids.csv
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: X_pca_harmony
+    num_cell_types: 84
+    fov_size: 256
+  reference_dataset:
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/sanger_in_house_xenium/sanger_beacon_MANIFEST.csv
+    celltype_id_file: /lustre/scratch126/cellgen/lotfollahi/mm58/spatial_alignment/sanger_in_house_xenium/cell_type_ids.csv
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: X_pca_harmony
+    num_cell_types: 84
+    fov_size: 256
+
+test:
+  batch_size: 256
+  num_samples: 100
+  num_workers: 8

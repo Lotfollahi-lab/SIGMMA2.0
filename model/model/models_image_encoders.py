@@ -68,8 +68,8 @@ class H_optimus_zero(nn.Module):
 class ResNet50(nn.Module):
     def __init__(self):
         super(ResNet50, self).__init__()
-        resnet50 = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
-        model = nn.Sequential(*list(resnet50.children())[:-1])
+        model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
+        model.fc = nn.Identity()
         self.model = model
 
     @torch.no_grad()

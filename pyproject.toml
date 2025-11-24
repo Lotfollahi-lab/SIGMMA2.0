@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "model"
 version = "0.1.0"
@@ -6,7 +10,8 @@ description = ""
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = ["novae (>=0.2.4,<0.3.0)",
-                "uni @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/UNI",
+                "timm (>=1.0.9)",
+                "huggingface-hub",
                 "ipykernel (>=6.29.5,<7.0.0)",
                 "tifffile (>=2025.5.26,<2026.0.0)",
                 "pot (>=0.9.5,<0.10.0)",
@@ -19,9 +24,8 @@ dependencies = ["novae (>=0.2.4,<0.3.0)",
                 "gseapy (>=1.1.9,<2.0.0)",
                 "xarray-dataclasses (>=1.9.1,<2.0.0)",
                 "torch (==2.3.1)",
+                "torchvision",
                 "dgl @ https://data.dgl.ai/wheels-test/torch-2.3/cu121/dgl-2.5a241214%2Bcu121-cp311-cp311-manylinux1_x86_64.whl",
-                "nichejepa @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/nichejepa",
-                "loki @ file:///nfs/team361/dj16/projects/img_spatial_alignment_dependencies/Loki/src",
                 "shapely (>=2.0,<3.0)",
                 "xgboost (>=3.0.5,<4.0.0)",
                 "gdown (>=5.2.0,<6.0.0)"]
@@ -29,4 +33,6 @@ dependencies = ["novae (>=0.2.4,<0.3.0)",
 [tool.poetry.dependencies]
 loki = {develop = true}
 nichejepa = {develop = true}
-uni = {develop = true}
+
+[tool.setuptools.packages.find]
+include = ["model*"]

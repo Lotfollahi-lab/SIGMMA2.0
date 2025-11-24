@@ -13,6 +13,8 @@
 **out
 **archive/
 **ipynb.py
+**ckpt
+ckpt/
 
 # ⚙️ Environment & Configuration
 # These define local or project-specific environment settings.
@@ -73,6 +75,8 @@ share/
 src
 tables
 R/
+runs_bleep/run_*
+runs_bleep/wandb
 
 # 🖥️ Operating System Files
 # System-generated metadata and indexing files (mostly macOS).
@@ -91,3 +95,5 @@ assets/*
 wandb/*
 .vscode/*
 .ipynb_checkpoints/*
+*.pt
+*.pth

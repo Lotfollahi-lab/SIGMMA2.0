@@ -35,11 +35,13 @@ def objective(args):
     if os.path.exists(config.outdir) == False:
         os.makedirs(config.outdir)
 
+    dataset = None  # Initialize dataset variable
     if config.dataset.split_type == "section_split":
-        train_dataset = load_dataset(config.dataset.train)
-        eval_dataset = load_dataset(config.dataset.validation)
+        dataset = load_dataset(config.dataset.train, is_train=True, model_name=model_name)
+        train_dataset = dataset
+        eval_dataset = load_dataset(config.dataset.validation, is_train=False, model_name=model_name)
     elif config.dataset.split_type == "pooled_FOV_split":
-        dataset = load_dataset(config.dataset)
+        dataset = load_dataset(config.dataset, is_train=True, model_name=model_name)
         total = len(dataset)
 
         path_to_dataset = Path(config.dataset.manifest_path).parent
@@ -98,7 +100,8 @@ def objective(args):
     wandb_logger = WandbLogger(config=dict(config.model)|dict(config.train), **wandb_config)
     wandb_logger.set_step(0)
 
-    model, optimizer, lr_scheduler = load_model(config, device, pretrained_image_encoder=config.model.pretrained_image_encoder)
+    # Pass dataset to load_model for BLEEP to determine spot_embedding dynamically
+    model, optimizer, lr_scheduler = load_model(config, device, pretrained_image_encoder=config.model.pretrained_image_encoder, dataset=dataset)
 
     global_step, first_epoch, num_train_epochs = (
         0,

@@ -9,12 +9,10 @@ from pathlib import Path
 from ml_collections.config_dict import ConfigDict
 import yaml
 
-from model.utils import train_one_epoch, load_dataset, load_model, evaluate, fix_seed, seed_worker, WandbLogger
-from model.datasets import multimodal_collate
+from sigmma.utils import train_one_epoch, load_dataset, load_model, evaluate, fix_seed, seed_worker, WandbLogger
+from sigmma.datasets import multimodal_collate
 
-import optuna
 
-# def objective(trial):
 def objective(args):
     fix_seed(42)
     dataset_name = args.config_file.split('/')[-1].split('_')[0]
@@ -34,12 +32,14 @@ def objective(args):
 
     if os.path.exists(config.outdir) == False:
         os.makedirs(config.outdir)
-
+    print(config.dataset.type_pretrained_cell_embedding)
+    fov_size = config.get("dataset.fov_size", None)
     if config.dataset.split_type == "section_split":
-        train_dataset = load_dataset(config.dataset.train)
-        eval_dataset = load_dataset(config.dataset.validation)
+        dataset = load_dataset(config.dataset.train, is_train=True, model_name=model_name)
+        train_dataset = dataset
+        eval_dataset = load_dataset(config.dataset.validation, is_train=False, model_name=model_name)
     elif config.dataset.split_type == "pooled_FOV_split":
-        dataset = load_dataset(config.dataset)
+        dataset = load_dataset(config.dataset, is_train=True, model_name=model_name)
         total = len(dataset)
 
         path_to_dataset = Path(config.dataset.manifest_path).parent
@@ -55,16 +55,34 @@ def objective(args):
         train_indices = list(range(0, train_len))
         val_indices = list(range(train_len, train_len + val_len))
         test_indices = list(range(train_len + val_len, total))
-        indices_file = path_to_dataset/f"{dataset_name}_train_indices.npy"
-        if indices_file.exists():
-            print(f"Loading pre-saved dataset split indices from {indices_file.parent}")
-            train_indices = np.load(path_to_dataset/f"{dataset_name}_train_indices.npy").tolist()
-            val_indices = np.load(path_to_dataset/f"{dataset_name}_val_indices.npy").tolist()
-            test_indices = np.load(path_to_dataset/f"{dataset_name}_test_indices.npy").tolist()
+        if fov_size != 256:
+            indices_file = path_to_dataset/f"{dataset_name}_train_indices_{fov_size}.npy"
+            if indices_file.exists():
+                print(f"Loading {fov_size} pre-saved dataset split indices from {indices_file.parent}")
+                train_indices = np.load(path_to_dataset/f"{dataset_name}_train_indices_{fov_size}.npy").tolist()
+                val_indices = np.load(path_to_dataset/f"{dataset_name}_val_indices_{fov_size}.npy").tolist()
+                test_indices = np.load(path_to_dataset/f"{dataset_name}_test_indices_{fov_size}.npy").tolist()
+            else:
+                np.save(path_to_dataset/f"{dataset_name}_train_indices_{fov_size}.npy", train_indices)
+                np.save(path_to_dataset/f"{dataset_name}_val_indices_{fov_size}.npy", val_indices)
+                np.save(path_to_dataset/f"{dataset_name}_test_indices_{fov_size}.npy", test_indices)
         else:
-            np.save(path_to_dataset/f"{dataset_name}_train_indices.npy", train_indices)
-            np.save(path_to_dataset/f"{dataset_name}_val_indices.npy", val_indices)
-            np.save(path_to_dataset/f"{dataset_name}_test_indices.npy", test_indices)
+            indices_file = path_to_dataset/f"{dataset_name}_train_indices.npy"
+            if indices_file.exists():
+                if config.dataset.get("split_version") is not None:
+                    print(f"Loading pre-saved dataset split indices version {config.dataset.split_version} from {indices_file.parent}")
+                    train_indices = np.load(path_to_dataset/f"{dataset_name}_train_indices_split_{config.dataset.split_version}.npy")
+                    val_indices = np.load(path_to_dataset/f"{dataset_name}_val_indices_split_{config.dataset.split_version}.npy")
+                    test_indices = np.load(path_to_dataset/f"{dataset_name}_test_indices_split_{config.dataset.split_version}.npy")
+                else:
+                    print(f"Loading pre-saved dataset split indices from {indices_file.parent}")
+                    train_indices = np.load(path_to_dataset/f"{dataset_name}_train_indices.npy").tolist()
+                    val_indices = np.load(path_to_dataset/f"{dataset_name}_val_indices.npy").tolist()
+                    test_indices = np.load(path_to_dataset/f"{dataset_name}_test_indices.npy").tolist()
+            # else:
+            #     np.save(path_to_dataset/f"{dataset_name}_train_indices.npy", train_indices)
+            #     np.save(path_to_dataset/f"{dataset_name}_val_indices.npy", val_indices)
+            #     np.save(path_to_dataset/f"{dataset_name}_test_indices.npy", test_indices) 
         train_dataset = torch.utils.data.Subset(dataset, train_indices)
         eval_dataset = torch.utils.data.Subset(dataset, val_indices)
 
@@ -85,20 +103,26 @@ def objective(args):
         "entity": None,
         "project": f"img-spatial-alignment_{dataset_name}",
         "group": None,
-        # "name": f"{model_name}_trail_{trial.number}",
         "name": f"{model_name}_trial_{dataset_name}_{config.model.pretrained_image_encoder}",
         "tags": None,
         "mode": "online",
     }
 
-    # config.train.learning_rate = trial.suggest_loguniform("lr", 1e-5, 1e-2)
-    # config.train.weight_decay = trial.suggest_loguniform("weight_decay", 1e-5, 1e-2)
-    # config.model.temperature = trial.suggest_uniform("temperature", 0.05, 0.2)
+    # lr_candidates = [0.00001, 0.0001, 0.001]
+    # lr_stepsize_candidates = [10, 50, 100]
+    # wd_candidates = [0.00001, 0.0001, 0.001, 0.01]
+    # temp_candidates = [0.01, 0.05, 0.1, 0.15]
+
+    # config.train.learning_rate = trial.suggest_categorical("lr", lr_candidates)
+    # config.train.lr_stepsize = trial.suggest_categorical("lr_stepsize", lr_stepsize_candidates)
+    # config.train.weight_decay = trial.suggest_categorical("weight_decay", wd_candidates)
+    # config.model.temperature = trial.suggest_categorical("temperature", temp_candidates)
 
     wandb_logger = WandbLogger(config=dict(config.model)|dict(config.train), **wandb_config)
     wandb_logger.set_step(0)
 
-    model, optimizer, lr_scheduler = load_model(config, device, pretrained_image_encoder=config.model.pretrained_image_encoder)
+    # Pass dataset to load_model for BLEEP to determine spot_embedding dynamically
+    model, optimizer, lr_scheduler = load_model(config, device, pretrained_image_encoder=config.model.pretrained_image_encoder, dataset=dataset)
 
     global_step, first_epoch, num_train_epochs = (
         0,

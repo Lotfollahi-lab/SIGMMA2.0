@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 from ml_collections.config_dict import ConfigDict
 import yaml
 
-from model.utils import load_dataset, load_model, retrieval_score, eval_retrieval, WandbLogger
-from model.datasets import multimodal_collate
+from sigmma.utils import load_dataset, load_model, retrieval_score, eval_retrieval, WandbLogger
+from sigmma.datasets import multimodal_collate
 
 import wandb
 
@@ -26,12 +26,14 @@ def main(args):
         os.makedirs(config.outdir)
 
     print(f"dataset_name: {dataset_name}")
+    model_name = config.model.get("name")
+    print(f"Benchmarking model: {model_name}")
     g = torch.Generator()
     g.manual_seed(42)
 
     if config.dataset.split_type == "section_split":
         # == Query dataset preparation ==
-        query_dataset = load_dataset(config.dataset.query_dataset)
+        query_dataset = load_dataset(config.dataset.query_dataset, is_train=False, model_name=model_name)
         query_sampler = SequentialSampler(query_dataset)
         query_dataloader = DataLoader(query_dataset, batch_size=config.test.batch_size, sampler=query_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
 
@@ -39,9 +41,12 @@ def main(args):
         reference_dataset = copy.deepcopy(query_dataset)
         reference_sampler = SequentialSampler(reference_dataset)
         reference_dataloader = DataLoader(reference_dataset, batch_size=config.test.batch_size, sampler=reference_sampler, num_workers=config.test.num_workers, collate_fn=multimodal_collate)
+        
+        # Set dataset for load_model to determine spot_embedding
+        dataset = query_dataset
 
     elif config.dataset.split_type == "pooled_FOV_split":
-        dataset = load_dataset(config.dataset)
+        dataset = load_dataset(config.dataset, is_train=False, model_name=model_name)
         query_indices = np.load(config.dataset.test.indices, allow_pickle=True)
 
         # == Query dataset preparation ==
@@ -77,7 +82,8 @@ def main(args):
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
-    model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
+    # Pass dataset to load_model for BLEEP to determine spot_embedding dynamically
+    model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False, dataset=dataset)
     model_name = config.model.get("name")
     model.eval()
     

@@ -1,4 +1,4 @@
-# Retrieval evaluation logic adapted from BLIP (https://github.com/salesforce/BLIP/blob/main/eval_retrieval_video.py)
+# Linear probing evaluation logic adapted from Hest1k (https://github.com/mahmoodlab/HEST/blob/main/src/hest/bench/trainer.py)
 
 import os
 import argparse
@@ -10,9 +10,9 @@ from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 from ml_collections.config_dict import ConfigDict
 import yaml
 
-from model.utils import load_dataset, load_model, linear_probing, WandbLogger
-from model.model import UNI, H_optimus_zero, ResNet50
-from model.datasets import multimodal_collate
+from sigmma.utils import load_dataset, load_model, linear_probing, WandbLogger
+from sigmma.model import UNI, H_optimus_zero, ResNet50
+from sigmma.datasets import multimodal_collate
 
 from huggingface_hub import login
 
@@ -31,22 +31,24 @@ def main(args):
         os.makedirs(config.outdir)
 
     print(f"dataset_name: {dataset_name}")
+    model_name = config.get("model.name")
+    print(f"Benchmarking model: {model_name}")
     g = torch.Generator()
     g.manual_seed(42)
 
     # == Train dataset preparation ==
     if config.dataset.split_type == "section_split":
-        train_dataset = load_dataset(config.dataset.train)
+        train_dataset = load_dataset(config.dataset.train, is_train=False, model_name=model_name)
         random_sampler = RandomSampler(train_dataset, replacement=False, num_samples=min(len(train_dataset), config.test.get("num_samples", len(train_dataset))), generator=g)
         train_dataloader = DataLoader(train_dataset, batch_size=config.test.batch_size, sampler=random_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
         # == Test dataset preparation ==
-        test_dataset = load_dataset(config.dataset.test)
+        test_dataset = load_dataset(config.dataset.test, is_train=False, model_name=model_name)
         sequential_sampler = SequentialSampler(test_dataset)
         test_dataloader = DataLoader(test_dataset, batch_size=config.test.batch_size, sampler=sequential_sampler, num_workers=config.test.num_workers, generator=g, collate_fn=multimodal_collate)
 
     elif config.dataset.split_type == "pooled_FOV_split":
-        dataset = load_dataset(config.dataset)
+        dataset = load_dataset(config.dataset, is_train=False, model_name=model_name)
         train_indices = np.load(config.dataset.train.indices, allow_pickle=True)
         test_indices = np.load(config.dataset.test.indices, allow_pickle=True)
 
@@ -80,7 +82,8 @@ def main(args):
     wandb_logger = WandbLogger(config=config, **wandb_config)
     wandb_logger.set_step(0)
 
-    multimodal_model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False)
+    # Pass dataset to load_model for BLEEP to determine spot_embedding dynamically
+    multimodal_model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False, dataset=dataset)
     multimodal_model.eval()
 
     unimodal_image_encoder_UNI = UNI(checkpoint_path="/nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/")

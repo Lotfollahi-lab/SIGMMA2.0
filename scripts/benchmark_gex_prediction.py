@@ -1,4 +1,4 @@
-# Retrieval evaluation logic adapted from BLIP (https://github.com/salesforce/BLIP/blob/main/eval_retrieval_video.py)
+# Linear probing evaluation logic adapted from Hest1k (https://github.com/mahmoodlab/HEST/blob/main/src/hest/bench/trainer.py)
 
 import os
 import argparse

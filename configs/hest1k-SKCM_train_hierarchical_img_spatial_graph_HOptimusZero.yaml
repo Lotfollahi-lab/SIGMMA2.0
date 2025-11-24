@@ -16,7 +16,7 @@ model:
   dropout: 0.1
   activation: 'leaky_relu'
   aggregate: 'attn_pool'
-  num_graph_layers: 1
+  num_graph_layers: 2
 
 dataset:
   split_type: 'pooled_FOV_split'

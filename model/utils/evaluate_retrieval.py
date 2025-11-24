@@ -27,7 +27,7 @@ def load_embeddings(model, dataloader, device, config):
     for batch in dataloader:
         image = batch["image"].to(device)
 
-        if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph"]:
+        if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
             spatial = batch["spatial_graph"].to(device)
             inputs = [image, spatial]
         elif model_name == "single_img_spatial":
@@ -50,7 +50,7 @@ def load_embeddings(model, dataloader, device, config):
             spatial_embed = model_output["spatial_embedding"]
 
         # Normalize embeddings
-        if config.model.name == "hierarchical_img_spatial_graph":
+        if config.model.name in ["hierarchical_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
             image_embed = image_embed[-1]
             spatial_embed = spatial_embed[-1]
         else:

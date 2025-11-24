@@ -10,7 +10,7 @@ from ml_collections.config_dict import ConfigDict
 import pickle
 import timm
 from model.datasets.dataset import MultiSectionDataset
-from model.model import hierarchical_img_spatial_graph, single_img_spatial, single_img_spatial_graph
+from model.model import hierarchical_img_spatial_graph, hierarchical_img_spatial_graph_wo_sparsification, single_img_spatial, single_img_spatial_graph
 from model.model import UNI, H_optimus_zero, ResNet50
 from model.model import openAI_CLIP, PLIP, OmiCLIP, BLEEP
 from model.model import symmetric_InfoNCE
@@ -58,7 +58,7 @@ def load_model(config:ConfigDict,
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
-    if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial", "single_img_spatial_graph"]:
+    if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial", "single_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
         if pretrained_image_encoder == "UNI":
             pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
             assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
@@ -76,6 +76,8 @@ def load_model(config:ConfigDict,
             model = single_img_spatial(config.model, pretrained_image_encoder)
         elif config.model.name == "single_img_spatial_graph":
             model = single_img_spatial_graph(config.model, pretrained_image_encoder)
+        elif config.model.name == "hierarchical_img_spatial_graph_wo_sparsification":
+            model = hierarchical_img_spatial_graph_wo_sparsification(config.model, pretrained_image_encoder)
         else:
             raise NotImplementedError(f"Model {config.model.name} is not implemented.")
 
@@ -182,7 +184,7 @@ def train_one_epoch(
         
     for i, batch in enumerate(train_dataloader):
         image = batch["image"].to(device)
-        if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph"]:
+        if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
             spatial = batch['spatial_graph'].to(device)
             inputs = [image, spatial]
         elif config.model.name in ["single_img_spatial"]:
@@ -203,7 +205,7 @@ def train_one_epoch(
             # Forward pass
             with torch.amp.autocast(device.type, enabled=True):
                 model_out = model(*inputs)
-            if config.model.name == "hierarchical_img_spatial_graph":
+            if config.model.name in ["hierarchical_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
                 loss = 0
                 for s in range(num_resolutions):
                     loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'][s], inputs_for_loss['spatial_embedding'][s])
@@ -268,7 +270,7 @@ def train_one_epoch(
                 with torch.amp.autocast(device.type, enabled=True):
                     model_out = model(image, spatial)
                     inputs_for_loss = {}
-                    if config.model.name == "hierarchical_img_spatial_graph":
+                    if config.model.name in ["hierarchical_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
                         loss = 0
                         num_resolutions = len(model_out['image_embedding'])
                         for s in range(num_resolutions):
@@ -341,7 +343,7 @@ def train_one_epoch(
             and (global_step + 1) % config.train.eval_every == 0
             ):
             eval_loss, eval_image_embedding, eval_spatial_embedding, score_matrix_img2spatial, score_matrix_spatial2image, eval_results = evaluate(config, model, eval_dataloader, device)
-            if config.model.name == "hierarchical_img_spatial_graph":
+            if config.model.name in ["hierarchical_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
                 image_embedding = image_embedding[-1]
                 spatial_embedding = spatial_embedding[-1]
                 eval_image_embedding = eval_image_embedding[-1]
@@ -443,7 +445,7 @@ def evaluate(config, model, eval_dataloader, device):
     with torch.no_grad():
         for batch in eval_dataloader:
             image = batch["image"].to(device)
-            if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph"]:
+            if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
                 spatial = batch['spatial_graph'].to(device)
                 inputs = [image, spatial]
             elif config.model.name in ["single_img_spatial"]:
@@ -466,7 +468,7 @@ def evaluate(config, model, eval_dataloader, device):
             all_image_embeddings.append(image_embedding)
             all_spatial_embeddings.append(spatial_embedding)
 
-    if config.model.name == "hierarchical_img_spatial_graph":
+    if config.model.name in ["hierarchical_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
         num_resolutions = len(all_image_embeddings[0])
         all_image_embeddings = [torch.concat([all_image_embeddings[i][s] for i in range(len(all_image_embeddings))], dim=0).to(device) for s in range(num_resolutions)]
         all_spatial_embeddings = [torch.concat([all_spatial_embeddings[i][s] for i in range(len(all_spatial_embeddings))], dim=0).to(device) for s in range(num_resolutions)]

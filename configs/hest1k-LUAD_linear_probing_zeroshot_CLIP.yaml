@@ -18,5 +18,4 @@ dataset:
 
 test:
   batch_size: 256
-  num_samples: 1000
   num_workers: 16

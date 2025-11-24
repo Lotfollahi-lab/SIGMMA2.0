@@ -63,19 +63,35 @@ class StructureLearning(torch.nn.Module):
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges) or 1 (inter-subgraph edges rescued in this layer)
         # Edge mask: -1 (intra-subgraph edges) or 0 (inter-subgraph edges) or layer+1 (inter-subgraph edges rescued in this layer)
         with g.local_scope():
-            # Add self-loops
-            g = dgl.remove_self_loop(g)
-
             edge_feat_specs = {"mask": -1, "weight": 0}
 
+            # # Add self-loops
+            # g = dgl.remove_self_loop(g)
+            # g_unbatched = []
+            # for graph in dgl.unbatch(g):
+            #     for feat, fill_val in edge_feat_specs.items():
+            #         graph = dgl.add_self_loop(graph, edge_feat_names=[feat], fill_data=fill_val)
+            #     g_unbatched.append(graph)
+
+            # g = dgl.batch(g_unbatched)
+
             g_unbatched = []
-            for graph in dgl.unbatch(g):
+            for gi in dgl.unbatch(g):
+                # Remove self-loops if any
+                gi = dgl.remove_self_loop(gi)
+
+                # Add self-loops with specified edge features 
                 for feat, fill_val in edge_feat_specs.items():
-                    graph = dgl.add_self_loop(graph, edge_feat_names=[feat], fill_data=fill_val)
-                g_unbatched.append(graph)
+                    gi = dgl.add_self_loop(
+                        gi,
+                        edge_feat_names=[feat],
+                        fill_data=fill_val
+                    )
+                g_unbatched.append(gi)
 
+            # Batch graphs back 
             g = dgl.batch(g_unbatched)
-
+        
             # GGN on intra-subgraph edges only
             if self.emb_layer > 0:
                 for i in range(self.emb_layer):
@@ -266,8 +282,6 @@ class BaseGRAPHLayer(torch.nn.Module):
 
         for layer in self.node_embedding:
             h = layer(h)
-        # self._print_summaries("after_node_embedding",
-        #                           self._summarize_layer(h, g, bins=50))
 
         # Apply GCN/structure learning layers
         g_unbatched = [dgl.add_self_loop(graph) for graph in dgl.unbatch(g)]
@@ -276,8 +290,6 @@ class BaseGRAPHLayer(torch.nn.Module):
         for i in range(self.num_gnn_layers):
             h = self.convs[i](g, h)
             h = self.activation(h)
-            # self._print_summaries("after_node_embedding",
-            #                       self._summarize_layer(h, g, bins=50))
         return h
 
 

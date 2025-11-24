@@ -1,15 +1,13 @@
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from tempfile import template
+from typing import Callable, Optional, Union
 import random
 
-import copy
 import numpy as np
 import pandas as pd
-import collections
 from collections.abc import Mapping, Sequence
 from itertools import product
-
 import scanpy
 import zarr
 import torch
@@ -39,7 +37,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                  hierarchical_graph: bool = True,
                  tissue_filtering_threshold: float = 20000,
                  pretrained_cell_embedding: bool = True,
-                 type_pretrained_cell_embedding: str = 'nemo', # 'nemo' or 'novae'
+                 type_pretrained_cell_embedding: str = 'stemo',
                  is_train: bool = False,
                  model_name: Optional[str] = None):
         manifest =  pd.read_csv(manifest_path)
@@ -88,8 +86,8 @@ class MultiSectionDataset(torch.utils.data.Dataset):
         """Returns the number of genes or embedding dimension depending on whether pretrained embeddings are used."""
         if self.first_dataset.pretrained_cell_embedding:
             # Return the embedding dimension instead of gene count
-            if self.first_dataset.type_pretrained_cell_embedding == "nemo":
-                return self.first_dataset.spatial_anndata.obsm["nemo_latent"].shape[1]
+            if self.first_dataset.type_pretrained_cell_embedding == "stemo":
+                return self.first_dataset.spatial_anndata.obsm["stemo_latent"].shape[1]
             elif self.first_dataset.type_pretrained_cell_embedding == "novae":
                 return self.first_dataset.spatial_anndata.obsm["novae_latent"].shape[1]
             elif self.first_dataset.type_pretrained_cell_embedding == "X_pca_harmony":
@@ -111,7 +109,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         hierarchical_graph: bool = True,
         tissue_filtering_threshold: float = 20000,
         pretrained_cell_embedding: bool = True,
-        type_pretrained_cell_embedding: str = 'nemo', # 'nemo' or 'novae'
+        type_pretrained_cell_embedding: str = 'stemo',
         is_train: bool = False,
         model_name: Optional[str] = None,
     ):
@@ -131,7 +129,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.section_id = Path(spatial_file).parts[-2]
         self.tissue_type = Path(spatial_file).parts[-3]
 
-        assert 'nemo_latent' in self.spatial_anndata.obsm, "'nemo_latent' embedding is required in the spatial anndata obsm, please run the preprocessing script first."
+        assert 'stemo_latent' in self.spatial_anndata.obsm, "'stemo_latent' embedding is required in the spatial anndata obsm, please run the preprocessing script first."
         assert 'spatial_connectivities' in self.spatial_anndata.obsp, "'spatial_connectivities' is required in the spatial anndata obsp, please run the preprocessing script first."
 
         self.fov_size = fov_size
@@ -144,7 +142,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.is_train = is_train
         self.model_name = model_name
         if self.pretrained_cell_embedding == True:
-            assert type_pretrained_cell_embedding in ['nemo', 'novae', 'X_pca_harmony'], "type_pretrained_cell_embedding must be either 'nemo' or 'novae'"
+            assert type_pretrained_cell_embedding in ['stemo', 'novae', 'X_pca_harmony'], "type_pretrained_cell_embedding must be either 'stemo' or 'novae'"
             self.type_pretrained_cell_embedding = type_pretrained_cell_embedding
 
 
@@ -177,11 +175,15 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                         return None
 
         if self.pretrained_cell_embedding == True:
-            if self.type_pretrained_cell_embedding == "nemo":
-                cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
+            if self.type_pretrained_cell_embedding == "stemo":
+                cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["stemo_latent"][mask])
             elif self.type_pretrained_cell_embedding == "novae":
                 cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask])
             elif self.type_pretrained_cell_embedding == "X_pca_harmony":
+                if 'num_non_zero_genes' in self.spatial_anndata.obs:
+                    mean_nz_genes = self.spatial_anndata.obs['num_non_zero_genes'][mask].mean()
+                    if mean_nz_genes < 30:  # Require at least 30 non-zero genes on average
+                        return None
                 cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["X_pca_harmony"][mask])
         else:
             cell_embeddings = torch.Tensor(self.spatial_anndata.X[mask].toarray())
@@ -222,7 +224,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                 subgraph_grid = dgl.from_scipy(sparse_maxtrix_grid)
 
                 if self.pretrained_cell_embedding == True:
-                    node_features_grid = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask_grid])
+                    node_features_grid = torch.Tensor(self.spatial_anndata.obsm["stemo_latent"][mask_grid])
                 else:
                     node_features_grid = torch.Tensor(self.spatial_anndata[mask_grid,:].X.toarray())
                 subgraph_grid.ndata['feat'] = node_features_grid
@@ -351,10 +353,6 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                 
         return image
 
-# -------------------- Fix to handle None (low gex samples) --------------------
-import copy
-from collections.abc import Mapping
-
 def _empty_batch_like(template: Mapping):
     """Return an empty-but-well-formed batch matching `template`'s structure."""
     out = {}
@@ -369,43 +367,6 @@ def _empty_batch_like(template: Mapping):
             out[k] = []
     return out
 
-def multimodal_collate(batch):
-    # 0) Strip None samples early (your Dataset might yield None to “skip”)
-    batch = [b for b in batch if b is not None and isinstance(b, Mapping)]
-    if not batch:
-        # No usable samples: return a safe empty structure
-        # If you can, keep a global/template example to mirror shapes more precisely.
-        return {}
-
-    # 1) Drop samples that contain None/empty DGL graphs anywhere inside
-    filtered = [b for b in batch if not _is_empty_sample(b)]
-    if not filtered:
-        # Build an empty structure keyed like the first non-None original sample
-        return _empty_batch_like(batch[0])
-
-    elem = filtered[0]
-    out = {}
-
-    for key in elem:
-        values = [d.get(key) for d in filtered]
-
-        if type(elem[key]) in collate_fn_map:
-            out[key] = collate(values, collate_fn_map=collate_fn_map)
-
-        elif isinstance(elem[key], dgl.DGLGraph):
-            graphs = [v for v in values if isinstance(v, dgl.DGLGraph) and v.num_nodes() > 0]
-            if not graphs:
-                out[key] = dgl.graph(([], []))  # safe empty graph
-            else:
-                out[key] = dgl.batch(graphs)
-
-        elif isinstance(elem[key], Mapping):
-            out[key] = multimodal_collate_dict(values)
-
-        else:
-            out[key] = values
-
-    return out
 
 def multimodal_collate_dict(batch_dicts):
     # Handle None subdicts
@@ -449,3 +410,40 @@ def _is_empty_sample(sample_dict) -> bool:
         if g is None or g.num_nodes() == 0:
             return True
     return False
+
+def multimodal_collate(batch):
+    # 0) Strip None samples early (your Dataset might yield None to “skip”)
+    batch = [b for b in batch if b is not None and isinstance(b, Mapping)]
+    if not batch:
+        # No usable samples: return a safe empty structure
+        # If you can, keep a global/template example to mirror shapes more precisely.
+        return {}
+ 
+    # 1) Drop samples that contain None/empty DGL graphs anywhere inside
+    filtered = [b for b in batch if not _is_empty_sample(b)]
+    if not filtered:
+        # Build an empty structure keyed like the first non-None original sample
+        return _empty_batch_like(batch[0])
+
+    elem = filtered[0]
+    out = {}
+
+    for key in elem:
+        values = [d.get(key) for d in filtered]
+        if type(elem[key]) in collate_fn_map:
+            out[key] = collate(values, collate_fn_map=collate_fn_map)
+
+        elif isinstance(elem[key], dgl.DGLGraph):
+            graphs = [v for v in values if isinstance(v, dgl.DGLGraph) and v.num_nodes() > 0]
+            if not graphs:
+                out[key] = dgl.graph(([], []))  # safe empty graph
+            else:
+                out[key] = dgl.batch(graphs)
+
+        elif isinstance(elem[key], Mapping):
+            out[key] = multimodal_collate_dict(values)
+
+        else:
+            out[key] = values
+
+    return out

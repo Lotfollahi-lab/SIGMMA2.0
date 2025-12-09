@@ -33,37 +33,8 @@ class UNI(nn.Module):
         return image_embedding
 
     def forward(self, x):
-        #if x.shape[-1] != 224 or x.shape[-2] != 224:
         x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
         return self.model(x)
-
-class H_optimus_zero(nn.Module):
-    def __init__(self, checkpoint_path=None):
-        super(H_optimus_zero, self).__init__()
-        H_optimus_zero_model = timm.create_model("hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False)
-
-        if checkpoint_path:
-            H_optimus_zero_model.load_state_dict(
-                torch.load(
-                    Path(checkpoint_path, "pytorch_model.bin"), map_location="cpu"
-                ),
-                strict=True,
-            )
-        self.model = H_optimus_zero_model
-
-    @torch.no_grad()
-    def get_image_features(self, x):
-        #if x.shape[-1] != 224 or x.shape[-2] != 224:
-        x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
-        with torch.inference_mode():
-            image_embedding = self.model(x)
-        return image_embedding
-
-    def forward(self, x):
-        # if x.shape[-1] != 224 or x.shape[-2] != 224:
-        x = torch.nn.functional.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
-        x = self.model(x)
-        return x
 
 class ResNet50(nn.Module):
     def __init__(self):

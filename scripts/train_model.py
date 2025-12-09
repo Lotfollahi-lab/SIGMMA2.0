@@ -32,59 +32,27 @@ def objective(args):
 
     if os.path.exists(config.outdir) == False:
         os.makedirs(config.outdir)
-    print(config.dataset.type_pretrained_cell_embedding)
-    fov_size = config.get("dataset.fov_size", None)
+    
     if config.dataset.split_type == "section_split":
         dataset = load_dataset(config.dataset.train, is_train=True, model_name=model_name)
         train_dataset = dataset
         eval_dataset = load_dataset(config.dataset.validation, is_train=False, model_name=model_name)
-    elif config.dataset.split_type == "pooled_FOV_split":
+    elif config.dataset.split_type == "spatially_stratified_tile_split":
         dataset = load_dataset(config.dataset, is_train=True, model_name=model_name)
-        total = len(dataset)
 
-        path_to_dataset = Path(config.dataset.manifest_path).parent
-        # Split ratio: 8:1:1
-        train_ratio = 0.8
-        val_ratio = 0.1
-        test_ratio = 0.1
-        assert abs(train_ratio + val_ratio + test_ratio - 1.0) < 1e-6
+        train_indices_file = Path(config.dataset.train.indices)
+        val_indices_file = Path(config.dataset.validation.indices)
+        
+        print(f"Loading pre-saved dataset split indices from {train_indices_file.parent}")
 
-        train_len = int(total * train_ratio)
-        val_len = int(total * val_ratio)
-
-        train_indices = list(range(0, train_len))
-        val_indices = list(range(train_len, train_len + val_len))
-        test_indices = list(range(train_len + val_len, total))
-        if fov_size != 256:
-            indices_file = path_to_dataset/f"{dataset_name}_train_indices_{fov_size}.npy"
-            if indices_file.exists():
-                print(f"Loading {fov_size} pre-saved dataset split indices from {indices_file.parent}")
-                train_indices = np.load(path_to_dataset/f"{dataset_name}_train_indices_{fov_size}.npy").tolist()
-                val_indices = np.load(path_to_dataset/f"{dataset_name}_val_indices_{fov_size}.npy").tolist()
-                test_indices = np.load(path_to_dataset/f"{dataset_name}_test_indices_{fov_size}.npy").tolist()
-            else:
-                np.save(path_to_dataset/f"{dataset_name}_train_indices_{fov_size}.npy", train_indices)
-                np.save(path_to_dataset/f"{dataset_name}_val_indices_{fov_size}.npy", val_indices)
-                np.save(path_to_dataset/f"{dataset_name}_test_indices_{fov_size}.npy", test_indices)
-        else:
-            indices_file = path_to_dataset/f"{dataset_name}_train_indices.npy"
-            if indices_file.exists():
-                if config.dataset.get("split_version") is not None:
-                    print(f"Loading pre-saved dataset split indices version {config.dataset.split_version} from {indices_file.parent}")
-                    train_indices = np.load(path_to_dataset/f"{dataset_name}_train_indices_split_{config.dataset.split_version}.npy")
-                    val_indices = np.load(path_to_dataset/f"{dataset_name}_val_indices_split_{config.dataset.split_version}.npy")
-                    test_indices = np.load(path_to_dataset/f"{dataset_name}_test_indices_split_{config.dataset.split_version}.npy")
-                else:
-                    print(f"Loading pre-saved dataset split indices from {indices_file.parent}")
-                    train_indices = np.load(path_to_dataset/f"{dataset_name}_train_indices.npy").tolist()
-                    val_indices = np.load(path_to_dataset/f"{dataset_name}_val_indices.npy").tolist()
-                    test_indices = np.load(path_to_dataset/f"{dataset_name}_test_indices.npy").tolist()
-            # else:
-            #     np.save(path_to_dataset/f"{dataset_name}_train_indices.npy", train_indices)
-            #     np.save(path_to_dataset/f"{dataset_name}_val_indices.npy", val_indices)
-            #     np.save(path_to_dataset/f"{dataset_name}_test_indices.npy", test_indices) 
+        train_indices = np.load(train_indices_file).tolist()
+        val_indices = np.load(val_indices_file).tolist()
+        
         train_dataset = torch.utils.data.Subset(dataset, train_indices)
         eval_dataset = torch.utils.data.Subset(dataset, val_indices)
+
+    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Eval dataset size: {len(eval_dataset)}")
 
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Eval dataset size: {len(eval_dataset)}")

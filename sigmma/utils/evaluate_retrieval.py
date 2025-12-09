@@ -1,9 +1,5 @@
 import torch
-import zarr
-import scanpy
 import numpy as np
-import pandas as pd
-from scipy.stats import pearsonr
 
 @torch.no_grad()
 def retrieval_score(model, query_dataloader, reference_dataloader, device, config):

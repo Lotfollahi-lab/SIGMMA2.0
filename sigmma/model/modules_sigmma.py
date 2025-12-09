@@ -6,15 +6,13 @@ import torch.nn.functional as F
 from torchvision.transforms import Resize
 from torch.utils.checkpoint import checkpoint
 
-import dgl
-
-from .layers_graph import BaseGRAPHLayer, READOUTLayer
+from .layers_graph import GRAPHLayer, READOUTLayer
 
 from .losses import symmetric_InfoNCE
 
-class hierarchical_img_spatial_graph_wo_sparsification(nn.Module):
+class sigmma(nn.Module):
     def __init__(self, config, image_encoder):
-        super(hierarchical_img_spatial_graph_wo_sparsification, self).__init__()
+        super(sigmma, self).__init__()
         self.config = config
         assert config.image_encoder_output_dim == config.spatial_encoder_output_dim, "Image and spatial encoder output dimensions must match."
         self.image_encoder = image_encoder
@@ -33,19 +31,34 @@ class hierarchical_img_spatial_graph_wo_sparsification(nn.Module):
         self.num_resolutions = config.num_resolutions
         self.spatial_encoder = torch.nn.ModuleList()
         for i in range(config.num_resolutions):
-            self.spatial_encoder.append(
-                BaseGRAPHLayer(config.spatial_encoder_input_dim,
-                        config.spatial_encoder_output_dim,
-                        config.activation,
-                        config.dropout
-                        ))
-            self.spatial_encoder.append(
-                READOUTLayer(config.spatial_encoder_output_dim,
+            if i == 0:
+                self.spatial_encoder.append(
+                    GRAPHLayer(config.spatial_encoder_input_dim,
                             config.spatial_encoder_output_dim,
-                            config.aggregate,
                             config.activation,
-                            config.dropout)
-            )
+                            config.dropout
+                            ))
+                self.spatial_encoder.append(
+                    READOUTLayer(config.spatial_encoder_output_dim,
+                                config.spatial_encoder_output_dim,
+                                config.aggregate,
+                                config.activation,
+                                config.dropout)
+                )
+            else:
+                self.spatial_encoder.append(
+                    GRAPHLayer(config.spatial_encoder_output_dim,
+                            config.spatial_encoder_output_dim,
+                            config.activation,
+                            config.dropout
+                            ))
+                self.spatial_encoder.append(
+                    READOUTLayer(config.spatial_encoder_output_dim,
+                                config.spatial_encoder_output_dim,
+                                config.aggregate,
+                                config.activation,
+                                config.dropout)
+                )
 
         self.contrastive_loss = symmetric_InfoNCE(temperature=config.temperature)
 
@@ -53,42 +66,6 @@ class hierarchical_img_spatial_graph_wo_sparsification(nn.Module):
         self.csc_mode = getattr(config, "csc_mode", "both")  # "both" or "alt"
         self.register_buffer("global_step", torch.zeros((), dtype=torch.long))
 
-
-    def _csc_loss(self, z_list, mode="both", step: int = 0):
-        """
-        Cross-Scale Consistency Loss
-        =============================================
-        [Input]
-        z_list [ [B,D] for each scale ]: list of embeddings at different scales
-        mode (str): "both"-both-way optimization / "alt"-alternate optimization
-        step (int): current training step, used for "alt" mode
-        [Output]
-        loss (torch.Tensor): scalar loss
-        per_pair (dict): dictionary of loss values for each pair of scales
-        """
-        if len(z_list) <= 1:
-            return z_list[0].new_tensor(0.0), {}
-
-        pairs = list(itertools.combinations(range(len(z_list)), 2))
-        losses = []
-        per_pair = {}
-        for (a, b) in pairs:
-            za, zb = z_list[a], z_list[b]  # [B,D]
-            if mode == "both":
-                l1 = 1.0 - F.cosine_similarity(za, zb.detach(), dim=-1)
-                l2 = 1.0 - F.cosine_similarity(zb, za.detach(), dim=-1)
-                l = 0.5 * (l1 + l2)
-            elif mode == "alt":
-                if (step % 2) == 0:
-                    l = 1.0 - F.cosine_similarity(za, zb.detach(), dim=-1)
-                else:
-                    l = 1.0 - F.cosine_similarity(zb, za.detach(), dim=-1)
-            else:
-                raise ValueError("csc_mode must be 'both' or 'alt'")
-            losses.append(l.mean())
-            per_pair[f"{a}-{b}"] = float(l.mean().detach())
-        loss = torch.stack(losses).mean()
-        return loss, per_pair
 
     def _encode_image_multiscale(self, x1: torch.Tensor):
         """
@@ -155,74 +132,16 @@ class hierarchical_img_spatial_graph_wo_sparsification(nn.Module):
         x1_multiple_resolution = [self.image_projection_heads[i](feat) for i, feat in enumerate(x1_multiple_resolution)]
 
         # Spatial embeddings
-        # 1. Add edges based on block-wise fully connection
-        multiscale_graph = []
+        g, h_x2 = x2, x2.ndata['feat']
+        loss_contrastive, loss_kl = [], []
         for i in range(self.num_resolutions):
-            graph_li = []
-            for graph in dgl.unbatch(x2):
-                # Identify non-neighbor edges
-                u, v = graph.edges()
-                x_pos = graph.ndata['x_pos']
-                y_pos = graph.ndata['y_pos']
-
-                BLOCK = 2*(i+1)  # Assuming each block is of size 2x2, 4x4, 6x6, ...
-                bx = torch.div(x_pos, BLOCK, rounding_mode='floor')
-                by = torch.div(y_pos, BLOCK, rounding_mode='floor')
-
-                # block_id for each node
-                block_id = bx * 10_000 + by   # or bx * W + by if W known
-
-                # For each block, find nodes
-                unique_blocks = torch.unique(block_id)
-
-                new_src = []
-                new_dst = []
-
-                for b in unique_blocks:
-                    nodes_in_block = torch.where(block_id == b)[0]
-                    if len(nodes_in_block) <= 1:
-                        continue
-                    
-                    # Pairwise fully connect (excluding self-loop)
-                    grid = nodes_in_block
-                    src = grid.repeat(len(grid))
-                    dst = grid.repeat_interleave(len(grid))
-                    mask = src != dst  # remove self-loops
-
-                    new_src.append(src[mask])
-                    new_dst.append(dst[mask])
-
-                if new_src:
-                    new_src = torch.cat(new_src).to(graph.device)
-                    new_dst = torch.cat(new_dst).to(graph.device)
-
-                    # Remove duplicates: only keep edges that don't already exist
-                    # (optional but recommended)
-                    existing = set(map(tuple, zip(u.tolist(), v.tolist())))
-                    filtered_src = []
-                    filtered_dst = []
-
-                    for s, d in zip(new_src.tolist(), new_dst.tolist()):
-                        if (s, d) not in existing:
-                            filtered_src.append(s)
-                            filtered_dst.append(d)
-
-                    if filtered_src:
-                        graph.add_edges(filtered_src, filtered_dst)
-                graph_li.append(graph)
-            batched_graph = dgl.batch(graph_li)
-            multiscale_graph.append(batched_graph)
-
-        # 2. Forward through spatial encoder at each scale
-        loss_contrastive = []
-        for i in range(self.num_resolutions):
-            g = multiscale_graph[i]
-            h_x2 = g.ndata['feat']
             # spatial encoder
             ## (1) graph layer
-            h_x2 = self.spatial_encoder[i*2](g, h_x2)
+            g, h_x2 = self.spatial_encoder[i*2](g, h_x2, layer_id=i)
             ## (2) graph readout layer
             h_x2_pooled = self.spatial_encoder[i*2+1](g, h_x2)
+
+            loss_kl.extend(self.spatial_encoder[i*2].kl_terms)
 
             # corresponding image embeddings
             h_x1 = x1_multiple_resolution[i]
@@ -233,18 +152,17 @@ class hierarchical_img_spatial_graph_wo_sparsification(nn.Module):
 
             embedding_imgs.append(h_x1_norm)
             embedding_spatial.append(h_x2_norm)
+
             loss_contrastive.append(self.contrastive_loss(h_x1_norm, h_x2_norm))
 
+        loss_kl = torch.stack(loss_kl).mean()
         loss_contrastive = torch.stack(loss_contrastive).mean()
 
         self.global_step += 1
-        loss_csc_img, csc_img_terms = self._csc_loss(embedding_imgs,mode=self.csc_mode, step=self.global_step)
 
-        loss = loss_contrastive + self.lambda_csc_img*loss_csc_img
+        loss = loss_contrastive
 
         model_outputs = {"loss": loss,
-                         "loss_contrastive": loss_contrastive,
-                         "loss_csc_img": loss_csc_img*self.lambda_csc_img,
                          "image_embedding": embedding_imgs,
                          "spatial_embedding": embedding_spatial}
         return model_outputs

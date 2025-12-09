@@ -37,7 +37,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                  hierarchical_graph: bool = True,
                  tissue_filtering_threshold: float = 20000,
                  pretrained_cell_embedding: bool = True,
-                 type_pretrained_cell_embedding: str = 'stemo',
+                 type_pretrained_cell_embedding: str = 'nemo',
                  is_train: bool = False,
                  model_name: Optional[str] = None):
         manifest =  pd.read_csv(manifest_path)
@@ -86,8 +86,8 @@ class MultiSectionDataset(torch.utils.data.Dataset):
         """Returns the number of genes or embedding dimension depending on whether pretrained embeddings are used."""
         if self.first_dataset.pretrained_cell_embedding:
             # Return the embedding dimension instead of gene count
-            if self.first_dataset.type_pretrained_cell_embedding == "stemo":
-                return self.first_dataset.spatial_anndata.obsm["stemo_latent"].shape[1]
+            if self.first_dataset.type_pretrained_cell_embedding == "nemo":
+                return self.first_dataset.spatial_anndata.obsm["nemo_latent"].shape[1]
             elif self.first_dataset.type_pretrained_cell_embedding == "novae":
                 return self.first_dataset.spatial_anndata.obsm["novae_latent"].shape[1]
             elif self.first_dataset.type_pretrained_cell_embedding == "X_pca_harmony":
@@ -109,7 +109,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         hierarchical_graph: bool = True,
         tissue_filtering_threshold: float = 20000,
         pretrained_cell_embedding: bool = True,
-        type_pretrained_cell_embedding: str = 'stemo',
+        type_pretrained_cell_embedding: str = 'nemo',
         is_train: bool = False,
         model_name: Optional[str] = None,
     ):
@@ -129,7 +129,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.section_id = Path(spatial_file).parts[-2]
         self.tissue_type = Path(spatial_file).parts[-3]
 
-        assert 'stemo_latent' in self.spatial_anndata.obsm, "'stemo_latent' embedding is required in the spatial anndata obsm, please run the preprocessing script first."
+        assert 'nemo_latent' in self.spatial_anndata.obsm, "'nemo_latent' embedding is required in the spatial anndata obsm, please run the preprocessing script first."
         assert 'spatial_connectivities' in self.spatial_anndata.obsp, "'spatial_connectivities' is required in the spatial anndata obsp, please run the preprocessing script first."
 
         self.fov_size = fov_size
@@ -142,7 +142,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.is_train = is_train
         self.model_name = model_name
         if self.pretrained_cell_embedding == True:
-            assert type_pretrained_cell_embedding in ['stemo', 'novae', 'X_pca_harmony'], "type_pretrained_cell_embedding must be either 'stemo' or 'novae'"
+            assert type_pretrained_cell_embedding in ['nemo', 'novae', 'X_pca_harmony'], "type_pretrained_cell_embedding must be either 'nemo' or 'novae'"
             self.type_pretrained_cell_embedding = type_pretrained_cell_embedding
 
 
@@ -165,18 +165,9 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             & (points[:, 1] < y_start + self.fov_size)
         )
         
-        # For BLEEP model with PCA embeddings, check for minimum data quality
-        if self.model_name == 'BLEEP' and self.pretrained_cell_embedding:
-            if self.type_pretrained_cell_embedding == "X_pca_harmony":
-                # Check if we have enough non-zero genes in this FOV
-                if 'num_non_zero_genes' in self.spatial_anndata.obs:
-                    mean_nz_genes = self.spatial_anndata.obs['num_non_zero_genes'][mask].mean()
-                    if mean_nz_genes < 30:  # Require at least 30 non-zero genes on average
-                        return None
-
         if self.pretrained_cell_embedding == True:
-            if self.type_pretrained_cell_embedding == "stemo":
-                cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["stemo_latent"][mask])
+            if self.type_pretrained_cell_embedding == "nemo":
+                cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask])
             elif self.type_pretrained_cell_embedding == "novae":
                 cell_embeddings = torch.Tensor(self.spatial_anndata.obsm["novae_latent"][mask])
             elif self.type_pretrained_cell_embedding == "X_pca_harmony":
@@ -199,7 +190,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         spatial_graph.ndata['cell_id'] = torch.Tensor(self.spatial_anndata.obs['cell_id_to_num'][mask].to_numpy().astype("int64"))
         spatial_graph.ndata['feat'] = cell_embeddings
-        # print('mean, std of cell embeddings', cell_embeddings.mean(), cell_embeddings.std())
+
         # Edge weight: 1 (intra-subgraph edges) or 0 (inter-subgraph edges)
         # Edge mask: -1 (intra-subgraph edges) or 0 (inter-subgraph edges)
         spatial_graph.edata['weight'] = torch.ones(len(spatial_graph.edges()[0]))
@@ -224,7 +215,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                 subgraph_grid = dgl.from_scipy(sparse_maxtrix_grid)
 
                 if self.pretrained_cell_embedding == True:
-                    node_features_grid = torch.Tensor(self.spatial_anndata.obsm["stemo_latent"][mask_grid])
+                    node_features_grid = torch.Tensor(self.spatial_anndata.obsm["nemo_latent"][mask_grid])
                 else:
                     node_features_grid = torch.Tensor(self.spatial_anndata[mask_grid,:].X.toarray())
                 subgraph_grid.ndata['feat'] = node_features_grid
@@ -263,46 +254,21 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         K = self.number_of_genes
         spatial_text = " ".join(filtered_spatial_anndata.var.index[np.argsort(mean_exp)[-K:][::-1]]) # TODO: exclude empty strings
 
-        # 2. cell type composition
-        try:
-            cell_type_ids = self.spatial_anndata.obs["Annotation"][mask]
-            cell_type_ids_tensor = torch.tensor(cell_type_ids.tolist(), dtype=torch.int8)
-            if len(cell_type_ids_tensor) != 0:
-                cell_type_composition = torch.bincount(cell_type_ids_tensor, minlength=self.num_cell_types).long()
-            else:
-                cell_type_composition = torch.zeros(self.num_cell_types)
-            cell_type_composition = cell_type_composition.float() / cell_type_composition.sum() if cell_type_composition.sum() > 0 else cell_type_composition
-        except Exception as e:
-            pass
-            # print(f"[Warning]: Cell type composition skipped {e}")
-
-        # 3. cropped image
+        # 2. cropped image
         fov_image = self.image_array[
                     :,
                     y_start : y_start + self.fov_size,
                     x_start : x_start + self.fov_size,
                     ]
         
-        # Apply BLEEP-specific transform if training with BLEEP model
-        if self.model_name == 'BLEEP':
-            # For BLEEP, apply augmentations and ImageNet normalization
-            # fov_image is (C, H, W) with values in [0, 255]
-            image = self.transform(fov_image)
-        else:
-            # For other models, just normalize to [0, 1] 
-            image = torch.tensor(fov_image) / 255.0
+        # For other models, just normalize to [0, 1] 
+        image = torch.tensor(fov_image) / 255.0
 
         # Label
         label = {}
         topK_exp = mean_exp[np.argsort(mean_exp)[-K:]]
 
         label['topK_exp'] = torch.tensor(topK_exp, dtype=torch.float32) # TODO: add gene names
-        # label['raw_exp'] = torch.tensor(mean_exp, dtype=torch.float32) # TODO: add gene names
-        try:
-            label['cell_type_composition'] = cell_type_composition
-        except Exception as e:
-            pass
-            # print(f"[Warning]: Cell type composition information is not available in the spatial anndata. Please make sure cell type information is included in the spatial anndata. {e}")
 
         return {
             "image": image,

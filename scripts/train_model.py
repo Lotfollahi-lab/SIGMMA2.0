@@ -106,7 +106,7 @@ def objective(args, rank=None, world_size=None):
     # config.train.weight_decay = trial.suggest_categorical("weight_decay", wd_candidates)
     # config.model.temperature = trial.suggest_categorical("temperature", temp_candidates)
 
-    if rank == 0:
+    if int(os.environ.get("RANK", "0")) == 0: 
         wandb_logger = WandbLogger(config=dict(config.model)|dict(config.train), **wandb_config)
         wandb_logger.set_step(0)
     else:
@@ -152,4 +152,4 @@ if __name__ == "__main__":
     world_size = int(os.environ.get('WORLD_SIZE', 1))
 
     setup(local_rank, world_size)
-    objective(args)
+    objective(args, rank=local_rank, world_size=world_size)

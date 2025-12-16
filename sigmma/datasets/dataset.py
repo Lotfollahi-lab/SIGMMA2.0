@@ -123,10 +123,9 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.index_array = zarr.open(indices_file, mode="r")
         if tissue_filtering_threshold is not None:
             mask = self.index_array[:, -1] >= tissue_filtering_threshold
-            valid_indices = np.where(mask)[0]
-            self.index_array = self.index_array[valid_indices]
+            self.valid_indices = np.where(mask)[0]
         self.spatial_anndata = scanpy.read_h5ad(
-            spatial_file
+            spatial_file, backed="r"
         )
         self.section_id = Path(spatial_file).parts[-2]
         self.tissue_type = Path(spatial_file).parts[-3]
@@ -147,15 +146,15 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             assert type_pretrained_cell_embedding in ['nemo', 'novae', 'X_pca_harmony'], "type_pretrained_cell_embedding must be either 'nemo' or 'novae'"
             self.type_pretrained_cell_embedding = type_pretrained_cell_embedding
 
-
-    def __getitem__(self, idx):
-        # 0. image slice
-        slice_args = self.index_array[idx]
-        y_start, x_start, _ = np.uint32(slice_args)
-
         cell_ids = self.spatial_anndata.obs.index.to_numpy()
         cell_ids_to_num = [i for i, cell_id in enumerate(cell_ids)]
         self.spatial_anndata.obs['cell_id_to_num'] = cell_ids_to_num
+
+    def __getitem__(self, idx):
+        idx = int(self.valid_indices[idx]) if self.valid_indices is not None else idx
+        # 0. image slice
+        slice_args = self.index_array[idx]
+        y_start, x_start, _ = np.uint32(slice_args)
 
         # 1-1. spatial embedding (cells inside this FOV)
         points = self.spatial_anndata.obsm["spatial"]
@@ -284,7 +283,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         }
 
     def __len__(self) -> int:
-        return len(self.index_array)
+        return len(self.valid_indices) if self.valid_indices is not None else self.index_array.shape[0]
     
     def transform(self, image):
         """

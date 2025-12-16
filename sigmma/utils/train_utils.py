@@ -122,7 +122,8 @@ def train_one_epoch(
     model = model.to(device)
     model.train()
 
-    wandb.watch(model, log=None, log_freq=10)
+    if int(os.environ.get("RANK", "0")) == 0:
+        wandb.watch(model, log=None, log_freq=10)
 
     accum_freq = config.get("train.gradient_accumulation_steps", 1)
     if accum_freq > 1:
@@ -148,7 +149,8 @@ def train_one_epoch(
                     loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'][s], inputs_for_loss['spatial_embedding'][s])
                 loss = loss / num_resolutions
             else:
-                print('Loss', model_out['loss'])
+                if int(os.environ.get("RANK", "0")) == 0:
+                    print('Loss', model_out['loss'])
                 loss = model_out["loss"]
                 image_embedding = model_out["image_embedding"] # Tensor (B, D)
                 spatial_embedding = model_out["spatial_embedding"] # Tensor (B, D)
@@ -174,7 +176,8 @@ def train_one_epoch(
                     accum_features["spatial_embedding"].append(spatial_embedding)
 
             if (i+1) % accum_freq > 0:
-                print(f"Skipping optimizer step at iter {i}, accumulating more gradients...")
+                if int(os.environ.get("RANK", "0")) == 0:
+                    print(f"Skipping optimizer step at iter {i}, accumulating more gradients...")
                 continue
             
             # Take gradients for the last accum_freq batches
@@ -234,16 +237,17 @@ def train_one_epoch(
             fig_train_spatial2spatial_heatmap = heatmap(spatial_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
 
             model.train() # Set model back to training mode
-            wandb_logger.update({"(train)img2spatial heatmap": wandb.Image(fig_train_img2spatial_heatmap),
-                                 "(train)img2img heatmap": wandb.Image(fig_train_img2img_heatmap),
-                                 "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),
-                                 "(eval)loss": eval_loss,
-                                 "epoch": epoch_index + 1})
-
-        wandb_logger.update({"(train)loss": loss,
-                             "(train)lr": lr_scheduler.get_last_lr()[0],
-                             "epoch": epoch_index + 1})
-        wandb_logger.set_step()
+            if wandb_logger is not None:
+                wandb_logger.update({"(train)img2spatial heatmap": wandb.Image(fig_train_img2spatial_heatmap),
+                                    "(train)img2img heatmap": wandb.Image(fig_train_img2img_heatmap),
+                                    "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),
+                                    "(eval)loss": eval_loss,
+                                    "epoch": epoch_index + 1})
+        if wandb_logger is not None:
+            wandb_logger.update({"(train)loss": loss,
+                                "(train)lr": lr_scheduler.get_last_lr()[0],
+                                "epoch": epoch_index + 1})
+            wandb_logger.set_step()
 
         global_step += 1
 

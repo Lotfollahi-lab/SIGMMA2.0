@@ -68,11 +68,12 @@ def objective(args, rank=None, world_size=None):
         train_dataset = torch.utils.data.Subset(dataset, train_indices)
         eval_dataset = torch.utils.data.Subset(dataset, val_indices)
 
-    print(f"Train dataset size: {len(train_dataset)}")
-    print(f"Eval dataset size: {len(eval_dataset)}")
+    if int(os.environ.get("RANK", "0")) == 0:
+        print(f"Train dataset size: {len(train_dataset)}")
+        print(f"Eval dataset size: {len(eval_dataset)}")
 
-    print(f"Train dataset size: {len(train_dataset)}")
-    print(f"Eval dataset size: {len(eval_dataset)}")
+        print(f"Train dataset size: {len(train_dataset)}")
+        print(f"Eval dataset size: {len(eval_dataset)}")
 
     g = torch.Generator()
     g.manual_seed(42)

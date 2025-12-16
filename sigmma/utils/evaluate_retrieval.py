@@ -23,11 +23,8 @@ def load_embeddings(model, dataloader, device, config):
     for batch in dataloader:
         image = batch["image"].to(device)
 
-        if config.model.name in ["hierarchical_img_spatial_graph", "single_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
+        if config.model.name == "sigmma":
             spatial = batch["spatial_graph"].to(device)
-            inputs = [image, spatial]
-        elif model_name == "single_img_spatial":
-            spatial = batch["spatial"].to(device)
             inputs = [image, spatial]
         elif model_name in ["openAI_CLIP", "PLIP", "loki_OmiCLIP"]:
             spatial = batch["spatial_text"]

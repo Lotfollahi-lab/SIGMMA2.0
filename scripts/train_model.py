@@ -12,8 +12,24 @@ import yaml
 from sigmma.utils import train_one_epoch, load_dataset, load_model, evaluate, fix_seed, seed_worker, WandbLogger
 from sigmma.datasets import multimodal_collate
 
+import torch.distributed as dist
 
-def objective(args):
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+
+    torch.cuda.set_device(rank)
+    if world_size > 1:
+        dist.init_process_group("nccl", rank=rank, world_size=world_size)
+        is_distributed = True
+    else:
+        is_distributed = False
+    return is_distributed
+
+def cleanup():
+    dist.destroy_process_group()
+
+def objective(args, rank=None, world_size=None):
     fix_seed(42)
     dataset_name = args.config_file.split('/')[-1].split('_')[0]
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
@@ -24,14 +40,15 @@ def objective(args):
     if config.get("model.pretrained_image_encoder") is None:
         config.model.pretrained_image_encoder = ""
 
-    print(f"dataset_name: {dataset_name}")
     model_name = config.get("model.name")
-    print(f"Training model: {model_name}")
-    print(f"image_encoder: {config.model.pretrained_image_encoder}")
+    if int(os.environ.get("RANK", "0")) == 0:
+        print(f"dataset_name: {dataset_name}")
+        print(f"Training model: {model_name}")
+        print(f"image_encoder: {config.model.pretrained_image_encoder}")
+
     config.outdir = config.get("out_dir") if args.out_dir is None else args.out_dir
 
-    if os.path.exists(config.outdir) == False:
-        os.makedirs(config.outdir)
+    os.makedirs(config.outdir, exist_ok=True)
     
     if config.dataset.split_type == "section_split":
         dataset = load_dataset(config.dataset.train, is_train=True, model_name=model_name)
@@ -51,20 +68,23 @@ def objective(args):
         train_dataset = torch.utils.data.Subset(dataset, train_indices)
         eval_dataset = torch.utils.data.Subset(dataset, val_indices)
 
-    print(f"Train dataset size: {len(train_dataset)}")
-    print(f"Eval dataset size: {len(eval_dataset)}")
+    if int(os.environ.get("RANK", "0")) == 0:
+        print(f"Train dataset size: {len(train_dataset)}")
+        print(f"Eval dataset size: {len(eval_dataset)}")
 
-    print(f"Train dataset size: {len(train_dataset)}")
-    print(f"Eval dataset size: {len(eval_dataset)}")
+        print(f"Train dataset size: {len(train_dataset)}")
+        print(f"Eval dataset size: {len(eval_dataset)}")
 
     g = torch.Generator()
     g.manual_seed(42)
 
     batch_size = config.get("train.batch_size")
     random_sampler = torch.utils.data.RandomSampler(train_dataset, num_samples=config.get("train.max_num_samples_per_epoch", len(train_dataset)), replacement=False)
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=random_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
+    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if rank is not None else random_sampler
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
     sequential_sampler = torch.utils.data.SequentialSampler(eval_dataset)
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, sampler=sequential_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers)
+    eval_sampler = torch.utils.data.distributed.DistributedSampler(eval_dataset,) if rank is not None else sequential_sampler
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, sampler=eval_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers)
 
     # Add wandb logging
     wandb_config = {
@@ -86,11 +106,13 @@ def objective(args):
     # config.train.weight_decay = trial.suggest_categorical("weight_decay", wd_candidates)
     # config.model.temperature = trial.suggest_categorical("temperature", temp_candidates)
 
-    wandb_logger = WandbLogger(config=dict(config.model)|dict(config.train), **wandb_config)
-    wandb_logger.set_step(0)
+    if int(os.environ.get("RANK", "0")) == 0: 
+        wandb_logger = WandbLogger(config=dict(config.model)|dict(config.train), **wandb_config)
+        wandb_logger.set_step(0)
+    else:
+        wandb_logger = None
 
-    # Pass dataset to load_model for BLEEP to determine spot_embedding dynamically
-    model, optimizer, lr_scheduler = load_model(config, device, pretrained_image_encoder=config.model.pretrained_image_encoder, dataset=dataset)
+    model, optimizer, lr_scheduler = load_model(config, device, pretrained_image_encoder=config.model.pretrained_image_encoder, dataset=dataset, rank=rank)
 
     global_step, first_epoch, num_train_epochs = (
         0,
@@ -113,6 +135,7 @@ def objective(args):
         )
 
     eval_loss, _, _, _, _, _ = evaluate(config, model, eval_dataloader, device)
+    cleanup()
     return eval_loss
 
 if __name__ == "__main__":
@@ -125,4 +148,8 @@ if __name__ == "__main__":
     #study.optimize(objective, n_trials=10)
     #print("Best trial:", study.best_params)
 
-    objective(args)
+    local_rank = int(os.environ.get('LOCAL_RANK', 0))
+    world_size = int(os.environ.get('WORLD_SIZE', 1))
+
+    setup(local_rank, world_size)
+    objective(args, rank=local_rank, world_size=world_size)

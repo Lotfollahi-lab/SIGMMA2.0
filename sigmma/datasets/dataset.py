@@ -1,3 +1,4 @@
+import os
 from collections.abc import Sequence
 from pathlib import Path
 from tempfile import template
@@ -44,7 +45,8 @@ class MultiSectionDataset(torch.utils.data.Dataset):
         slides = manifest['sample_name']
         li_datsets = []
         for slide in slides:
-            print(f"Loading slide {slide}...")
+            if int(os.environ.get("RANK", "0")) == 0:
+                print(f"Loading slide {slide}...")
             image_file = manifest.loc[manifest['sample_name'] == slide, 'hematoxylin_eosin_image'].values[0]
             spatial_file = manifest.loc[manifest['sample_name'] == slide, 'spatial_preprocessed'].values[0]
             index_file = manifest.loc[manifest['sample_name'] == slide, 'index'].values[0]

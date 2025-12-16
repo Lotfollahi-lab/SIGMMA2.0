@@ -50,7 +50,8 @@ def load_model(config:ConfigDict,
                pretrained_image_encoder:str="UNI",
                pretrained_ckpt_path:Optional[str]=None,
                train: Optional[bool]=True,
-               dataset=None):
+               dataset=None,
+               rank:Optional[int]=None):
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
@@ -62,15 +63,16 @@ def load_model(config:ConfigDict,
         else:
             raise NotImplementedError(f"Pretrained image encoder {pretrained_image_encoder} is not implemented.")
 
-        if config.model.name == "sigmma":
-            model = sigmma(config.model, pretrained_image_encoder)
-        else:
-            raise NotImplementedError(f"Model {config.model.name} is not implemented.")
+        model = sigmma(config.model, pretrained_image_encoder)
 
     else:
         raise NotImplementedError(f"Model {config.model.name} is not implemented.")
 
-    model = model.to(device)
+    if rank is not None: 
+        model = model.to(torch.cuda.current_device())
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[torch.cuda.current_device()], output_device=torch.cuda.current_device())
+    else:
+        model = model.to(device)
 
     print(f"Total parameters in the {config.model.name} model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
 

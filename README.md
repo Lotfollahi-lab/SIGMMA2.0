@@ -9,7 +9,7 @@ Install the project
 - You can install the requirements with [poetry](https://github.com/python-poetry/poetry):  
   `poetry install`
 
-Note. [*STEMO*](https://github.com/Lotfollahi-lab/stemo), [*UNI*](https://github.com/mahmoodlab/UNI), and [*LOKI*](https://github.com/GuangyuWangLab2021/Loki) must be installed separately and their local paths should be provided in the pyproject.toml before environment installation.
+Note. [*NEMO*](https://github.com/Lotfollahi-lab/pantheome), [*UNI*](https://github.com/mahmoodlab/UNI), and [*LOKI*](https://github.com/GuangyuWangLab2021/Loki) must be installed separately and their local paths should be provided in the pyproject.toml before environment installation.
 
 ## Data Preparation
 You can download dataset in the following [link](https://huggingface.co/datasets/AnonymousAuthor42/preprocessed_hest1k_LUAD)

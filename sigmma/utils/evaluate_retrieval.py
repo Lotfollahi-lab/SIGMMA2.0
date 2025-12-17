@@ -43,7 +43,7 @@ def load_embeddings(model, dataloader, device, config):
             spatial_embed = model_output["spatial_embedding"]
 
         # Normalize embeddings
-        if config.model.name in ["hierarchical_img_spatial_graph", "hierarchical_img_spatial_graph_wo_sparsification"]:
+        if config.model.name == "sigmma":
             image_embed = image_embed[-1]
             spatial_embed = spatial_embed[-1]
         else:

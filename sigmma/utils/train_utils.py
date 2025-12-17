@@ -70,7 +70,7 @@ def load_model(config:ConfigDict,
 
     if rank is not None: 
         model = model.to(torch.cuda.current_device())
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[torch.cuda.current_device()], output_device=torch.cuda.current_device())
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[torch.cuda.current_device()], output_device=torch.cuda.current_device(), find_unused_parameters=True)
     else:
         model = model.to(device)
 

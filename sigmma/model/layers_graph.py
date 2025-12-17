@@ -118,7 +118,7 @@ class StructureLearning(torch.nn.Module):
             edges_soft = dist.rsample()
             edges_hard = (edges_soft > self.threshold).float()
             y = (edges_hard - edges_soft).detach() + edges_soft  # Straight-through
-            print('------------')
+            # print('------------')
 
             #  == Update inter-subgraph edges ===
             # Identify inter-subgraph edges
@@ -140,18 +140,18 @@ class StructureLearning(torch.nn.Module):
 
             # Update edge weights for inter-subgraph edges only
             g.edata['weight'][inter_mask & non_neighbor_edge_mask] = y[inter_mask & non_neighbor_edge_mask]
-            print(f"the number of {layer_id}th-step rescued edges: {g.edata['weight'].sum()} / {g.num_edges()}")
+            # print(f"the number of {layer_id}th-step rescued edges: {g.edata['weight'].sum()} / {g.num_edges()}")
             # Update edge masks for inter-subgraph edges only
             edge_mask = g.edata['mask']
             g.edata['mask'][(edge_mask == 0) & (y > self.threshold) & non_neighbor_edge_mask] = layer_id + 1
-            print(f"the number of {layer_id}th-step rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
+            # print(f"the number of {layer_id}th-step rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
 
             updated_weight = g.edata['weight'].clone()
             updated_mask = g.edata['mask'].clone()
 
         g.edata['weight'] = updated_weight
         g.edata['mask'] = updated_mask
-        print(f"the number of cumulative rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
+        # print(f"the number of cumulative rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
         return g
     
 class GRAPHLayer(torch.nn.Module):

@@ -59,8 +59,9 @@ def objective(args, rank=None, world_size=None):
 
         train_indices_file = Path(config.dataset.train.indices)
         val_indices_file = Path(config.dataset.validation.indices)
-        
-        print(f"Loading pre-saved dataset split indices from {train_indices_file.parent}")
+
+        if int(os.environ.get("RANK", "0")) == 0:
+            print(f"Loading pre-saved dataset split indices from {train_indices_file.parent}")
 
         train_indices = np.load(train_indices_file).tolist()
         val_indices = np.load(val_indices_file).tolist()
@@ -69,9 +70,6 @@ def objective(args, rank=None, world_size=None):
         eval_dataset = torch.utils.data.Subset(dataset, val_indices)
 
     if int(os.environ.get("RANK", "0")) == 0:
-        print(f"Train dataset size: {len(train_dataset)}")
-        print(f"Eval dataset size: {len(eval_dataset)}")
-
         print(f"Train dataset size: {len(train_dataset)}")
         print(f"Eval dataset size: {len(eval_dataset)}")
 

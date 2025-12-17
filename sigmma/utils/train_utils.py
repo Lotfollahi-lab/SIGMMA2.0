@@ -74,7 +74,8 @@ def load_model(config:ConfigDict,
     else:
         model = model.to(device)
 
-    print(f"Total parameters in the {config.model.name} model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+    if int(os.environ.get("RANK", "0")) == 0:
+        print(f"Total parameters in the {config.model.name} model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
 
     if train:
         optimizer = torch.optim.AdamW(
@@ -272,10 +273,11 @@ def save_checkpoint(
         "global_step": global_step,
     }
     torch.save(checkpoint, save_path)
-    if logger:
-        logger.info(f"Checkpoint saved at {save_path}")
-    else:
-        print(f"Checkpoint saved at {save_path}")
+    if int(os.environ.get("RANK", "0")) == 0:
+        if logger:
+            logger.info(f"Checkpoint saved at {save_path}")
+        else:
+            print(f"Checkpoint saved at {save_path}")
     return save_path
 
 
@@ -289,7 +291,8 @@ def load_checkpoint(model, optimizer, lr_scheduler, checkpoint_path, device="cud
         lr_scheduler.load_state_dict(checkpoint["lr_scheduler_state_dict"])
     global_step = checkpoint.get("global_step", 0)
 
-    print(f"Loaded checkpoint from {checkpoint_path} at step {global_step}")
+    if int(os.environ.get("RANK", "0")) == 0:
+        print(f"Loaded checkpoint from {checkpoint_path} at step {global_step}")
     return global_step
 
 

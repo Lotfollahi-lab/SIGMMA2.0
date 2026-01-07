@@ -14,17 +14,11 @@ from sigmma.datasets import multimodal_collate
 
 import torch.distributed as dist
 
-def setup(rank, world_size):
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
-
-    torch.cuda.set_device(rank)
-    if world_size > 1:
-        dist.init_process_group("nccl", rank=rank, world_size=world_size)
-        is_distributed = True
-    else:
-        is_distributed = False
-    return is_distributed
+def setup():
+    dist.init_process_group(backend="nccl", init_method="env://")
+    local_rank = int(os.environ["LOCAL_RANK"])
+    torch.cuda.set_device(local_rank)
+    return True
 
 def cleanup():
     dist.destroy_process_group()
@@ -35,7 +29,7 @@ def objective(args, rank=None, world_size=None):
     config_file = yaml.load(open(args.config_file, "r"), yaml.FullLoader)
     config = ConfigDict(config_file)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda", rank)
 
     if config.get("model.pretrained_image_encoder") is None:
         config.model.pretrained_image_encoder = ""
@@ -113,7 +107,7 @@ def objective(args, rank=None, world_size=None):
     else:
         wandb_logger = None
 
-    model, optimizer, lr_scheduler = load_model(config, device, pretrained_image_encoder=config.model.pretrained_image_encoder, dataset=dataset, rank=rank)
+    model, optimizer, lr_scheduler = load_model(config, pretrained_image_encoder=config.model.pretrained_image_encoder, rank=rank)
 
     global_step, first_epoch, num_train_epochs = (
         0,
@@ -152,5 +146,5 @@ if __name__ == "__main__":
     local_rank = int(os.environ.get('LOCAL_RANK', 0))
     world_size = int(os.environ.get('WORLD_SIZE', 1))
 
-    setup(local_rank, world_size)
+    setup()
     objective(args, rank=local_rank, world_size=world_size)

@@ -46,11 +46,9 @@ def load_dataset(config_dataset, is_train=False, model_name=None):
 
 
 def load_model(config:ConfigDict, 
-               device:Optional[str]="cuda",
                pretrained_image_encoder:str="UNI",
                pretrained_ckpt_path:Optional[str]=None,
                train: Optional[bool]=True,
-               dataset=None,
                rank:Optional[int]=None):
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
@@ -72,6 +70,7 @@ def load_model(config:ConfigDict,
         model = model.to(torch.cuda.current_device())
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[torch.cuda.current_device()], output_device=torch.cuda.current_device(), find_unused_parameters=True)
     else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = model.to(device)
 
     if int(os.environ.get("RANK", "0")) == 0:
@@ -120,7 +119,6 @@ def train_one_epoch(
     """
     One epoch of training for the model.
     """
-    model = model.to(device)
     model.train()
 
     if int(os.environ.get("RANK", "0")) == 0:
@@ -229,8 +227,15 @@ def train_one_epoch(
         if (
             eval_dataloader is not None
             and (global_step + 1) % config.train.eval_every == 0
+            and int(os.environ.get("RANK", "0")) == 0
             ):
             eval_loss, _, _, _, _, _ = evaluate(config, model, eval_dataloader, device)
+
+            if config.model.name == "sigmma":
+                image_embedding = image_embedding[-1]
+                spatial_embedding = spatial_embedding[-1]
+                eval_image_embedding = eval_image_embedding[-1]
+                eval_spatial_embedding = eval_spatial_embedding[-1]
 
             # Plot learnt embeddings
             fig_train_img2spatial_heatmap = heatmap(image_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")
@@ -300,6 +305,8 @@ def evaluate(config, model, eval_dataloader, device):
     """
     Evaluate the model on the validation dataset.
     """
+    # DDP unwrap
+    model = model.module if hasattr(model, "module") else model
     model.eval()
     all_image_embeddings = []
     all_spatial_embeddings = []

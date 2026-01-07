@@ -234,8 +234,6 @@ def train_one_epoch(
             if config.model.name == "sigmma":
                 image_embedding = image_embedding[-1]
                 spatial_embedding = spatial_embedding[-1]
-                eval_image_embedding = eval_image_embedding[-1]
-                eval_spatial_embedding = eval_spatial_embedding[-1]
 
             # Plot learnt embeddings
             fig_train_img2spatial_heatmap = heatmap(image_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")

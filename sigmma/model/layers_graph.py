@@ -65,16 +65,6 @@ class StructureLearning(torch.nn.Module):
         with g.local_scope():
             edge_feat_specs = {"mask": -1, "weight": 0}
 
-            # # Add self-loops
-            # g = dgl.remove_self_loop(g)
-            # g_unbatched = []
-            # for graph in dgl.unbatch(g):
-            #     for feat, fill_val in edge_feat_specs.items():
-            #         graph = dgl.add_self_loop(graph, edge_feat_names=[feat], fill_data=fill_val)
-            #     g_unbatched.append(graph)
-
-            # g = dgl.batch(g_unbatched)
-
             g_unbatched = []
             for gi in dgl.unbatch(g):
                 # Remove self-loops if any
@@ -118,7 +108,6 @@ class StructureLearning(torch.nn.Module):
             edges_soft = dist.rsample()
             edges_hard = (edges_soft > self.threshold).float()
             y = (edges_hard - edges_soft).detach() + edges_soft  # Straight-through
-            # print('------------')
 
             #  == Update inter-subgraph edges ===
             # Identify inter-subgraph edges

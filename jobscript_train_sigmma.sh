@@ -6,8 +6,8 @@
 #BSUB -q gpu-lotfollahi
 #BSUB -gpu "mode=shared:j_exclusive=no:gmem=76GB:num=2"
 #BSUB -n 16
-#BSUB -M 500GB
-#BSUB -R "select[mem>500GB] rusage[mem=500GB] span[hosts=1]"
+#BSUB -M 400GB
+#BSUB -R "select[mem>400GB] rusage[mem=400GB] span[hosts=1]"
 
 set -e
 

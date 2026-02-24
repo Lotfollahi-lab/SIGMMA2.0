@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from pathlib import Path
 from typing import Optional
 from ml_collections.config_dict import ConfigDict
+import torch.distributed as dist
 
 from sigmma.datasets.dataset import MultiSectionDataset
 from sigmma.model import sigmma
@@ -121,7 +122,13 @@ def train_one_epoch(
     """
     model.train()
 
-    if int(os.environ.get("RANK", "0")) == 0:
+    # Identify rank in DDP setting
+    if dist.is_available() and dist.is_initialized():
+        rank = dist.get_rank()
+    else:
+        rank = 0
+
+    if rank == 0:
         wandb.watch(model, log=None, log_freq=10)
 
     accum_freq = config.get("train.gradient_accumulation_steps", 1)
@@ -149,7 +156,7 @@ def train_one_epoch(
                     loss += symmetric_InfoNCE()(model_out['image_embedding'][s], model_out['spatial_embedding'][s])
                 loss = loss / num_resolutions
             else:
-                if int(os.environ.get("RANK", "0")) == 0:
+                if rank == 0:
                     print('Loss', model_out['loss'])
                 loss = model_out["loss"]
                 image_embedding = model_out["image_embedding"] # Tensor (B, D)
@@ -176,7 +183,7 @@ def train_one_epoch(
                     accum_features["spatial_embedding"].append(spatial_embedding)
 
             if (i+1) % accum_freq > 0:
-                if int(os.environ.get("RANK", "0")) == 0:
+                if rank == 0:
                     print(f"Skipping optimizer step at iter {i}, accumulating more gradients...")
                 continue
             
@@ -228,9 +235,14 @@ def train_one_epoch(
         if (
             eval_dataloader is not None
             and (global_step + 1) % config.train.eval_every == 0
-            and int(os.environ.get("RANK", "0")) == 0
             ):
-            eval_loss, _, _, _, _, _ = evaluate(config, model, eval_dataloader, device)
+            # In DDP mode, synchronize all ranks
+            if dist.is_available() and dist.is_initialized():
+                dist.barrier()
+
+            # Run eval
+            if rank == 0:
+                eval_loss, _, _, _, _, _ = evaluate(config, model, eval_dataloader, device)
 
             if config.model.name == "sigmma":
                 image_embedding = image_embedding[-1]
@@ -241,13 +253,18 @@ def train_one_epoch(
             fig_train_img2img_heatmap = heatmap(image_embedding.detach().cpu(), image_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Image Embeddings")
             fig_train_spatial2spatial_heatmap = heatmap(spatial_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
 
-            model.train() # Set model back to training mode
             if wandb_logger is not None:
                 wandb_logger.update({"(train)img2spatial heatmap": wandb.Image(fig_train_img2spatial_heatmap),
                                     "(train)img2img heatmap": wandb.Image(fig_train_img2img_heatmap),
                                     "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),
                                     "(eval)loss": eval_loss,
                                     "epoch": epoch_index + 1})
+
+            if dist.is_available() and dist.is_initialized():
+                dist.barrier()
+
+            model.train() # Set model back to training mode
+
         if wandb_logger is not None:
             wandb_logger.update({"(train)loss": loss,
                                 "(train)lr": lr_scheduler.get_last_lr()[0],

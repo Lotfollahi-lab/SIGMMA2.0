@@ -142,10 +142,11 @@ def train_one_epoch(
             # Forward pass
             with torch.amp.autocast(device.type, enabled=True):
                 model_out = model(*inputs)
+                num_resolutions = len(model_out['image_embedding'])
             if config.model.name == "sigmma":
                 loss = 0
                 for s in range(num_resolutions):
-                    loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'][s], inputs_for_loss['spatial_embedding'][s])
+                    loss += symmetric_InfoNCE()(model_out['image_embedding'][s], model_out['spatial_embedding'][s])
                 loss = loss / num_resolutions
             else:
                 if int(os.environ.get("RANK", "0")) == 0:

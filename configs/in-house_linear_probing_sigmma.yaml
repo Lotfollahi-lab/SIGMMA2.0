@@ -1,6 +1,6 @@
 model:
   name: sigmma 
-  checkpoint_path: path_to_trained_checkpoint/checkpoint-epochN.pth 
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs/in-house_sigmma_121618/checkpoint-epoch15.pth
   pretrained_image_encoder: UNI
   pretrained_image_encoder_ckpt_path: path_to_uni_checkpoint/vit_large_patch16_224.dinov2.uni_mass100k/
   image_encoder_input_dim: 1024
@@ -17,6 +17,8 @@ model:
 
 dataset:
   split_type: 'section_split'
+  type_pretrained_cell_embedding: 'nemo'
+  tissue_filtering_threshold: 0
   train:
     manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv
     pretrained_cell_embedding: True

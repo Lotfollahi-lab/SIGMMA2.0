@@ -37,8 +37,8 @@ train:
   lr_scheduler: "step"
   lr_step_size: 500
   lr_gamma: 0.1
-  save_every: 1000
-  eval_every: 1000
+  save_every: 500
+  eval_every: 500
   gradient_accumulation_steps: 10
   num_workers: 8
-  max_num_eval_samples: 5000
+  max_num_eval_samples: 1000

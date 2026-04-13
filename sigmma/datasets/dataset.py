@@ -1,17 +1,22 @@
+from __future__ import annotations
+import bisect
 import os
 from collections.abc import Sequence
 from pathlib import Path
 from tempfile import template
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, OrderedDict, Union
 import random
 
 import numpy as np
 import pandas as pd
+
 from collections.abc import Mapping, Sequence
 from itertools import product
 import scanpy
+import scipy.sparse as sp
+
 import zarr
-import torch
+:import torch
 from torchvision.transforms import ToTensor, Resize, Compose
 import dgl
 from torch.utils.data._utils.collate import collate, collate_tensor_fn, collate_float_fn, collate_int_fn, collate_str_fn
@@ -190,8 +195,10 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.pretrained_cell_embedding = pretrained_cell_embedding
         self.is_train = is_train
         self.model_name = model_name
-        if self.pretrained_cell_embedding == True:
-            assert type_pretrained_cell_embedding in ['nemo', 'novae', 'X_pca_harmony'], "type_pretrained_cell_embedding must be either 'nemo' or 'novae'"
+
+        if self.pretrained_cell_embedding:
+            assert type_pretrained_cell_embedding in ['nemo', 'novae', 'X_pca_harmony'], \
+                "type_pretrained_cell_embedding must be 'nemo', 'novae', or 'X_pca_harmony'"
             self.type_pretrained_cell_embedding = type_pretrained_cell_embedding
 
     def _get_cell_embeddings(self, mask: np.ndarray) -> np.ndarray:
@@ -214,17 +221,16 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         idx = int(self.valid_indices[idx]) if self.valid_indices is not None else idx
-        # 0. image slice
+
+        # 0. tile coordinates from index array
         slice_args = self.index_array[idx]
         y_start, x_start, _ = np.uint32(slice_args)
 
         # 1-1. cells inside this FOV
         points = self._coords   # (N, 2)  – already in memory, no h5ad access
         mask = (
-            (x_start <= points[:, 0])
-            & (points[:, 0] < x_start + self.fov_size)
-            & (y_start <= points[:, 1])
-            & (points[:, 1] < y_start + self.fov_size)
+            (x_start <= points[:, 0]) & (points[:, 0] < x_start + self.fov_size) &
+            (y_start <= points[:, 1]) & (points[:, 1] < y_start + self.fov_size)
         )
 
         n_cells = int(mask.sum())
@@ -244,7 +250,6 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                 cell_embeddings = torch.tensor(self._X[mask], dtype=torch.float32)
 
         spatial_embedding = cell_embeddings.mean(dim=0)
-        
         if torch.isnan(spatial_embedding).any():
             spatial_embedding = spatial_embedding.nan_to_num(0.0)
 
@@ -295,7 +300,9 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             spatial_graph.ndata['y_pos'] = disjoint.ndata['y_pos']
             spatial_graph.ndata['cell_coordinates'] = disjoint.ndata['cell_coordinates']
             spatial_graph.edata['mask'] = edge_mask
-            spatial_graph.edata['weight'] = torch.where(edge_mask == -1, torch.tensor(1.0), torch.tensor(0.0))
+            spatial_graph.edata['weight'] = torch.where(
+                edge_mask == -1, torch.tensor(1.0), torch.tensor(0.0)
+            )
 
         # 1-4. spatial text (top-K genes by mean expression in FOV)
         if sp.issparse(self._X):
@@ -303,28 +310,31 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         else:
             X_fov = self._X[mask]
 
-        # 2. cropped image
-        fov_image = self.image_array[
-                    :,
-                    y_start : y_start + self.fov_size,
-                    x_start : x_start + self.fov_size,
-                    ]
-        
-        # For other models, just normalize to [0, 1] 
-        image = torch.tensor(fov_image) / 255.0
+        var_index = self._var_index
+        if self.housekeeping_genes is not None:
+            hk_set = set(self.housekeeping_genes)
+            keep = np.array([g not in hk_set for g in var_index])
+            X_fov = X_fov[:, keep]
+            var_index = var_index[keep]
 
-        # Label
-        label = {}
+        mean_exp = X_fov.mean(axis=0).ravel()   # works for both ndarray and matrix
+        K = self.number_of_genes
+        top_idx = np.argsort(mean_exp)[-K:][::-1]
+        spatial_text = " ".join(var_index[top_idx])
+
         topK_exp = mean_exp[np.argsort(mean_exp)[-K:]]
 
-        label['topK_exp'] = torch.tensor(topK_exp, dtype=torch.float32) # TODO: add gene names
+        # 2. cropped image
+        fov_image = self.image_array[:, y_start: y_start + self.fov_size,
+                                        x_start: x_start + self.fov_size]
+        image = torch.tensor(fov_image) / 255.0
 
         return {
             "image": image,
             "spatial": spatial_embedding,
             "spatial_graph": spatial_graph,
             "spatial_text": spatial_text,
-            "label": label,
+            "label": topK_exp,
             "metadata": {"section_id": self.section_id, 
                          "tissue_type": self.tissue_type,
                          "annotation": self.spatial_annotation_file}
@@ -381,7 +391,6 @@ def _empty_batch_like(template: Mapping):
             # Fallback: empty list; your downstream code may stack later
             out[k] = []
     return out
-
 
 def multimodal_collate_dict(batch_dicts):
     # Handle None subdicts

@@ -72,13 +72,22 @@ def objective(args, rank=None, world_size=None):
 
     batch_size = config.get("train.batch_size")
     # Train dataloader
-    random_sampler = torch.utils.data.RandomSampler(train_dataset, num_samples=config.get("train.max_num_samples_per_epoch", len(train_dataset)), replacement=False, generator=g)
-    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if rank is not None else random_sampler
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
+    num_train_samples = config.get("train.max_num_samples_per_epoch", len(train_dataset))
+    indices_train = np.random.default_rng(0).choice(len(train_dataset), size=min(num_train_samples, len(train_dataset)), replace=False)
+
+    if rank is not None:
+        subset = torch.utils.data.Subset(train_dataset, indices_train)
+        train_sampler = torch.utils.data.distributed.DistributedSampler(subset)
+        train_dataloader = DataLoader(subset, batch_size=batch_size, sampler=train_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
+    else:
+        # train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if rank is not None else train_sampler
+        train_sampler = torch.utils.data.SubsetRandomSampler(indices_train, generator=g)
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
+
     # Eval dataloader
     num_eval_samples = config.get("train.max_num_eval_samples", len(eval_dataset))
-    indices = np.random.default_rng(0).choice(len(eval_dataset), size=min(num_eval_samples, len(eval_dataset)), replace=False)
-    eval_sampler = torch.utils.data.SubsetRandomSampler(indices, generator=g)
+    indices_eval = np.random.default_rng(0).choice(len(eval_dataset), size=min(num_eval_samples, len(eval_dataset)), replace=False)
+    eval_sampler = torch.utils.data.SubsetRandomSampler(indices_eval, generator=g)
     eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, sampler=eval_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, shuffle=False, drop_last=False)
 
     # Add wandb logging

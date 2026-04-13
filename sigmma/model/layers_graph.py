@@ -6,16 +6,16 @@ from sympy import galois_group
 import torch
 from torch.nn import Parameter
 
-from typing import Union, Optional
+from typing import Union, Literal,Optional
 
 import dgl
 
 class StructureLearning(torch.nn.Module):
     def __init__(self, 
                  input_dim:int, 
-                 sparse:Union['sparse','hard'], 
+                 sparse:Literal['sparse','hard'],
                  emb_layer:int=1, 
-                 activation: Union['relu','sigmoid','leaky_relu']='leaky_relu',
+                 activation: Literal['relu','sigmoid','leaky_relu']='leaky_relu',
                  threshold:float=0.5, 
                  temperature:float=0.5):
         super(StructureLearning, self).__init__()
@@ -129,25 +129,25 @@ class StructureLearning(torch.nn.Module):
 
             # Update edge weights for inter-subgraph edges only
             g.edata['weight'][inter_mask & non_neighbor_edge_mask] = y[inter_mask & non_neighbor_edge_mask]
-            # print(f"the number of {layer_id}th-step rescued edges: {g.edata['weight'].sum()} / {g.num_edges()}")
+            print(f"the number of {layer_id}th-step rescued edges: {g.edata['weight'].sum()} / {g.num_edges()}")
             # Update edge masks for inter-subgraph edges only
             edge_mask = g.edata['mask']
             g.edata['mask'][(edge_mask == 0) & (y > self.threshold) & non_neighbor_edge_mask] = layer_id + 1
-            # print(f"the number of {layer_id}th-step rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
+            print(f"the number of {layer_id}th-step rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
 
             updated_weight = g.edata['weight'].clone()
             updated_mask = g.edata['mask'].clone()
 
         g.edata['weight'] = updated_weight
         g.edata['mask'] = updated_mask
-        # print(f"the number of cumulative rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
+        print(f"the number of cumulative rescued edges: {(g.edata['mask']!=0).sum()} / {g.num_edges()}")
         return g
     
 class GRAPHLayer(torch.nn.Module):
     def __init__(self,
                  input_dim: int,
                  output_dim: int,
-                 activation: Union['relu','sigmoid','leaky_relu'] = 'leaky_relu',
+                 activation: Literal['relu','sigmoid','leaky_relu'] = 'leaky_relu',
                  dropout: float = 0,
                  bias: bool = True,
                  num_gnn_layers: int = 1,
@@ -236,7 +236,7 @@ class BaseGRAPHLayer(torch.nn.Module):
     def __init__(self,
                  input_dim: int,
                  output_dim: int,
-                 activation: Union['relu','sigmoid','leaky_relu'] = 'leaky_relu',
+                 activation: Literal['relu','sigmoid','leaky_relu'] = 'leaky_relu',
                  dropout: float = 0,
                  num_gnn_layers: int = 1,
                  ):
@@ -286,8 +286,8 @@ class READOUTLayer(torch.nn.Module):
     def __init__(self, 
                  input_dim: int,
                  output_dim: int,
-                 aggregate: Union['mean','max','add','attn_pool']= 'max',
-                 activation: Union['relu', 'sigmoid', 'leaky_relu'] = 'leaky_relu',
+                 aggregate: Literal['mean','max','add','attn_pool']= 'max',
+                 activation: Literal['relu', 'sigmoid', 'leaky_relu'] = 'leaky_relu',
                  dropout: float = 0,
                  ):
         super(READOUTLayer, self).__init__()

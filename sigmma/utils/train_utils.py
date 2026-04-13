@@ -12,8 +12,7 @@ from sigmma.datasets.dataset import MultiSectionDataset
 from sigmma.model import sigmma
 from sigmma.model import UNI, ResNet50
 from sigmma.model import symmetric_InfoNCE, bleep_cross_entropy
-from .evaluate_retrieval import retrieval_score, eval_retrieval
-import loki.utils
+from ..evaluation.evaluate_retrieval import retrieval_score, eval_retrieval
 
 from sklearn.decomposition import PCA
 import umap
@@ -287,13 +286,20 @@ def save_checkpoint(
     model, optimizer, lr_scheduler, output_dir, global_step, epoch_index, logger=None
 ):
     save_path = Path(output_dir) / f"checkpoint-epoch{epoch_index}.pth"
+
+    if hasattr(model, 'module'):
+        model_state_dict = model.module.state_dict()
+    else:
+        model_state_dict = model.state_dict()
+
     checkpoint = {
-        "model_state_dict": model.state_dict(),
+        "model_state_dict": model_state_dict,
         "optimizer_state_dict": optimizer.state_dict(),
         "lr_scheduler_state_dict": lr_scheduler.state_dict(),
         "global_step": global_step,
     }
     torch.save(checkpoint, save_path)
+
     if int(os.environ.get("RANK", "0")) == 0:
         if logger:
             logger.info(f"Checkpoint saved at {save_path}")
@@ -302,10 +308,36 @@ def save_checkpoint(
     return save_path
 
 
+
 def load_checkpoint(model, optimizer, lr_scheduler, checkpoint_path, device="cuda"):
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
-    model.load_state_dict(checkpoint["model_state_dict"])
+    state_dict = checkpoint["model_state_dict"]
+    is_ddp_checkpoint = False
+
+    if len(state_dict) > 0:
+        first_key = next(iter(state_dict))
+        is_ddp_checkpoint = first_key.startswith('module.')
+
+    model_is_ddp = hasattr(model, 'module')
+
+    print(f"Checkpoint DDP: {is_ddp_checkpoint}, Model DDP: {model_is_ddp}")
+
+    if is_ddp_checkpoint and not model_is_ddp:
+        new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+        model.load_state_dict(new_state_dict, strict=True)
+        print("Removed 'module.' prefix from DDP checkpoint")
+    elif not is_ddp_checkpoint and model_is_ddp:
+        new_state_dict = {"module." + k: v for k, v in state_dict.items()}
+        model.module.load_state_dict(new_state_dict, strict=True)
+        print("Added 'module.' prefix for DDP model")
+    else:
+        if model_is_ddp:
+            model.module.load_state_dict(state_dict, strict=True)
+        else:
+            model.load_state_dict(state_dict, strict=True)
+        print("Direct load (matching DDP status)")
+
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     if lr_scheduler is not None:

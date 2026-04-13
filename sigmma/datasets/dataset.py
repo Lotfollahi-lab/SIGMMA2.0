@@ -49,10 +49,12 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                 print(f"Loading slide {slide}...")
             image_file = manifest.loc[manifest['sample_name'] == slide, 'hematoxylin_eosin_image'].values[0]
             spatial_file = manifest.loc[manifest['sample_name'] == slide, 'spatial_preprocessed'].values[0]
+            spatial_annotation_file = manifest.loc[manifest['sample_name'] == slide, 'annotation'].values[0]
             index_file = manifest.loc[manifest['sample_name'] == slide, 'index'].values[0]
             dataset = SpatialPatchDataset(
                 image_file=Path(image_file),
                 spatial_file=Path(spatial_file),
+                spatial_annotation_file=spatial_annotation_file,
                 indices_file=Path(index_file),
                 fov_size=fov_size,
                 number_of_genes=number_of_genes,
@@ -103,6 +105,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         image_file: Path | str,
         spatial_file: Path | str,
         indices_file: Path | str,
+        spatial_annotation_file: Optional[Path | str] = None,
         fov_size: int = 256,
         number_of_genes: int = 50,
         num_resolutions: int = 3,
@@ -279,7 +282,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             "label": label,
             "metadata": {"section_id": self.section_id, 
                          "tissue_type": self.tissue_type,
-                         }
+                         "annotation": self.spatial_annotation_file}
         }
 
     def __len__(self) -> int:

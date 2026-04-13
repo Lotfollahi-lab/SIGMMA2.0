@@ -12,8 +12,7 @@ from sigmma.datasets.dataset import MultiSectionDataset
 from sigmma.model import sigmma
 from sigmma.model import UNI, ResNet50
 from sigmma.model import symmetric_InfoNCE, bleep_cross_entropy
-from .evaluate_retrieval import retrieval_score, eval_retrieval
-import loki.utils
+from ..evaluation.evaluate_retrieval import retrieval_score, eval_retrieval
 
 from sklearn.decomposition import PCA
 import umap

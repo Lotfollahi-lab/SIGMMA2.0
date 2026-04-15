@@ -9,7 +9,7 @@ from pathlib import Path
 from ml_collections.config_dict import ConfigDict
 import yaml
 
-from sigmma.utils import train_one_epoch, load_dataset, load_model, evaluate, fix_seed, seed_worker, WandbLogger
+from sigmma.utils import train, load_dataset, load_model, evaluate, fix_seed, seed_worker, WandbLogger
 from sigmma.datasets import multimodal_collate
 
 import torch.distributed as dist
@@ -71,24 +71,18 @@ def objective(args, rank=None, world_size=None):
     g.manual_seed(42)
 
     batch_size = config.get("train.batch_size")
-    # Train dataloader
-    num_train_samples = config.get("train.max_num_train_samples", len(train_dataset))
-    indices_train = np.random.default_rng(0).choice(len(train_dataset), size=min(num_train_samples, len(train_dataset)), replace=False)
-
+    # Train dataloader: full dataset, reshuffled each pass via sampler.set_epoch in the training loop
     if rank is not None:
-        subset = torch.utils.data.Subset(train_dataset, indices_train)
-        train_sampler = torch.utils.data.distributed.DistributedSampler(subset)
-        train_dataloader = DataLoader(subset, batch_size=batch_size, sampler=train_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, shuffle=True)
     else:
-        # train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if rank is not None else train_sampler
-        train_sampler = torch.utils.data.SubsetRandomSampler(indices_train, generator=g)
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
+        train_sampler = torch.utils.data.RandomSampler(train_dataset, generator=g)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
 
-    # Eval dataloader
+    # Eval dataloader: fixed subset for reproducible evaluation
     num_eval_samples = config.get("train.max_num_eval_samples", len(eval_dataset))
     indices_eval = np.random.default_rng(0).choice(len(eval_dataset), size=min(num_eval_samples, len(eval_dataset)), replace=False)
-    eval_sampler = torch.utils.data.SubsetRandomSampler(indices_eval, generator=g)
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, sampler=eval_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, shuffle=False, drop_last=False)
+    eval_subset = torch.utils.data.Subset(eval_dataset, indices_eval)
+    eval_dataloader = DataLoader(eval_subset, batch_size=batch_size, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, shuffle=False, drop_last=False)
 
     # Add wandb logging
     wandb_config = {
@@ -118,25 +112,17 @@ def objective(args, rank=None, world_size=None):
 
     model, optimizer, lr_scheduler = load_model(config, pretrained_image_encoder=config.model.pretrained_image_encoder, rank=rank)
 
-    global_step, first_epoch, num_train_epochs = (
-        0,
-        0,
-        config.get("train.epochs"),
+    train(
+        config,
+        model,
+        train_dataloader,
+        eval_dataloader,
+        optimizer,
+        lr_scheduler,
+        max_steps=config.get("train.max_steps"),
+        device=device,
+        wandb_logger=wandb_logger,
     )
-
-    for epoch_index in range(first_epoch, num_train_epochs):
-        global_step = train_one_epoch(
-            config,
-            model,
-            train_dataloader,
-            eval_dataloader,
-            optimizer,
-            lr_scheduler,
-            global_step,
-            epoch_index,
-            device=device,
-            wandb_logger=wandb_logger,
-        )
 
     eval_loss, _, _, _, _, _ = evaluate(config, model, eval_dataloader, device)
     cleanup()

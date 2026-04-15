@@ -84,7 +84,7 @@ def load_model(config:ConfigDict,
         )
 
         if config.train.lr_scheduler == "constant":
-            lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1, total_iters=config.train.epochs * config.train.batch_size)
+            lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1, total_iters=config.train.max_steps)
 
         elif config.train.lr_scheduler == "step":
             lr_scheduler = torch.optim.lr_scheduler.StepLR(
@@ -104,20 +104,20 @@ def load_model(config:ConfigDict,
         return model
 
 
-def train_one_epoch(
+def train(
     config,
     model,
     train_dataloader,
     eval_dataloader,
     optimizer,
     lr_scheduler,
-    global_step,
-    epoch_index,
+    max_steps,
     device,
     wandb_logger,
 ):
     """
-    One epoch of training for the model.
+    Step-based training loop. Runs until global_step reaches max_steps,
+    cycling through the dataloader as needed.
     """
     model.train()
 
@@ -133,160 +133,169 @@ def train_one_epoch(
     accum_freq = config.get("train.gradient_accumulation_steps", 1)
     if accum_freq > 1:
         accum_images, accum_spatial, accum_features = [], [], {}
-        
-    for i, batch in enumerate(train_dataloader):
-        image = batch["image"].to(device)
-        if config.model.name == "sigmma":
-            spatial = batch['spatial_graph'].to(device)
-            inputs = [image, spatial]
-        else:
-            raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
-        
-        optimizer.zero_grad()
-        # Gradient accumulation code adapted from OpenCLIP (https://github.com/mlfoundations/open_clip/blob/main/src/open_clip_train/train.py)
-        if accum_freq == 1:
-            # Forward pass
-            with torch.amp.autocast(device.type, enabled=True):
-                model_out = model(*inputs)
-                num_resolutions = len(model_out['image_embedding'])
+
+    global_step = 0
+    i = -1
+    pass_index = 0
+    steps_per_pass = len(train_dataloader)
+    train_sampler = getattr(train_dataloader, "sampler", None)
+    while global_step < max_steps:
+        if hasattr(train_sampler, "set_epoch"):
+            train_sampler.set_epoch(pass_index)
+        for batch in train_dataloader:
+            if global_step >= max_steps:
+                break
+            i += 1
+            image = batch["image"].to(device)
             if config.model.name == "sigmma":
-                loss = 0
-                for s in range(num_resolutions):
-                    loss += symmetric_InfoNCE()(model_out['image_embedding'][s], model_out['spatial_embedding'][s])
-                loss = loss / num_resolutions
+                spatial = batch['spatial_graph'].to(device)
+                inputs = [image, spatial]
             else:
-                if rank == 0:
-                    print('Loss', model_out['loss'])
-                loss = model_out["loss"]
-                image_embedding = model_out["image_embedding"] # Tensor (B, D)
-                spatial_embedding = model_out["spatial_embedding"] # Tensor (B, D)
-            # Backward pass
-            loss.backward()
-            optimizer.step()
-            lr_scheduler.step()
-        else:
-            with torch.no_grad():
+                raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
+
+            optimizer.zero_grad()
+            # Gradient accumulation code adapted from OpenCLIP (https://github.com/mlfoundations/open_clip/blob/main/src/open_clip_train/train.py)
+            if accum_freq == 1:
                 # Forward pass
                 with torch.amp.autocast(device.type, enabled=True):
                     model_out = model(*inputs)
-
-                image_embedding = model_out["image_embedding"] # List of Tensors [(B, D), (B, D), ...] or Tensor (B, D)
-                spatial_embedding = model_out["spatial_embedding"] # List of Tensors [(B, D), (B, D), ...] or Tensor (B, D)
-
-                accum_images.append(image)
-                accum_spatial.append(spatial)
-                if "image_embedding" not in accum_features:
-                    accum_features["image_embedding"] = [image_embedding]
-                    accum_features["spatial_embedding"] = [spatial_embedding]
+                    num_resolutions = len(model_out['image_embedding'])
+                if config.model.name == "sigmma":
+                    loss = 0
+                    for s in range(num_resolutions):
+                        loss += symmetric_InfoNCE()(model_out['image_embedding'][s], model_out['spatial_embedding'][s])
+                    loss = loss / num_resolutions
                 else:
-                    accum_features["image_embedding"].append(image_embedding)
-                    accum_features["spatial_embedding"].append(spatial_embedding)
+                    if rank == 0:
+                        print('Loss', model_out['loss'])
+                    loss = model_out["loss"]
+                    image_embedding = model_out["image_embedding"] # Tensor (B, D)
+                    spatial_embedding = model_out["spatial_embedding"] # Tensor (B, D)
+                # Backward pass
+                loss.backward()
+                optimizer.step()
+                lr_scheduler.step()
+            else:
+                with torch.no_grad():
+                    # Forward pass
+                    with torch.amp.autocast(device.type, enabled=True):
+                        model_out = model(*inputs)
 
-            if (i+1) % accum_freq > 0:
-                if rank == 0:
-                    print(f"Skipping optimizer step at iter {i}, accumulating more gradients...")
-                continue
-            
-            # Take gradients for the last accum_freq batches
-            # Re-do the forward pass for those batches, and use the cached features from the other batches as negatives.
-            optimizer.zero_grad()
-            total_loss = None
-            for j in range(len(accum_images)):
-                image = to_device_if_tensor(accum_images[j], device)
-                spatial = to_device_if_tensor(accum_spatial[j], device)
-                with torch.amp.autocast(device.type, enabled=True):
-                    model_out = model(image, spatial)
-                    inputs_for_loss = {}
-                    if config.model.name == "sigmma":
-                        loss = 0
-                        num_resolutions = len(model_out['image_embedding'])
-                        for s in range(num_resolutions):
-                            for key in accum_features:
-                                accumulated = accum_features[key]
-                                parts = [accumulated[k][s] for k in range(j)] + [model_out[key][s]] + [accumulated[k][s] for k in range(j+1, len(accumulated))]
-                                inputs_for_loss[key] = torch.cat(parts)
-                            loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
-                        loss = loss / num_resolutions
-                        losses = {'contrastive_loss': loss}
-                        total_loss = sum(losses.values()) #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
-                        losses['loss'] = total_loss
+                    image_embedding = model_out["image_embedding"] # List of Tensors [(B, D), (B, D), ...] or Tensor (B, D)
+                    spatial_embedding = model_out["spatial_embedding"] # List of Tensors [(B, D), (B, D), ...] or Tensor (B, D)
+
+                    accum_images.append(image)
+                    accum_spatial.append(spatial)
+                    if "image_embedding" not in accum_features:
+                        accum_features["image_embedding"] = [image_embedding]
+                        accum_features["spatial_embedding"] = [spatial_embedding]
                     else:
-                        raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
-                    del inputs_for_loss
-                total_loss.backward()
-            loss = total_loss.item()
+                        accum_features["image_embedding"].append(image_embedding)
+                        accum_features["spatial_embedding"].append(spatial_embedding)
 
-            optimizer.step()
-            lr_scheduler.step()
+                if (i+1) % accum_freq > 0:
+                    if rank == 0:
+                        print(f"Skipping optimizer step at iter {i}, accumulating more gradients...")
+                    continue
 
-            # Reset accumulators
-            if accum_freq > 1:
-                accum_images, accum_spatial, accum_features = [], [], {}
+                # Take gradients for the last accum_freq batches
+                # Re-do the forward pass for those batches, and use the cached features from the other batches as negatives.
+                optimizer.zero_grad()
+                total_loss = None
+                for j in range(len(accum_images)):
+                    image = to_device_if_tensor(accum_images[j], device)
+                    spatial = to_device_if_tensor(accum_spatial[j], device)
+                    with torch.amp.autocast(device.type, enabled=True):
+                        model_out = model(image, spatial)
+                        inputs_for_loss = {}
+                        if config.model.name == "sigmma":
+                            loss = 0
+                            num_resolutions = len(model_out['image_embedding'])
+                            for s in range(num_resolutions):
+                                for key in accum_features:
+                                    accumulated = accum_features[key]
+                                    parts = [accumulated[k][s] for k in range(j)] + [model_out[key][s]] + [accumulated[k][s] for k in range(j+1, len(accumulated))]
+                                    inputs_for_loss[key] = torch.cat(parts)
+                                loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
+                            loss = loss / num_resolutions
+                            losses = {'contrastive_loss': loss}
+                            total_loss = sum(losses.values()) #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
+                            losses['loss'] = total_loss
+                        else:
+                            raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
+                        del inputs_for_loss
+                    total_loss.backward()
+                loss = total_loss.item()
 
-        if (global_step + 1) % config.train.save_every == 0:
-            save_checkpoint(
-                model,
-                optimizer,
-                lr_scheduler,
-                config.outdir,
-                global_step + 1,
-                epoch_index + 1,
-            )
-        if (
-            eval_dataloader is not None
-            and (global_step + 1) % config.train.eval_every == 0
-            ):
-            # In DDP mode, synchronize all ranks
-            if dist.is_available() and dist.is_initialized():
-                dist.barrier()
+                optimizer.step()
+                lr_scheduler.step()
 
-            # Run eval
-            if rank == 0:
-                eval_loss, _, _, _, _, _ = evaluate(config, model, eval_dataloader, device)
+                # Reset accumulators
+                if accum_freq > 1:
+                    accum_images, accum_spatial, accum_features = [], [], {}
 
-            if config.model.name == "sigmma":
-                image_embedding = image_embedding[-1]
-                spatial_embedding = spatial_embedding[-1]
+            if (global_step + 1) % config.train.save_every == 0:
+                save_checkpoint(
+                    model,
+                    optimizer,
+                    lr_scheduler,
+                    config.outdir,
+                    global_step + 1,
+                )
+            if (
+                eval_dataloader is not None
+                and (global_step + 1) % config.train.eval_every == 0
+                ):
+                # In DDP mode, synchronize all ranks
+                if dist.is_available() and dist.is_initialized():
+                    dist.barrier()
 
-            # Plot learnt embeddings
-            fig_train_img2spatial_heatmap = heatmap(image_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")
-            fig_train_img2img_heatmap = heatmap(image_embedding.detach().cpu(), image_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Image Embeddings")
-            fig_train_spatial2spatial_heatmap = heatmap(spatial_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
+                # Run eval
+                if rank == 0:
+                    eval_loss, _, _, _, _, _ = evaluate(config, model, eval_dataloader, device)
+
+                if config.model.name == "sigmma":
+                    image_embedding = image_embedding[-1]
+                    spatial_embedding = spatial_embedding[-1]
+
+                # Plot learnt embeddings
+                fig_train_img2spatial_heatmap = heatmap(image_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")
+                fig_train_img2img_heatmap = heatmap(image_embedding.detach().cpu(), image_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Image Embeddings")
+                fig_train_spatial2spatial_heatmap = heatmap(spatial_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
+
+                if wandb_logger is not None:
+                    wandb_logger.update({"(train)img2spatial heatmap": wandb.Image(fig_train_img2spatial_heatmap),
+                                        "(train)img2img heatmap": wandb.Image(fig_train_img2img_heatmap),
+                                        "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),
+                                        "(eval)loss": eval_loss})
+
+                if dist.is_available() and dist.is_initialized():
+                    dist.barrier()
+
+                model.train() # Set model back to training mode
 
             if wandb_logger is not None:
-                wandb_logger.update({"(train)img2spatial heatmap": wandb.Image(fig_train_img2spatial_heatmap),
-                                    "(train)img2img heatmap": wandb.Image(fig_train_img2img_heatmap),
-                                    "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),
-                                    "(eval)loss": eval_loss,
-                                    "epoch": epoch_index + 1})
+                wandb_logger.update({"(train)loss": loss,
+                                    "(train)lr": lr_scheduler.get_last_lr()[0],
+                                    "epoch": (global_step + 1) / steps_per_pass})
+                wandb_logger.set_step()
 
-            if dist.is_available() and dist.is_initialized():
-                dist.barrier()
-
-            model.train() # Set model back to training mode
-
-        if wandb_logger is not None:
-            wandb_logger.update({"(train)loss": loss,
-                                "(train)lr": lr_scheduler.get_last_lr()[0],
-                                "epoch": epoch_index + 1})
-            wandb_logger.set_step()
-
-        global_step += 1
+            global_step += 1
+        pass_index += 1
 
     save_checkpoint(model,
                     optimizer,
                     lr_scheduler,
                     config.outdir,
-                    global_step + 1,
-                    epoch_index + 1,
+                    global_step,
                 )
     return global_step
 
 
 def save_checkpoint(
-    model, optimizer, lr_scheduler, output_dir, global_step, epoch_index, logger=None
+    model, optimizer, lr_scheduler, output_dir, global_step, logger=None
 ):
-    save_path = Path(output_dir) / f"checkpoint-epoch{epoch_index}.pth"
+    save_path = Path(output_dir) / f"checkpoint-step{global_step}.pth"
 
     if hasattr(model, 'module'):
         model_state_dict = model.module.state_dict()

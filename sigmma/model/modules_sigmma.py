@@ -36,7 +36,8 @@ class sigmma(nn.Module):
                     GRAPHLayer(config.spatial_encoder_input_dim,
                             config.spatial_encoder_output_dim,
                             config.activation,
-                            config.dropout
+                            config.dropout,
+                            temperature=config.temperature
                             ))
                 self.spatial_encoder.append(
                     READOUTLayer(config.spatial_encoder_output_dim,
@@ -50,7 +51,8 @@ class sigmma(nn.Module):
                     GRAPHLayer(config.spatial_encoder_output_dim,
                             config.spatial_encoder_output_dim,
                             config.activation,
-                            config.dropout
+                            config.dropout,
+                            temperature=config.temperature
                             ))
                 self.spatial_encoder.append(
                     READOUTLayer(config.spatial_encoder_output_dim,

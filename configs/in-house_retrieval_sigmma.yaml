@@ -1,6 +1,6 @@
 model:
-  name: sigmma
-  checkpoint_path: path_to_trained_checkpoint/checkpoint-epochN.pth
+  name: sigmma 
+  checkpoint_path: path_to_trained_checkpoint/checkpoint-epochN.pth 
   pretrained_image_encoder: UNI
   pretrained_image_encoder_ckpt_path: path_to_uni_checkpoint/vit_large_patch16_224.dinov2.uni_mass100k/
   image_encoder_input_dim: 1024

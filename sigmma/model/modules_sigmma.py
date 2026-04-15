@@ -37,7 +37,8 @@ class sigmma(nn.Module):
                             config.spatial_encoder_output_dim,
                             config.activation,
                             config.dropout,
-                            temperature=config.temperature
+                            threshold=config.edge_threshold,
+                            temperature=config.gumbel_temperature
                             ))
                 self.spatial_encoder.append(
                     READOUTLayer(config.spatial_encoder_output_dim,
@@ -52,7 +53,8 @@ class sigmma(nn.Module):
                             config.spatial_encoder_output_dim,
                             config.activation,
                             config.dropout,
-                            temperature=config.temperature
+                            threshold=config.edge_threshold,
+                            temperature=config.gumbel_temperature
                             ))
                 self.spatial_encoder.append(
                     READOUTLayer(config.spatial_encoder_output_dim,
@@ -62,7 +64,7 @@ class sigmma(nn.Module):
                                 config.dropout)
                 )
 
-        self.contrastive_loss = symmetric_InfoNCE(temperature=config.temperature)
+        self.contrastive_loss = symmetric_InfoNCE(temperature=config.contrastive_temperature)
 
         self.register_buffer("global_step", torch.zeros((), dtype=torch.long))
 

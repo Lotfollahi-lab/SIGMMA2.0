@@ -7,7 +7,9 @@ model:
   spatial_encoder_input_dim: 384
   spatial_encoder_output_dim: 512
   num_resolutions: 3
-  temperature: 0.01
+  contrastive_temperature: 10.0
+  gumbel_temperature: 0.5
+  edge_threshold: 0.5
   dropout: 0.1
   activation: "leaky_relu"
   aggregate: "attn_pool"

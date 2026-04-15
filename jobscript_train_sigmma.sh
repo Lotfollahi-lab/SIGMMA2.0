@@ -3,7 +3,7 @@
 #BSUB -L /usr/bin/bash
 #BSUB -o train-SIGMMA.%J.out
 #BSUB -e train-SIGMMA.%J.err
-#BSUB -q gpu-lotfollahi
+#BSUB -q training-parallel
 #BSUB -gpu "mode=shared:j_exclusive=no:gmem=76GB:num=2"
 #BSUB -n 16
 #BSUB -M 400GB
@@ -28,8 +28,14 @@ ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/b
 
 [ -f $ENV_PATH ] && source $ENV_PATH || echo "Failed to activate: ${ENV_PATH}"
 
-# Without DDP
+# === Run Without DDP
+# Save the config file to the output directory for reference
+# mkdir -p ${output_dir}/in-house_sigmma_${LSB_JOBID}
+# cp ${run_dir}/configs/in-house_train_sigmma.yaml ${output_dir}/in-house_sigmma_${LSB_JOBID}/
 # python -u scripts/train_model.py -config_file ${run_dir}/configs/in-house_train_sigmma.yaml -out_dir ${output_dir}/in-house_sigmma_${LSB_JOBID}
 
-# With DDP
-torchrun --standalone --nproc_per_node 2 scripts/train_model.py -config_file ${run_dir}/configs/in-house_train_sigmma.yaml -out_dir ${output_dir}/in-house_sigmma_${LSB_JOBID} 
+# === RUN With DDP
+# Save the config file to the output directory for reference
+mkdir -p ${output_dir}/in-house_sigmma_${LSB_JOBID}
+cp ${run_dir}/configs/in-house_train_sigmma.yaml ${output_dir}/in-house_sigmma_${LSB_JOBID}/
+torchrun --standalone --nproc_per_node 2 scripts/train_model.py -config_file ${run_dir}/configs/in-house_train_sigmma.yaml -out_dir ${output_dir}/in-house_sigmma_${LSB_JOBID}

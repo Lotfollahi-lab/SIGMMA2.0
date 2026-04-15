@@ -162,7 +162,8 @@ def train_one_epoch(
                 spatial_embedding = model_out["spatial_embedding"] # Tensor (B, D)
             # Backward pass
             loss.backward()
-            
+            optimizer.step()
+            lr_scheduler.step()
         else:
             with torch.no_grad():
                 # Forward pass

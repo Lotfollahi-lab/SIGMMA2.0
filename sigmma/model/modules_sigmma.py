@@ -36,7 +36,8 @@ class sigmma(nn.Module):
                     GRAPHLayer(config.spatial_encoder_input_dim,
                             config.spatial_encoder_output_dim,
                             config.activation,
-                            config.dropout
+                            config.dropout,
+                            temperature=config.temperature
                             ))
                 self.spatial_encoder.append(
                     READOUTLayer(config.spatial_encoder_output_dim,
@@ -50,7 +51,8 @@ class sigmma(nn.Module):
                     GRAPHLayer(config.spatial_encoder_output_dim,
                             config.spatial_encoder_output_dim,
                             config.activation,
-                            config.dropout
+                            config.dropout,
+                            temperature=config.temperature
                             ))
                 self.spatial_encoder.append(
                     READOUTLayer(config.spatial_encoder_output_dim,
@@ -62,8 +64,6 @@ class sigmma(nn.Module):
 
         self.contrastive_loss = symmetric_InfoNCE(temperature=config.temperature)
 
-        self.lambda_csc_img = getattr(config, "lambda_csc_img", 1.0)
-        self.csc_mode = getattr(config, "csc_mode", "both")  # "both" or "alt"
         self.register_buffer("global_step", torch.zeros((), dtype=torch.long))
 
 

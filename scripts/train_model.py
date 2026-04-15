@@ -72,7 +72,7 @@ def objective(args, rank=None, world_size=None):
 
     batch_size = config.get("train.batch_size")
     # Train dataloader
-    num_train_samples = config.get("train.max_num_samples_per_epoch", len(train_dataset))
+    num_train_samples = config.get("train.max_num_train_samples", len(train_dataset))
     indices_train = np.random.default_rng(0).choice(len(train_dataset), size=min(num_train_samples, len(train_dataset)), replace=False)
 
     if rank is not None:

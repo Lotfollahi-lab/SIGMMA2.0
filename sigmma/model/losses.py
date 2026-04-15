@@ -12,15 +12,6 @@ class InfoNCE(torch.nn.Module):
         z_i: image embeddings, shape (B, D)
         z_j: spatial embeddings, shape (B, D)
         """
-        print("z_i std:", z_i.std().item())
-        print("z_j std:", z_j.std().item())
-        sim = (z_i @ z_j.T).detach()
-        diag = sim.diag()
-        off  = sim[~torch.eye(sim.shape[0], dtype=bool, device=sim.device)]
-
-        print("diag mean:", diag.mean().item(),
-            "off mean:", off.mean().item())
-
         # Filter: Only valid (non-zero) pairs
         valid_mask = z_j.norm(dim=-1) > 0.0
         z_i = z_i[valid_mask]

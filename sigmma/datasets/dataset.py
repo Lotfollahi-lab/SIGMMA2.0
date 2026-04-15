@@ -16,7 +16,7 @@ import scanpy
 import scipy.sparse as sp
 
 import zarr
-:import torch
+import torch
 from torchvision.transforms import ToTensor, Resize, Compose
 import dgl
 from torch.utils.data._utils.collate import collate, collate_tensor_fn, collate_float_fn, collate_int_fn, collate_str_fn

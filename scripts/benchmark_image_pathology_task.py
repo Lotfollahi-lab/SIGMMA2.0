@@ -160,7 +160,7 @@ class SIGMMABackboneSegmentation(nn.Module):
     EVA's SemanticSegmentationModule expects a list of feature tensors.
     """
 
-    def __init__(self, config_path: str, n_intermediate: int = 4):
+    def __init__(self, config_path: str, n_intermediate: int = 1):
         super().__init__()
         config_file = yaml.load(open(config_path, "r"), yaml.FullLoader)
         config = ConfigDict(config_file)
@@ -289,8 +289,8 @@ def run_classification(
     task_output_dir = os.path.join(output_root, dataset_name)
     embeddings_dir = os.path.join(task_output_dir, "embeddings")
 
-    # 20% of max_steps, leaderboard protocol.
-    patience_steps = int(0.2 * max_steps)
+    # EVA leaderboard: EarlyStopping patience=500 validation epochs (effectively loose).
+    patience = 500
 
     # ------------------------------------------------------------
     # Step 1: Extract embeddings once (before any run).
@@ -361,9 +361,8 @@ def run_classification(
     # Step 2: Fit linear probe (n_runs with different seeds).
     # ------------------------------------------------------------
     for run_idx in range(n_runs):
-        L.seed_everything(42 + run_idx, workers=True)
         print(f"\n{'='*60}")
-        print(f"[{dataset_name}] Run {run_idx + 1}/{n_runs}  (seed={42 + run_idx})")
+        print(f"[{dataset_name}] Run {run_idx + 1}/{n_runs}")
         print(f"{'='*60}")
 
         run_output_dir = os.path.join(task_output_dir, f"run_{run_idx}")
@@ -377,11 +376,11 @@ def run_classification(
                 eva.callbacks.ConfigurationLogger(),
                 ModelCheckpoint(
                     filename="best", save_top_k=1,
-                    monitor="val/MulticlassRecall", mode="max",
+                    monitor="val/MulticlassAccuracy", mode="max",
                 ),
                 EarlyStopping(
-                    min_delta=0, patience=patience_steps,
-                    monitor="val/MulticlassRecall", mode="max",
+                    min_delta=0, patience=patience,
+                    monitor="val/MulticlassAccuracy", mode="max",
                 ),
             ],
         )
@@ -548,9 +547,8 @@ def run_wsi(
     patience_epochs = max(1, int(0.2 * max_epochs))
 
     for run_idx in range(n_runs):
-        L.seed_everything(42 + run_idx, workers=True)
         print(f"\n{'='*60}")
-        print(f"[{dataset_name}] Run {run_idx + 1}/{n_runs}  (seed={42 + run_idx})")
+        print(f"[{dataset_name}] Run {run_idx + 1}/{n_runs}")
         print(f"{'='*60}")
 
         run_output_dir = os.path.join(task_output_dir, f"run_{run_idx}")
@@ -668,11 +666,18 @@ def run_segmentation(
     seg_backbone = SIGMMABackboneSegmentation(sigmma_config_path)
     in_features = seg_backbone.out_features
 
-    transform = ResizeAndCrop(
-        size=224,
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225],
-    )
+    # Train vs val transforms (matches EVA online/monusac.yaml):
+    #   train: RandomResizedCrop(224) + ToDtype(float32, scale=True) + Normalize
+    #   val:   ResizeAndCrop(224, mean, std)
+    from torchvision.transforms import v2 as tv2
+    _MEAN = [0.485, 0.456, 0.406]
+    _STD = [0.229, 0.224, 0.225]
+    train_transform = tv2.Compose([
+        tv2.RandomResizedCrop(size=224),
+        tv2.ToDtype(torch.float32, scale=True),
+        tv2.Normalize(mean=_MEAN, std=_STD),
+    ])
+    eval_transform = ResizeAndCrop(size=224, mean=_MEAN, std=_STD)
 
     task_output_dir = os.path.join(output_root, dataset_name)
 
@@ -680,9 +685,8 @@ def run_segmentation(
     patience_steps = int(0.2 * max_steps)
 
     for run_idx in range(n_runs):
-        L.seed_everything(42 + run_idx, workers=True)
         print(f"\n{'='*60}")
-        print(f"[{dataset_name}] Run {run_idx + 1}/{n_runs}  (seed={42 + run_idx})")
+        print(f"[{dataset_name}] Run {run_idx + 1}/{n_runs}")
         print(f"{'='*60}")
 
         run_output_dir = os.path.join(task_output_dir, f"run_{run_idx}")
@@ -736,7 +740,7 @@ def run_segmentation(
             root=os.path.join(data_root, dataset_name),
             split="train",
             download=download,
-            transforms=transform,
+            transforms=train_transform,
         )
 
         # Resolve val / test splits per dataset.
@@ -750,7 +754,7 @@ def run_segmentation(
             root=os.path.join(data_root, dataset_name),
             split=val_split,
             download=False,
-            transforms=transform,
+            transforms=eval_transform,
         )
         if val_ds is None:
             # Dataset has no val split (e.g., MoNuSAC). Use test for monitoring.
@@ -759,7 +763,7 @@ def run_segmentation(
                 root=os.path.join(data_root, dataset_name),
                 split=val_split,
                 download=False,
-                transforms=transform,
+                transforms=eval_transform,
             )
             test_ds = None  # val == test
         else:
@@ -768,7 +772,7 @@ def run_segmentation(
                 root=os.path.join(data_root, dataset_name),
                 split=test_split,
                 download=False,
-                transforms=transform,
+                transforms=eval_transform,
             )
 
         # MoNuSAC train has ~4 batches/epoch; multi-worker loading on shared
@@ -900,6 +904,14 @@ def main():
                              "Defaults follow the EVA leaderboard: "
                              "5 (patch/seg), 20 (WSI).")
     args = parser.parse_args()
+
+    # EVA convention: seed ONCE at process startup (matches their
+    # _configure_random_seed in src/eva/core/cli/setup.py which calls
+    # pl_seed.seed_everything(42, workers=True) exactly once in setup()).
+    # The per-task n_runs loops do NOT re-seed — successive runs advance
+    # the RNG state naturally, so each run differs but the whole session
+    # is fully reproducible from this single call.
+    L.seed_everything(42, workers=True)
 
     for ds in args.datasets:
         n_runs = args.n_runs if args.n_runs is not None else DEFAULT_N_RUNS[ds]

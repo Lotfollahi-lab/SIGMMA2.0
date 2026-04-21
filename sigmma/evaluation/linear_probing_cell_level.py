@@ -16,7 +16,8 @@ def linear_probing_cell_level(model: torch.nn.Module,
                               cell_ids_to_labels: dict,
                               config: ml_collections.config_dict.ConfigDict,
                               device: torch.device,
-                              multi_scale: bool=False):
+                              multi_scale: bool=False,
+                              annotation_lookup: dict=None):
     """Performs linear probing at the cell level using the embeddings extracted from the SIGMMA model.
     ------------------------------------------------------------------------------
     Args:
@@ -32,26 +33,42 @@ def linear_probing_cell_level(model: torch.nn.Module,
     - eval: A dictionary containing the evaluation metrics for the multi-modal predictions.
     """
     output_predictor_train = label_prediction_cell_level(
-            train_dataloader, model, config, device, cell_ids_to_labels, multi_scale=multi_scale
-    )
-    
-    if multi_scale:
-        # multi_scale: {'scale_0': {'predictor': ..., 'label_encoder': ...}, ...}
-        trained_predictor = {k: v["predictor"] for k, v in output_predictor_train.items()}
-    else:
-        # single scale: {'predictor': {'method': clf, 'label_encoder': le}, ...}
-        trained_predictor = output_predictor_train['predictor']
-    
-    output_predictor_test = label_prediction_cell_level(
-        test_dataloader, model, config, device, cell_ids_to_labels,
-        predictor=trained_predictor, multi_scale=multi_scale, train_mode=False
+            train_dataloader, model, config, device, cell_ids_to_labels,
+            multi_scale=multi_scale, annotation_lookup=annotation_lookup
     )
 
     if multi_scale:
+        if output_predictor_train is None or all(v is None for v in output_predictor_train.values()):
+            return None
+        # multi_scale: {'scale_0': {'predictor': ..., 'label_encoder': ...}, ...}
+        trained_predictor = {
+            k: (v["predictor"] if v is not None else None)
+            for k, v in output_predictor_train.items()
+        }
+    else:
+        if output_predictor_train is None:
+            return None
+        # single scale: {'predictor': {'method': clf, 'label_encoder': le}, ...}
+        trained_predictor = output_predictor_train['predictor']
+
+    output_predictor_test = label_prediction_cell_level(
+        test_dataloader, model, config, device, cell_ids_to_labels,
+        predictor=trained_predictor, multi_scale=multi_scale, train_mode=False,
+        annotation_lookup=annotation_lookup
+    )
+
+    if multi_scale:
+        if output_predictor_test is None:
+            return None
         eval = {}
         for k, v in output_predictor_test.items():
+            if v is None:
+                eval[k] = None
+                continue
             eval[k] = evaluate_cell_level_prediction(v['labels'], v['labels_pred'])
     else:
+        if output_predictor_test is None:
+            return None
         y = output_predictor_test['labels']
         y_pred = output_predictor_test['labels_pred']
         eval = evaluate_cell_level_prediction(y, y_pred)
@@ -106,8 +123,13 @@ def label_prediction_cell_level(dataloader: torch.utils.data.DataLoader,
                                 max_iter: int=1000,
                                 random_state: int=42,
                                 pipe=None,
-                                multi_scale=False):
-    graph_across_resolution, section_ids = extract_graphs(dataloader, model, config=config, device=device, group_to_id=cell_ids_to_labels, multi_scale=multi_scale)
+                                multi_scale=False,
+                                annotation_lookup=None):
+    graph_across_resolution, section_ids = extract_graphs(
+        dataloader, model, config=config, device=device,
+        group_to_id=cell_ids_to_labels, multi_scale=multi_scale,
+        annotation_lookup=annotation_lookup,
+    )
 
     num_resolutions = int(config.model.num_resolutions)
 
@@ -126,10 +148,17 @@ def label_prediction_cell_level(dataloader: torch.utils.data.DataLoader,
             for batched_g in graph_across_resolution[f"scale_{k}"]:
                 all_graphs.extend(dgl.unbatch(batched_g))
 
+            if len(all_graphs) == 0:
+                output[f"scale_{k}"] = None
+                continue
+
             labels_k = np.concatenate([g.ndata["group"].cpu().numpy() for g in all_graphs])
 
             # Filter out cells with unknown labels (group == -1)
             valid_mask = labels_k != -1
+            if not valid_mask.any():
+                output[f"scale_{k}"] = None
+                continue
             labels_k = labels_k[valid_mask]
             embeddings = embeddings[valid_mask]
             cell_ids = cell_ids[valid_mask]
@@ -161,7 +190,9 @@ def label_prediction_cell_level(dataloader: torch.utils.data.DataLoader,
                 }
             else:
                 assert predictor is not None, "Predictor must be provided in evaluation mode"
-                assert f"scale_{k}" in predictor, f"Missing predictor for scale_{k}"
+                if f"scale_{k}" not in predictor or predictor[f"scale_{k}"] is None:
+                    output[f"scale_{k}"] = None
+                    continue
 
                 clf = predictor[f"scale_{k}"]["method"]
                 le = predictor[f"scale_{k}"]["label_encoder"]
@@ -192,10 +223,15 @@ def label_prediction_cell_level(dataloader: torch.utils.data.DataLoader,
         for batched_g in graph_across_resolution:
             all_graphs.extend(dgl.unbatch(batched_g))
 
+        if len(all_graphs) == 0:
+            return None
+
         labels_ = np.concatenate([g.ndata["group"].cpu().numpy() for g in all_graphs])
 
         # Filter out cells with unknown labels (group == -1)
         valid_mask = labels_ != -1
+        if not valid_mask.any():
+            return None
         labels_ = labels_[valid_mask]
         embeddings = embeddings[valid_mask]
         cell_ids = cell_ids[valid_mask]

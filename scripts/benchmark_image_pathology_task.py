@@ -64,6 +64,8 @@ from eva.vision.models.networks.decoders.segmentation import ConvDecoderWithImag
 from eva.vision.losses import DiceLoss
 from eva.vision.data.transforms.common import ResizeAndCrop
 from eva.vision.metrics.defaults import MulticlassSegmentationMetrics
+from eva.vision.metrics import MonaiDiceScore
+from torchmetrics import ClasswiseWrapper
 from eva.core.models.transforms import AsDiscrete
 from eva.core.models.modules.utils.batch_postprocess import BatchPostProcess
 from eva.core.data.transforms import Pad2DTensor
@@ -71,6 +73,7 @@ from eva.core.data.transforms.dtype import ArrayToFloatTensor
 from eva.core.metrics.structs import MetricsSchema
 
 from sigmma.utils import load_model
+from sigmma.model.models_image_backbones import UNI
 
 
 class _DebugTransform:
@@ -206,6 +209,72 @@ class SIGMMABackboneSegmentation(nn.Module):
         return self._out_dim * self._n_layers
 
 
+def _uni_ckpt_dir_from_config(config_path: str) -> str:
+    cfg = ConfigDict(yaml.load(open(config_path, "r"), yaml.FullLoader))
+    return cfg.model.pretrained_image_encoder_ckpt_path
+
+
+class UNIBackbone(nn.Module):
+    """Raw UNI (DINOv2 ViT-L/16) for classification. Returns CLS token (B, D)."""
+
+    def __init__(self, config_path: str):
+        super().__init__()
+        uni = UNI(checkpoint_path=_uni_ckpt_dir_from_config(config_path))
+        self.encoder = uni.model  # inner timm ViT
+        self.encoder.eval()
+        for p in self.encoder.parameters():
+            p.requires_grad = False
+
+        with torch.no_grad():
+            dummy = torch.randn(1, 3, 224, 224)
+            out = self.encoder(dummy)
+            self._out_dim = out.shape[-1]
+        print(f"[UNIBackbone] Loaded raw UNI. Output dim = {self._out_dim}")
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.encoder(x)
+
+    @property
+    def out_features(self) -> int:
+        return self._out_dim
+
+
+class UNIBackboneSegmentation(nn.Module):
+    """Raw UNI for segmentation. Same get_intermediate_layers API as SIGMMABackboneSegmentation."""
+
+    def __init__(self, config_path: str, n_intermediate: int = 1):
+        super().__init__()
+        uni = UNI(checkpoint_path=_uni_ckpt_dir_from_config(config_path))
+        self.model = uni.model
+        self.model.eval()
+        for p in self.model.parameters():
+            p.requires_grad = False
+
+        sig = inspect.signature(self.model.get_intermediate_layers)
+        self._intermediate_kwargs = dict(n=n_intermediate, reshape=True, norm=True)
+        if "return_prefix_tokens" in sig.parameters:
+            self._intermediate_kwargs["return_prefix_tokens"] = False
+        elif "return_class_token" in sig.parameters:
+            self._intermediate_kwargs["return_class_token"] = False
+
+        with torch.no_grad():
+            dummy = torch.randn(1, 3, 224, 224)
+            feats = self.model.get_intermediate_layers(dummy, **self._intermediate_kwargs)
+            self._out_dim = feats[0].shape[1]
+            self._n_layers = len(feats)
+
+        print(f"[UNIBackboneSegmentation] Loaded raw UNI. "
+              f"Output: list of {self._n_layers} feature maps, dim={self._out_dim}")
+
+    def forward(self, x: torch.Tensor):
+        feats = self.model.get_intermediate_layers(x, **self._intermediate_kwargs)
+        return list(feats)
+
+    @property
+    def out_features(self) -> int:
+        return self._out_dim * self._n_layers
+
+
 # ============================================================
 # 2. Dataset configs
 # ============================================================
@@ -230,6 +299,7 @@ EVA_SEGMENTATION_TASKS = {
         "num_classes": 5,
         "metric_num_classes": 5,
         "ignore_index": None,
+        "labels": ["background", "other", "inflammatory", "epithelial", "spindle-shaped"],
     },
     # MoNuSAC: decoder predicts 5 classes (bg + 4 nuclei). The test set adds
     # a 6th "Ambiguous" class (=5) for fuzzy regions; EVA ignores it in both
@@ -239,6 +309,7 @@ EVA_SEGMENTATION_TASKS = {
         "num_classes": 5,
         "metric_num_classes": 6,
         "ignore_index": 5,
+        "labels": ["background", "epithelial", "lymphocyte", "neutrophil", "macrophage", "ambiguous"],
     },
 }
 
@@ -272,12 +343,13 @@ def run_classification(
     batch_size: int = 256,
     max_steps: int = 12500,
     lr: float = 0.0003,
+    backbone_type: str = "sigmma",
 ):
     task = EVA_CLASSIFICATION_TASKS[dataset_name]
     num_classes = task["num_classes"]
     DatasetClass = getattr(eva_datasets, task["dataset_cls"])
 
-    backbone = SIGMMABackbone(sigmma_config_path)
+    backbone = (UNIBackbone if backbone_type == "uni" else SIGMMABackbone)(sigmma_config_path)
     in_features = backbone.out_features
 
     transform = ResizeAndCrop(
@@ -446,13 +518,14 @@ def run_wsi(
     batch_size: int = 32,
     max_epochs: int = 100,
     lr: float = 0.001,
+    backbone_type: str = "sigmma",
 ):
     task = EVA_WSI_TASKS[dataset_name]
     num_classes = task["num_classes"]
     n_patches = task["n_patches"]
     DatasetClass = getattr(eva_datasets, task["dataset_cls"])
 
-    backbone = SIGMMABackbone(sigmma_config_path)
+    backbone = (UNIBackbone if backbone_type == "uni" else SIGMMABackbone)(sigmma_config_path)
     in_features = backbone.out_features
 
     transform = ResizeAndCrop(
@@ -656,14 +729,17 @@ def run_segmentation(
     batch_size: int = 64,
     max_steps: int = 2000,
     lr: float = 0.002,
+    backbone_type: str = "sigmma",
 ):
     task = EVA_SEGMENTATION_TASKS[dataset_name]
     num_classes = task["num_classes"]
     metric_num_classes = task.get("metric_num_classes", num_classes)
     ignore_index = task.get("ignore_index")
+    labels = task["labels"]
     DatasetClass = getattr(eva_datasets, task["dataset_cls"])
 
-    seg_backbone = SIGMMABackboneSegmentation(sigmma_config_path)
+    seg_backbone_cls = UNIBackboneSegmentation if backbone_type == "uni" else SIGMMABackboneSegmentation
+    seg_backbone = seg_backbone_cls(sigmma_config_path)
     in_features = seg_backbone.out_features
 
     # Train vs val transforms (matches EVA online/monusac.yaml):
@@ -681,8 +757,8 @@ def run_segmentation(
 
     task_output_dir = os.path.join(output_root, dataset_name)
 
-    # 20% of max_steps, per leaderboard protocol.
-    patience_steps = int(0.2 * max_steps)
+    # EVA online/monusac.yaml: EarlyStopping patience=100.
+    patience_steps = 100
 
     for run_idx in range(n_runs):
         print(f"\n{'='*60}")
@@ -697,6 +773,9 @@ def run_segmentation(
             log_every_n_steps=6,
             accelerator="auto",
             devices=1,
+            precision="bf16-mixed",
+            check_val_every_n_epoch=5,
+            num_sanity_val_steps=0,
             callbacks=[
                 eva.callbacks.ConfigurationLogger(),
                 ModelCheckpoint(
@@ -729,10 +808,21 @@ def run_segmentation(
             ),
             metrics=MetricsSchema(
                 common=[eva.metrics.AverageLoss()],
-                evaluation=[MulticlassSegmentationMetrics(
-                    num_classes=metric_num_classes,
-                    ignore_index=ignore_index,
-                )],
+                evaluation=[
+                    MulticlassSegmentationMetrics(
+                        num_classes=metric_num_classes,
+                        ignore_index=ignore_index,
+                    ),
+                    ClasswiseWrapper(
+                        metric=MonaiDiceScore(
+                            include_background=True,
+                            num_classes=metric_num_classes,
+                            reduction="none",
+                            ignore_index=ignore_index,
+                        ),
+                        labels=labels,
+                    ),
+                ],
             ),
         )
 
@@ -903,6 +993,10 @@ def main():
                         help="Override the default number of runs. "
                              "Defaults follow the EVA leaderboard: "
                              "5 (patch/seg), 20 (WSI).")
+    parser.add_argument("--backbone", type=str, default="sigmma",
+                        choices=["sigmma", "uni"],
+                        help="sigmma: load SIGMMA checkpoint (inner UNI fine-tuned). "
+                             "uni: load raw UNI directly from pretrained_image_encoder_ckpt_path.")
     args = parser.parse_args()
 
     # EVA convention: seed ONCE at process startup (matches their
@@ -912,6 +1006,9 @@ def main():
     # the RNG state naturally, so each run differs but the whole session
     # is fully reproducible from this single call.
     L.seed_everything(42, workers=True)
+
+    # Keep SIGMMA and UNI runs in separate output trees so they don't clobber.
+    args.output_root = os.path.join(args.output_root, args.backbone)
 
     for ds in args.datasets:
         n_runs = args.n_runs if args.n_runs is not None else DEFAULT_N_RUNS[ds]
@@ -924,6 +1021,7 @@ def main():
                     output_root=args.output_root,
                     download=args.download,
                     n_runs=n_runs,
+                    backbone_type=args.backbone,
                 )
             elif ds in EVA_WSI_TASKS:
                 run_wsi(
@@ -933,6 +1031,7 @@ def main():
                     output_root=args.output_root,
                     download=args.download,
                     n_runs=n_runs,
+                    backbone_type=args.backbone,
                 )
             elif ds in EVA_SEGMENTATION_TASKS:
                 run_segmentation(
@@ -942,6 +1041,7 @@ def main():
                     output_root=args.output_root,
                     download=args.download,
                     n_runs=n_runs,
+                    backbone_type=args.backbone,
                 )
         except KeyboardInterrupt:
             raise

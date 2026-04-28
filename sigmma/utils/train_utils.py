@@ -172,7 +172,6 @@ def train(
             else:
                 raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
 
-            optimizer.zero_grad()
             # Gradient accumulation code adapted from OpenCLIP (https://github.com/mlfoundations/open_clip/blob/main/src/open_clip_train/train.py)
             if accum_freq == 1:
                 # Forward pass
@@ -191,6 +190,7 @@ def train(
                     image_embedding = model_out["image_embedding"] # Tensor (B, D)
                     spatial_embedding = model_out["spatial_embedding"] # Tensor (B, D)
                 # Backward pass
+                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 lr_scheduler.step()
@@ -261,42 +261,60 @@ def train(
                     config.outdir,
                     global_step + 1,
                 )
-            if (
-                eval_dataloader is not None
-                and (global_step + 1) % config.train.eval_every == 0
-                ):
-                # In DDP mode, synchronize all ranks
-                if dist.is_available() and dist.is_initialized():
-                    dist.barrier()
-
-                # Run eval
+            do_eval = eval_dataloader is not None and (global_step + 1) % config.train.eval_every == 0
+            if do_eval:
                 if rank == 0:
+                    print(f"Evaluating at step {global_step + 1}...")
+                model.eval()
+                with torch.no_grad():
                     eval_loss, _, _, _, _, _ = evaluate(config, model, eval_dataloader, device)
+                if rank == 0:
+                    if wandb_logger is not None:
+                        # Log eval loss first, separately
+                        wandb_logger.update({"(eval)loss": eval_loss})
 
-                if config.model.name == "sigmma":
-                    image_embedding = image_embedding[-1]
-                    spatial_embedding = spatial_embedding[-1]
+                    if config.model.name == "sigmma":
+                        image_embedding_plot = image_embedding[-1]
+                        spatial_embedding_plot = spatial_embedding[-1]
+                    else:
+                        image_embedding_plot = image_embedding
+                        spatial_embedding_plot = spatial_embedding
 
-                # Plot learnt embeddings
-                fig_train_img2spatial_heatmap = heatmap(image_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Spatial Embeddings")
-                fig_train_img2img_heatmap = heatmap(image_embedding.detach().cpu(), image_embedding.detach().cpu(), xlabel="Image Embeddings", ylabel="Image Embeddings")
-                fig_train_spatial2spatial_heatmap = heatmap(spatial_embedding.detach().cpu(), spatial_embedding.detach().cpu(), xlabel="Spatial Embeddings", ylabel="Spatial Embeddings")
+                    # Plot learnt embeddings only on rank 0
+                    fig_train_img2spatial_heatmap = heatmap(
+                        image_embedding_plot.detach().cpu(),
+                        spatial_embedding_plot.detach().cpu(),
+                        xlabel="Image Embeddings",
+                        ylabel="Spatial Embeddings",
+                    )
+                    fig_train_img2img_heatmap = heatmap(
+                        image_embedding_plot.detach().cpu(),
+                        image_embedding_plot.detach().cpu(),
+                        xlabel="Image Embeddings",
+                        ylabel="Image Embeddings",
+                    )
+                    fig_train_spatial2spatial_heatmap = heatmap(
+                        spatial_embedding_plot.detach().cpu(),
+                        spatial_embedding_plot.detach().cpu(),
+                        xlabel="Spatial Embeddings",
+                        ylabel="Spatial Embeddings",
+                    )
+                    plt.close('all')
+                    if wandb_logger is not None:
+                        wandb_logger.update({
+                            "(train)img2spatial heatmap": wandb.Image(fig_train_img2spatial_heatmap),
+                            "(train)img2img heatmap": wandb.Image(fig_train_img2img_heatmap),
+                            "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),
+                        })
 
-                if wandb_logger is not None:
-                    wandb_logger.update({"(train)img2spatial heatmap": wandb.Image(fig_train_img2spatial_heatmap),
-                                        "(train)img2img heatmap": wandb.Image(fig_train_img2img_heatmap),
-                                        "(train)spatial2spatial heatmap": wandb.Image(fig_train_spatial2spatial_heatmap),
-                                        "(eval)loss": eval_loss})
+                model.train()
 
-                if dist.is_available() and dist.is_initialized():
-                    dist.barrier()
-
-                model.train() # Set model back to training mode
-
-            if wandb_logger is not None:
-                wandb_logger.update({"(train)loss": loss,
-                                    "(train)lr": lr_scheduler.get_last_lr()[0],
-                                    "epoch": (global_step + 1) / steps_per_pass})
+            if wandb_logger is not None and rank == 0:
+                wandb_logger.update({
+                    "(train)loss": loss,
+                    "(train)lr": lr_scheduler.get_last_lr()[0],
+                    "epoch": (global_step + 1) / steps_per_pass
+                })
                 wandb_logger.set_step()
 
             global_step += 1
@@ -335,7 +353,6 @@ def save_checkpoint(
         else:
             print(f"Checkpoint saved at {save_path}")
     return save_path
-
 
 
 def load_checkpoint(model, optimizer, lr_scheduler, checkpoint_path, device="cuda"):
@@ -381,45 +398,83 @@ def load_checkpoint(model, optimizer, lr_scheduler, checkpoint_path, device="cud
 def evaluate(config, model, eval_dataloader, device):
     """
     Evaluate the model on the validation dataset.
+
+    DDP-aware: when launched under torchrun, the eval dataloader is sharded by
+    DistributedSampler, so each rank only forwards its shard. Per-rank
+    embeddings are then all_gather'd before computing loss / score matrices.
     """
-    # DDP unwrap
-    model = model.module if hasattr(model, "module") else model
     model.eval()
+    forward_module = getattr(model, "module", model)
     all_image_embeddings = []
     all_spatial_embeddings = []
 
     with torch.no_grad():
         for batch in eval_dataloader:
             image = batch["image"].to(device)
-            if config.model.name == "sigmma": 
+            if config.model.name == "sigmma":
                 spatial = batch['spatial_graph'].to(device)
                 inputs = [image, spatial]
+            elif config.model.name == "BLEEP":
+                spatial = batch['spatial'].to(device)
+                inputs = [image, spatial]
+            elif config.model.name in ("openAI_CLIP", "PLIP", "loki_OmiCLIP"):
+                spatial = batch["spatial_text"]
+                inputs = [image, spatial]
             else:
-                raise NotImplementedError(f"Model {model.name} is not implemented for training.")
+                raise NotImplementedError(f"Model {config.model.name} is not implemented for evaluation.")
 
             with torch.amp.autocast(device.type, enabled=True):
-                model_out = model(*inputs)
+                model_out = forward_module(*inputs)
             image_embedding = model_out["image_embedding"]
             spatial_embedding = model_out["spatial_embedding"]
 
             all_image_embeddings.append(image_embedding)
             all_spatial_embeddings.append(spatial_embedding)
 
+    is_distributed = dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
+
+    def _all_gather(t: torch.Tensor) -> torch.Tensor:
+        # DistributedSampler with drop_last=False pads to equal length per rank,
+        # so shapes already match across ranks.
+        tensors = [torch.zeros_like(t) for _ in range(dist.get_world_size())]
+        dist.all_gather(tensors, t.contiguous())
+        return torch.concat(tensors, dim=0)
+
     if config.model.name == "sigmma":
         num_resolutions = len(all_image_embeddings[0])
-        all_image_embeddings = [torch.concat([all_image_embeddings[i][s] for i in range(len(all_image_embeddings))], dim=0).to(device) for s in range(num_resolutions)]
-        all_spatial_embeddings = [torch.concat([all_spatial_embeddings[i][s] for i in range(len(all_spatial_embeddings))], dim=0).to(device) for s in range(num_resolutions)]
+        local_image = [torch.concat([all_image_embeddings[i][s] for i in range(len(all_image_embeddings))], dim=0).to(device) for s in range(num_resolutions)]
+        local_spatial = [torch.concat([all_spatial_embeddings[i][s] for i in range(len(all_spatial_embeddings))], dim=0).to(device) for s in range(num_resolutions)]
+        if is_distributed:
+            all_image_embeddings = [_all_gather(t) for t in local_image]
+            all_spatial_embeddings = [_all_gather(t) for t in local_spatial]
+        else:
+            all_image_embeddings = local_image
+            all_spatial_embeddings = local_spatial
         loss = 0
         for s in range(num_resolutions):
             loss += symmetric_InfoNCE()(all_image_embeddings[s], all_spatial_embeddings[s])
         loss = loss / num_resolutions
     else:
-        all_image_embeddings = torch.concat(all_image_embeddings, dim=0).to(device)
-        all_spatial_embeddings = torch.concat(all_spatial_embeddings, dim=0).to(device)
+        local_image = torch.concat(all_image_embeddings, dim=0).to(device)
+        local_spatial = torch.concat(all_spatial_embeddings, dim=0).to(device)
+        if is_distributed:
+            all_image_embeddings = _all_gather(local_image)
+            all_spatial_embeddings = _all_gather(local_spatial)
+        else:
+            all_image_embeddings = local_image
+            all_spatial_embeddings = local_spatial
         loss = symmetric_InfoNCE()(all_image_embeddings, all_spatial_embeddings)
 
-    score_matrix_img2spatial, score_matrix_spatial2image = retrieval_score(model, eval_dataloader, eval_dataloader, device, config)
-    eval_results = eval_retrieval(score_matrix_img2spatial, score_matrix_spatial2image)
+    # retrieval_score does its own forward pass over the dataloader, which
+    # under DDP would yield rank-local query/reference matrices. Callers in
+    # train() and train_model.py only consume eval_loss, so skip the redundant
+    # second pass when distributed.
+    if is_distributed:
+        score_matrix_img2spatial = score_matrix_spatial2image = None
+        eval_results = None
+    else:
+        score_matrix_img2spatial, score_matrix_spatial2image = retrieval_score(model, eval_dataloader, eval_dataloader, device, config)
+        eval_results = eval_retrieval(score_matrix_img2spatial, score_matrix_spatial2image)
     return loss, all_image_embeddings, all_spatial_embeddings, score_matrix_img2spatial, score_matrix_spatial2image, eval_results
 
 def PCA_embeddings(image_embeddings, spatial_embeddings, num_samples=1000):

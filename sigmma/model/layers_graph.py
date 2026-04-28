@@ -11,13 +11,15 @@ from typing import Union, Literal,Optional
 import dgl
 
 class StructureLearning(torch.nn.Module):
-    def __init__(self, 
-                 input_dim:int, 
+    def __init__(self,
+                 input_dim:int,
                  sparse:Literal['sparse','hard'],
-                 emb_layer:int=1, 
+                 emb_layer:int=1,
                  activation: Literal['relu','sigmoid','leaky_relu']='leaky_relu',
-                 threshold:float=0.5, 
-                 temperature:float=0.5):
+                 threshold:float=0.5,
+                 temperature:float=0.5,
+                 candidate_top_k:int=8,
+                 candidate_sim_threshold:float=0.4):
         super(StructureLearning, self).__init__()
         self.att = Parameter(torch.Tensor(1, input_dim*2))
 
@@ -37,6 +39,8 @@ class StructureLearning(torch.nn.Module):
         self.sparse = sparse
         self.threshold = threshold
         self.temperature = temperature
+        self.candidate_top_k = candidate_top_k
+        self.candidate_sim_threshold = candidate_sim_threshold
 
         self._reset_parameters()
 
@@ -45,9 +49,58 @@ class StructureLearning(torch.nn.Module):
 
     def edge_attention(self, edges):
         src, tgt = edges.src['learned_node_feat'], edges.dst['learned_node_feat']
-        edge_weights = (torch.cat([src, tgt], 1) * self.att).sum(-1) 
+        edge_weights = (torch.cat([src, tgt], 1) * self.att).sum(-1)
         edge_weights = self.activation(edge_weights)
         return {'learned_edge_weight': edge_weights}
+
+    def _propose_candidates(self,
+                            gi: dgl.DGLGraph,
+                            h: torch.Tensor,
+                            layer_id: int):
+        """Propose new inter-subgraph edges within the same macro-block.
+
+        Candidates are top-K cosine-similar node pairs whose similarity also
+        exceeds an absolute floor, excluding pairs that already exist in `gi`.
+        Returns symmetrized (src, dst) tensors.
+        """
+        n = gi.num_nodes()
+        if n < 2 or self.candidate_top_k <= 0:
+            empty = torch.empty(0, dtype=torch.long, device=h.device)
+            return empty, empty
+
+        BLOCK = 2 * (layer_id + 1)
+        x_pos = gi.ndata['x_pos']
+        y_pos = gi.ndata['y_pos']
+        bx = torch.div(x_pos, BLOCK, rounding_mode='floor')
+        by = torch.div(y_pos, BLOCK, rounding_mode='floor')
+        M = int(max(bx.max().item(), by.max().item())) + 1
+        block_key = bx * M + by # (N,)
+
+        h_norm = torch.nn.functional.normalize(h, dim=-1)
+        sim = h_norm @ h_norm.t() # (N, N)
+
+        same_block = block_key.unsqueeze(0) == block_key.unsqueeze(1)
+        eye = torch.eye(n, dtype=torch.bool, device=h.device)
+        sim = sim.masked_fill(~(same_block & ~eye), float('-inf'))
+
+        k = min(self.candidate_top_k, n - 1)
+        topk_vals, topk_idx = sim.topk(k, dim=-1)
+        valid = torch.isfinite(topk_vals) & (topk_vals > self.candidate_sim_threshold)
+
+        rows = torch.arange(n, device=h.device).unsqueeze(1).expand(-1, k)
+        src = rows[valid]
+        dst = topk_idx[valid]
+
+        # Symmetrize so directed DGL graph carries both (i,j) and (j,i)
+        src_sym = torch.cat([src, dst])
+        dst_sym = torch.cat([dst, src])
+
+        # Drop pairs that already exist (intra, inter, self-loop, or prior-layer rescued)
+        if src_sym.numel() == 0:
+            return src_sym, dst_sym
+        existing = gi.has_edges_between(src_sym, dst_sym)
+        keep = ~existing
+        return src_sym[keep], dst_sym[keep]
 
     def forward(self,
                 g: dgl.graph,
@@ -66,20 +119,35 @@ class StructureLearning(torch.nn.Module):
             edge_feat_specs = {"mask": -1, "weight": 0}
 
             g_unbatched = []
+            node_offset = 0
             for gi in dgl.unbatch(g):
+                n_nodes = gi.num_nodes()
+
                 # Remove self-loops if any
                 gi = dgl.remove_self_loop(gi)
 
-                # Add self-loops with specified edge features 
+                # Add self-loops with specified edge features
                 for feat, fill_val in edge_feat_specs.items():
                     gi = dgl.add_self_loop(
                         gi,
                         edge_feat_names=[feat],
                         fill_data=fill_val
                     )
-                g_unbatched.append(gi)
 
-            # Batch graphs back 
+                # Propose new candidate edges (feature-similar, same macro-block, not yet existing)
+                h_local = x[node_offset : node_offset + n_nodes]
+                new_src, new_dst = self._propose_candidates(gi, h_local, layer_id)
+                if new_src.numel() > 0:
+                    n_new = new_src.numel()
+                    gi.add_edges(new_src, new_dst, data={
+                        'mask':   torch.zeros(n_new, dtype=gi.edata['mask'].dtype,   device=x.device),
+                        'weight': torch.zeros(n_new, dtype=gi.edata['weight'].dtype, device=x.device),
+                    })
+
+                g_unbatched.append(gi)
+                node_offset += n_nodes
+
+            # Batch graphs back
             g = dgl.batch(g_unbatched)
         
             # GGN on intra-subgraph edges only
@@ -153,6 +221,8 @@ class GRAPHLayer(torch.nn.Module):
                  num_gnn_layers: int = 1,
                  threshold: float = 0.5,
                  temperature: float = 0.5,
+                 candidate_top_k: int = 8,
+                 candidate_sim_threshold: float = 0.4,
                  ):
         super(GRAPHLayer, self).__init__()
         if activation == 'relu':
@@ -179,7 +249,10 @@ class GRAPHLayer(torch.nn.Module):
         self.num_gnn_layers = num_gnn_layers
         for _ in range(self.num_gnn_layers):
             self.convs.append(dgl.nn.SAGEConv(output_dim, output_dim, 'lstm'))
-        self.sls = StructureLearning(output_dim, sparse='hard', emb_layer=1, threshold=threshold, temperature=temperature)
+        self.sls = StructureLearning(output_dim, sparse='hard', emb_layer=1,
+                                     threshold=threshold, temperature=temperature,
+                                     candidate_top_k=candidate_top_k,
+                                     candidate_sim_threshold=candidate_sim_threshold)
         self.threshold = threshold
         self.temperature = temperature
 

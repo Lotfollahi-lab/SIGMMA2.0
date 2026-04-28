@@ -31,6 +31,8 @@ class sigmma(nn.Module):
             self.register_buffer("std_rgb", std)
 
         self.num_resolutions = config.num_resolutions
+        candidate_top_k = getattr(config, "candidate_top_k", 8)
+        candidate_sim_threshold = getattr(config, "candidate_sim_threshold", 0.4)
         self.spatial_encoder = torch.nn.ModuleList()
         for i in range(config.num_resolutions):
             if i == 0:
@@ -40,7 +42,9 @@ class sigmma(nn.Module):
                             config.activation,
                             config.dropout,
                             threshold=config.edge_threshold,
-                            temperature=config.gumbel_temperature
+                            temperature=config.gumbel_temperature,
+                            candidate_top_k=candidate_top_k,
+                            candidate_sim_threshold=candidate_sim_threshold,
                             ))
                 self.spatial_encoder.append(
                     READOUTLayer(config.spatial_encoder_output_dim,
@@ -56,7 +60,9 @@ class sigmma(nn.Module):
                             config.activation,
                             config.dropout,
                             threshold=config.edge_threshold,
-                            temperature=config.gumbel_temperature
+                            temperature=config.gumbel_temperature,
+                            candidate_top_k=candidate_top_k,
+                            candidate_sim_threshold=candidate_sim_threshold,
                             ))
                 self.spatial_encoder.append(
                     READOUTLayer(config.spatial_encoder_output_dim,

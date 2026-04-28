@@ -6,6 +6,8 @@ import torch.nn.functional as F
 from torchvision.transforms import Resize
 from torch.utils.checkpoint import checkpoint
 
+from .models_image_backbones import set_lora_adapter
+
 from .layers_graph import GRAPHLayer, READOUTLayer
 
 from .losses import symmetric_InfoNCE
@@ -110,9 +112,14 @@ class sigmma(nn.Module):
             resized.append((im, num_patches))  # [B*num_patches, C, enc_in, enc_in]
 
         # Make embeddings
+        adapter_names = getattr(self.image_encoder, "lora_adapter_names", None)
         embeddings = []
-        for im, num_patches in resized[::-1]:  # from low to high resolution
-            feat = encode_in_microbatches_ckpt(self.image_encoder, im, microbatch=16, amp_dtype=torch.bfloat16)  # [B, D]
+        for idx, (im, num_patches) in enumerate(resized[::-1]):  # from low to high resolution
+            pre_hook = None
+            if adapter_names is not None:
+                name = adapter_names[idx]
+                pre_hook = lambda _name=name: set_lora_adapter(self.image_encoder, _name)
+            feat = encode_in_microbatches_ckpt(self.image_encoder, im, microbatch=16, amp_dtype=torch.bfloat16, pre_hook=pre_hook)  # [B, D]
             # Mean pooling over patches
             feat = feat.view(B, num_patches, -1).mean(dim=1)
             # L2 norm
@@ -192,13 +199,17 @@ class sigmma(nn.Module):
             spatial_embedding_norm = torch.nn.functional.normalize(spatial_embedding, dim=-1)
         return spatial_embedding_norm
 
-def encode_in_microbatches_ckpt(encoder, images, microbatch=16, amp_dtype=torch.bfloat16):
+def encode_in_microbatches_ckpt(encoder, images, microbatch=16, amp_dtype=torch.bfloat16, pre_hook=None):
+    # pre_hook runs inside the checkpointed fn so that any per-scale state
+    # (e.g. active LoRA adapter) is re-established during backward recompute.
     outs = []
     N = images.size(0)
     i = 0
     while i < N:
         chunk = images[i:i+microbatch]
         def fn(x):
+            if pre_hook is not None:
+                pre_hook()
             with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=True):
                 return encoder(x)
         feat = checkpoint(fn, chunk, use_reentrant=False)

@@ -10,10 +10,20 @@ model:
   contrastive_temperature: 10.0
   gumbel_temperature: 0.5
   edge_threshold: 0.5
+  candidate_top_k: 8
+  candidate_sim_threshold: 0.5
   dropout: 0.1
   activation: "leaky_relu"
   aggregate: "attn_pool"
   num_graph_layers: 2
+  lora:
+    enabled: true
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules: ["qkv", "proj"]
+    bias: "none"
+    per_scale: true
 
 dataset:
   split_type: "section_split"

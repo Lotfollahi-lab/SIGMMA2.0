@@ -15,3 +15,10 @@ model:
   activation: "leaky_relu"
   aggregate: "attn_pool"
   num_graph_layers: 2
+  lora:
+    enabled: true
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules: ["qkv", "proj"]
+    bias: "none"

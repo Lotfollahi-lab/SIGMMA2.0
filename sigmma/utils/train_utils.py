@@ -11,6 +11,7 @@ import torch.distributed as dist
 from sigmma.datasets.dataset import MultiSectionDataset
 from sigmma.model import sigmma
 from sigmma.model import UNI, ResNet50
+from sigmma.model.models_image_backbones import H_optimus_zero, apply_lora_to_backbone
 from sigmma.model import symmetric_InfoNCE, bleep_cross_entropy
 from ..evaluation.evaluate_retrieval import retrieval_score, eval_retrieval
 
@@ -19,6 +20,14 @@ import umap
 import matplotlib.pyplot as plt
 
 import wandb
+
+_IMAGE_BACKBONE_REGISTRY = {
+    "UNI": lambda cfg: UNI(checkpoint_path=cfg.model.pretrained_image_encoder_ckpt_path),
+    "H_optimus_zero": lambda cfg: H_optimus_zero(
+        checkpoint_path=cfg.model.get("pretrained_image_encoder_ckpt_path", None) or None
+    ),
+    "ResNet50": lambda cfg: ResNet50(),
+}
 
 def load_dataset(config_dataset, is_train=False, model_name=None):
     """
@@ -53,20 +62,28 @@ def load_model(config:ConfigDict,
     """
     Load the model, optimizer, and learning rate scheduler based on the configuration.
     """
-    if config.model.name == "sigmma": 
+    if config.model.name == "sigmma":
+        if pretrained_image_encoder not in _IMAGE_BACKBONE_REGISTRY:
+            raise NotImplementedError(
+                f"Pretrained image encoder '{pretrained_image_encoder}' is not implemented. "
+                f"Available: {sorted(_IMAGE_BACKBONE_REGISTRY)}"
+            )
         if pretrained_image_encoder == "UNI":
             pretrained_ckpt_dir = config.model.pretrained_image_encoder_ckpt_path
             assert Path(pretrained_ckpt_dir).exists(), f"Pretrained image encoder checkpoint directory {pretrained_ckpt_dir} does not exist."
-            pretrained_image_encoder = UNI(checkpoint_path=pretrained_ckpt_dir)
-        else:
-            raise NotImplementedError(f"Pretrained image encoder {pretrained_image_encoder} is not implemented.")
+        pretrained_image_encoder = _IMAGE_BACKBONE_REGISTRY[pretrained_image_encoder](config)
+
+        lora_cfg = config.model.get("lora", None)
+        if lora_cfg is not None and bool(lora_cfg.get("enabled", False)):
+            num_adapters = int(config.model.num_resolutions) if bool(lora_cfg.get("per_scale", False)) else 1
+            pretrained_image_encoder = apply_lora_to_backbone(pretrained_image_encoder, lora_cfg, num_adapters=num_adapters)
 
         model = sigmma(config.model, pretrained_image_encoder)
 
     else:
         raise NotImplementedError(f"Model {config.model.name} is not implemented.")
 
-    if rank is not None: 
+    if rank is not None:
         model = model.to(torch.cuda.current_device())
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[torch.cuda.current_device()], output_device=torch.cuda.current_device(), find_unused_parameters=True)
     else:
@@ -74,11 +91,13 @@ def load_model(config:ConfigDict,
         model = model.to(device)
 
     if int(os.environ.get("RANK", "0")) == 0:
-        print(f"Total parameters in the {config.model.name} model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+        n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        n_total = sum(p.numel() for p in model.parameters())
+        print(f"{config.model.name} parameters: trainable={n_trainable:,} / total={n_total:,} ({100.0 * n_trainable / max(n_total, 1):.2f}%)")
 
     if train:
         optimizer = torch.optim.AdamW(
-            model.parameters(),
+            [p for p in model.parameters() if p.requires_grad],
             lr=config.train.learning_rate,
             weight_decay=config.train.weight_decay,
         )

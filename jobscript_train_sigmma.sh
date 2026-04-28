@@ -1,11 +1,11 @@
 #BSUB -J train-SIGMMA
-#BSUB -G team361
+#BSUB -G s10396
 #BSUB -L /usr/bin/bash
 #BSUB -o train-SIGMMA.%J.out
 #BSUB -e train-SIGMMA.%J.err
 #BSUB -q training-parallel
 #BSUB -gpu "mode=shared:j_exclusive=no:gmem=76GB:num=2"
-#BSUB -n 16
+#BSUB -n 20
 #BSUB -M 400GB
 #BSUB -R "select[mem>400GB] rusage[mem=400GB] span[hosts=1]"
 

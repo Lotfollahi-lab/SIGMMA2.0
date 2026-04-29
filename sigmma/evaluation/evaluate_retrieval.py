@@ -42,10 +42,15 @@ def load_embeddings(model, dataloader, device, config):
             image_embed = model_output["image_embedding"]
             spatial_embed = model_output["spatial_embedding"]
 
-        # Normalize embeddings
+        # Normalize embeddings.
+        # SIGMMA returns one (image, spatial) pair per resolution in the order
+        # [micro, meso, macro] (see modules_sigmma.forward). config.test.scale_idx
+        # selects which scale to use for retrieval; default -1 = macro to match
+        # the historical eval behaviour.
         if config.model.name == "sigmma":
-            image_embed = image_embed[-1]
-            spatial_embed = spatial_embed[-1]
+            scale_idx = int(config.test.get("scale_idx", -1)) if "test" in config else -1
+            image_embed = image_embed[scale_idx]
+            spatial_embed = spatial_embed[scale_idx]
         else:
             image_embed = image_embed
             spatial_embed = spatial_embed

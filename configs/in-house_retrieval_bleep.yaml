@@ -1,0 +1,30 @@
+model:
+  name: BLEEP
+  # Set to the BLEEP checkpoint produced by jobscript_train_baselines.sh.
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs/in-house_BLEEP_REPLACE_JOBID/checkpoint-stepREPLACE.pth
+  spot_input_dim: 384            # nemo embedding dim
+  image_embedding_dim: 2048      # ResNet50 penultimate
+  projection_dim: 256
+  spot_hidden_dim: 512
+  contrastive_temperature: 1.0
+  dropout: 0.1
+  image_size: 224
+  pretrained_image_encoder_imagenet: True
+
+dataset:
+  split_type: "section_split"
+  reference_dataset:
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    fov_size: 256
+
+  query_dataset:
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_test.csv
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    fov_size: 256
+
+test:
+  batch_size: 256
+  num_workers: 16

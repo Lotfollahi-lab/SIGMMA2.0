@@ -38,7 +38,7 @@ configs=(
     "in-house_retrieval_clip.yaml"
     "in-house_retrieval_plip.yaml"
     "in-house_retrieval_omiclip.yaml"
-    # "in-house_retrieval_bleep.yaml"
+    "in-house_retrieval_bleep.yaml"
 )
 
 for cfg in "${configs[@]}"; do

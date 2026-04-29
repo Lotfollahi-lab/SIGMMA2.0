@@ -35,7 +35,7 @@ configs=(
     "in-house_retrieval_bleep_finetuned.yaml"
     "in-house_retrieval_clip_finetuned.yaml"
     "in-house_retrieval_plip_finetuned.yaml"
-    # "in-house_retrieval_omiclip_finetuned.yaml"  # add after 18306 done
+    "in-house_retrieval_omiclip_finetuned.yaml"  # add after 18306 done
 )
 
 for cfg in "${configs[@]}"; do

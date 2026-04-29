@@ -205,19 +205,24 @@ class sigmma(nn.Module):
         return spatial_embedding_norm
 
 def encode_in_microbatches_ckpt(encoder, images, microbatch=16, amp_dtype=torch.bfloat16, pre_hook=None):
-    # Outer activation checkpointing was redundant with timm's built-in
-    # per-block grad checkpointing (set via set_grad_checkpointing in
-    # sigmma.__init__). Only the inner one is kept; we still chunk the
-    # forward into microbatches so peak activation memory stays bounded.
+    # pre_hook runs inside the checkpointed fn so that any per-scale state
+    # (e.g. active LoRA adapter) is re-established during backward recompute.
+    # Outer checkpoint is required: with multi-resolution forward, all three
+    # resolutions' encoder activations are held simultaneously in the embeddings
+    # list until backward, which OOMs without this wrapper. timm's per-block
+    # grad ckpt alone is not enough — it only frees within-block intermediates,
+    # not the 24 inter-block boundary tensors per resolution.
     outs = []
     N = images.size(0)
     i = 0
     while i < N:
         chunk = images[i:i+microbatch]
-        if pre_hook is not None:
-            pre_hook()
-        with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=True):
-            feat = encoder(chunk)
+        def fn(x):
+            if pre_hook is not None:
+                pre_hook()
+            with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=True):
+                return encoder(x)
+        feat = checkpoint(fn, chunk, use_reentrant=False)
         outs.append(feat)
         i += microbatch
     return torch.cat(outs, dim=0)

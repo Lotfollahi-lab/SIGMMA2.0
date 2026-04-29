@@ -730,6 +730,7 @@ def run_segmentation(
     max_steps: int = 2000,
     lr: float = 0.002,
     backbone_type: str = "sigmma",
+    seg_backbone: nn.Module = None,
 ):
     task = EVA_SEGMENTATION_TASKS[dataset_name]
     num_classes = task["num_classes"]
@@ -738,8 +739,9 @@ def run_segmentation(
     labels = task["labels"]
     DatasetClass = getattr(eva_datasets, task["dataset_cls"])
 
-    seg_backbone_cls = UNIBackboneSegmentation if backbone_type == "uni" else SIGMMABackboneSegmentation
-    seg_backbone = seg_backbone_cls(sigmma_config_path)
+    if seg_backbone is None:
+        seg_backbone_cls = UNIBackboneSegmentation if backbone_type == "uni" else SIGMMABackboneSegmentation
+        seg_backbone = seg_backbone_cls(sigmma_config_path)
     in_features = seg_backbone.out_features
 
     # Train vs val transforms (matches EVA online/monusac.yaml):
@@ -764,6 +766,9 @@ def run_segmentation(
         print(f"\n{'='*60}")
         print(f"[{dataset_name}] Run {run_idx + 1}/{n_runs}")
         print(f"{'='*60}")
+
+        # EVA leaderboard protocol: distinct seed per run, then average metrics.
+        L.seed_everything(run_idx, workers=True)
 
         run_output_dir = os.path.join(task_output_dir, f"run_{run_idx}")
 

@@ -76,7 +76,7 @@ def objective(args, rank=None, world_size=None):
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, shuffle=True)
     else:
         train_sampler = torch.utils.data.RandomSampler(train_dataset, generator=g)
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=True, persistent_workers=config.train.num_workers > 0, pin_memory=True, prefetch_factor=4 if config.train.num_workers > 0 else None)
 
     # Eval dataloader: fixed subset for reproducible evaluation
     num_eval_samples = config.train.get("max_num_eval_samples", len(eval_dataset))
@@ -84,9 +84,9 @@ def objective(args, rank=None, world_size=None):
     eval_subset = torch.utils.data.Subset(eval_dataset, indices_eval)
     if rank is not None:
         eval_sampler = torch.utils.data.distributed.DistributedSampler(eval_subset, shuffle=False, drop_last=False)
-        eval_dataloader = DataLoader(eval_subset, batch_size=batch_size, sampler=eval_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=False)
+        eval_dataloader = DataLoader(eval_subset, batch_size=batch_size, sampler=eval_sampler, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, drop_last=False, persistent_workers=config.train.num_workers > 0, pin_memory=True, prefetch_factor=4 if config.train.num_workers > 0 else None)
     else:
-        eval_dataloader = DataLoader(eval_subset, batch_size=batch_size, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, shuffle=False, drop_last=False)
+        eval_dataloader = DataLoader(eval_subset, batch_size=batch_size, worker_init_fn=seed_worker, generator=g, collate_fn=multimodal_collate, num_workers=config.train.num_workers, shuffle=False, drop_last=False, persistent_workers=config.train.num_workers > 0, pin_memory=True, prefetch_factor=4 if config.train.num_workers > 0 else None)
 
     # Add wandb logging
     wandb_config = {

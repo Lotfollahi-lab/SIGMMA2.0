@@ -125,13 +125,12 @@ class sigmma(nn.Module):
             if adapter_names is not None:
                 name = adapter_names[idx]
                 pre_hook = lambda _name=name: set_lora_adapter(self.image_encoder, _name)
-            feat = encode_in_microbatches_ckpt(self.image_encoder, im, microbatch=16, amp_dtype=torch.bfloat16, pre_hook=pre_hook)  # [B, D]
+            feat = encode_in_microbatches_ckpt(self.image_encoder, im, microbatch=64, amp_dtype=torch.bfloat16, pre_hook=pre_hook)  # [B, D]
             # Mean pooling over patches
             feat = feat.view(B, num_patches, -1).mean(dim=1)
             # L2 norm
             feat = F.normalize(feat, dim=-1)
             embeddings.append(feat)
-            torch.cuda.empty_cache()
         return embeddings
 
     def forward(self, x1, x2):
@@ -206,19 +205,19 @@ class sigmma(nn.Module):
         return spatial_embedding_norm
 
 def encode_in_microbatches_ckpt(encoder, images, microbatch=16, amp_dtype=torch.bfloat16, pre_hook=None):
-    # pre_hook runs inside the checkpointed fn so that any per-scale state
-    # (e.g. active LoRA adapter) is re-established during backward recompute.
+    # Outer activation checkpointing was redundant with timm's built-in
+    # per-block grad checkpointing (set via set_grad_checkpointing in
+    # sigmma.__init__). Only the inner one is kept; we still chunk the
+    # forward into microbatches so peak activation memory stays bounded.
     outs = []
     N = images.size(0)
     i = 0
     while i < N:
         chunk = images[i:i+microbatch]
-        def fn(x):
-            if pre_hook is not None:
-                pre_hook()
-            with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=True):
-                return encoder(x)
-        feat = checkpoint(fn, chunk, use_reentrant=False)
+        if pre_hook is not None:
+            pre_hook()
+        with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=True):
+            feat = encoder(chunk)
         outs.append(feat)
         i += microbatch
     return torch.cat(outs, dim=0)

@@ -5,7 +5,7 @@
 #BSUB -e train-SIGMMA.%J.err
 #BSUB -q training-parallel
 #BSUB -gpu "mode=shared:j_exclusive=no:gmem=76GB:num=2"
-#BSUB -n 20
+#BSUB -n 32
 #BSUB -M 400GB
 #BSUB -R "select[mem>400GB] rusage[mem=400GB] span[hosts=1]"
 

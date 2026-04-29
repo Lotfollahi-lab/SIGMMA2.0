@@ -97,3 +97,12 @@ wandb/*
 .ipynb_checkpoints/*
 *.pt
 *.pth
+
+# Claude Code local settings
+.claude/
+
+# Manuscript PDFs (binary, kept locally)
+*.pdf
+
+# Notebook scratch (large outputs / figures live here)
+notebooks/

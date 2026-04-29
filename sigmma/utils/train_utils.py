@@ -13,6 +13,7 @@ from sigmma.model import sigmma
 from sigmma.model import UNI, ResNet50
 from sigmma.model.models_image_backbones import H_optimus_zero, apply_lora_to_backbone
 from sigmma.model import symmetric_InfoNCE, bleep_cross_entropy
+from sigmma.model.baselines import openAI_CLIP, PLIP, loki_OmiCLIP, BLEEP
 from ..evaluation.evaluate_retrieval import retrieval_score, eval_retrieval
 
 from sklearn.decomposition import PCA
@@ -80,6 +81,47 @@ def load_model(config:ConfigDict,
 
         model = sigmma(config.model, pretrained_image_encoder)
 
+    elif config.model.name == "openAI_CLIP":
+        model = openAI_CLIP(
+            hf_model_id=config.model.get("hf_model_id", "openai/clip-vit-base-patch32"),
+            freeze_encoders=not bool(train),
+            loss_temperature=(float(config.model.contrastive_temperature)
+                              if train and config.model.get("contrastive_temperature") is not None
+                              else None),
+        )
+
+    elif config.model.name == "PLIP":
+        model = PLIP(
+            hf_model_id=config.model.get("hf_model_id", "vinid/plip"),
+            freeze_encoders=not bool(train),
+            loss_temperature=(float(config.model.contrastive_temperature)
+                              if train and config.model.get("contrastive_temperature") is not None
+                              else None),
+        )
+
+    elif config.model.name == "loki_OmiCLIP":
+        ckpt = config.model.pretrained_ckpt_path
+        assert Path(ckpt).exists(), f"OmiCLIP checkpoint not found at {ckpt}"
+        model = loki_OmiCLIP(
+            pretrained_ckpt_path=str(ckpt),
+            freeze_encoders=not bool(train),
+            loss_temperature=(float(config.model.contrastive_temperature)
+                              if train and config.model.get("contrastive_temperature") is not None
+                              else None),
+        )
+
+    elif config.model.name == "BLEEP":
+        model = BLEEP(
+            spot_input_dim=int(config.model.spot_input_dim),
+            image_embedding_dim=int(config.model.get("image_embedding_dim", 2048)),
+            projection_dim=int(config.model.get("projection_dim", 256)),
+            spot_hidden_dim=int(config.model.get("spot_hidden_dim", 512)),
+            temperature=float(config.model.get("contrastive_temperature", 1.0)),
+            dropout=float(config.model.get("dropout", 0.1)),
+            image_size=int(config.model.get("image_size", 224)),
+            pretrained_image_encoder=bool(config.model.get("pretrained_image_encoder_imagenet", True)),
+        )
+
     else:
         raise NotImplementedError(f"Model {config.model.name} is not implemented.")
 
@@ -111,6 +153,28 @@ def load_model(config:ConfigDict,
                 step_size=config.train.lr_step_size,
                 gamma=config.train.lr_gamma,
         )
+
+        elif config.train.lr_scheduler == "warmup_cosine":
+            warmup_steps = int(config.train.get("lr_warmup_steps", 0))
+            min_lr = float(config.train.get("lr_min", 0.0))
+            base_lr = float(config.train.learning_rate)
+            min_lr_ratio = (min_lr / base_lr) if base_lr > 0 else 0.0
+            warmup = torch.optim.lr_scheduler.LinearLR(
+                optimizer,
+                start_factor=0.1,
+                end_factor=1.0,
+                total_iters=max(1, warmup_steps),
+            )
+            cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=max(1, int(config.train.max_steps) - warmup_steps),
+                eta_min=min_lr,
+            )
+            lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
+                optimizer,
+                schedulers=[warmup, cosine],
+                milestones=[max(1, warmup_steps)],
+            )
 
         return model, optimizer, lr_scheduler
 
@@ -169,13 +233,19 @@ def train(
             if config.model.name == "sigmma":
                 spatial = batch['spatial_graph'].to(device)
                 inputs = [image, spatial]
+            elif config.model.name == "BLEEP":
+                spatial = batch['spatial'].to(device)
+                inputs = [image, spatial]
+            elif config.model.name in ("openAI_CLIP", "PLIP", "loki_OmiCLIP"):
+                spatial = batch["spatial_text"]
+                inputs = [image, spatial]
             else:
                 raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
 
             # Gradient accumulation code adapted from OpenCLIP (https://github.com/mlfoundations/open_clip/blob/main/src/open_clip_train/train.py)
             if accum_freq == 1:
                 # Forward pass
-                with torch.amp.autocast(device.type, enabled=True):
+                with torch.amp.autocast(device.type, dtype=torch.bfloat16, enabled=True):
                     model_out = model(*inputs)
                     num_resolutions = len(model_out['image_embedding'])
                 if config.model.name == "sigmma":
@@ -197,7 +267,7 @@ def train(
             else:
                 with torch.no_grad():
                     # Forward pass
-                    with torch.amp.autocast(device.type, enabled=True):
+                    with torch.amp.autocast(device.type, dtype=torch.bfloat16, enabled=True):
                         model_out = model(*inputs)
 
                     image_embedding = model_out["image_embedding"] # List of Tensors [(B, D), (B, D), ...] or Tensor (B, D)
@@ -224,7 +294,7 @@ def train(
                 for j in range(len(accum_images)):
                     image = to_device_if_tensor(accum_images[j], device)
                     spatial = to_device_if_tensor(accum_spatial[j], device)
-                    with torch.amp.autocast(device.type, enabled=True):
+                    with torch.amp.autocast(device.type, dtype=torch.bfloat16, enabled=True):
                         model_out = model(image, spatial)
                         inputs_for_loss = {}
                         if config.model.name == "sigmma":
@@ -423,7 +493,7 @@ def evaluate(config, model, eval_dataloader, device):
             else:
                 raise NotImplementedError(f"Model {config.model.name} is not implemented for evaluation.")
 
-            with torch.amp.autocast(device.type, enabled=True):
+            with torch.amp.autocast(device.type, dtype=torch.bfloat16, enabled=True):
                 model_out = forward_module(*inputs)
             image_embedding = model_out["image_embedding"]
             spatial_embedding = model_out["spatial_embedding"]

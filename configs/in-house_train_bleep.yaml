@@ -1,0 +1,41 @@
+model:
+  name: BLEEP
+  spot_input_dim: 384            # nemo embedding dim (matches dataset)
+  image_embedding_dim: 2048      # ResNet50 penultimate
+  projection_dim: 256
+  spot_hidden_dim: 512
+  contrastive_temperature: 1.0
+  dropout: 0.1
+  image_size: 224
+  pretrained_image_encoder_imagenet: True
+  # train_utils.train() reads pretrained_image_encoder for naming/logging.
+  pretrained_image_encoder: "ResNet50"
+
+dataset:
+  split_type: "section_split"
+  train:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv
+    fov_size: 256
+  validation:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_val.csv
+    fov_size: 256
+
+train:
+  batch_size: 128
+  max_steps: 1000
+  learning_rate: 0.0001
+  weight_decay: 0.001
+  lr_scheduler: "step"
+  lr_step_size: 50
+  lr_gamma: 0.1
+  save_every: 100
+  eval_every: 100
+  # BLEEP forward returns a single tensor (no per-scale list); the
+  # gradient-accumulation branch in train_utils.train() is sigmma-only,
+  # so we keep accumulation disabled for baselines.
+  gradient_accumulation_steps: 1
+  num_workers: 15

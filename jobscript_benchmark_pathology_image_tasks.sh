@@ -42,9 +42,9 @@ ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/b
 #    --download
 
 # # Segmentation
-python scripts/benchmark_image_pathology_task.py \
-       --sigmma_config /nfs/team361/dj16/projects/SIGMMA/configs/image_pathology_task_sigmma.yaml \
-       --datasets monusac --backbone uni
+# python scripts/benchmark_image_pathology_task.py \
+#        --sigmma_config /nfs/team361/dj16/projects/SIGMMA/configs/image_pathology_task_sigmma.yaml \
+#        --datasets monusac --backbone uni
 
 python ./scripts/benchmark_image_pathology_task.py \
     --sigmma_config /nfs/team361/dj16/projects/SIGMMA/configs/image_pathology_task_sigmma.yaml \

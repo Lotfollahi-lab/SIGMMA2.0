@@ -1,0 +1,21 @@
+model:
+  name: openAI_CLIP
+  hf_model_id: "openai/clip-vit-base-patch32"
+
+dataset:
+  split_type: "section_split"
+  reference_dataset:
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    fov_size: 256
+
+  query_dataset:
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_test.csv
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    fov_size: 256
+
+test:
+  batch_size: 256
+  num_workers: 16

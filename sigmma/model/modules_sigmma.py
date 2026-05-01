@@ -10,8 +10,6 @@ from .models_image_backbones import set_lora_adapter
 
 from .layers_graph import GRAPHLayer, READOUTLayer
 
-from .losses import symmetric_InfoNCE
-
 class sigmma(nn.Module):
     def __init__(self, config, image_encoder):
         super(sigmma, self).__init__()
@@ -71,8 +69,6 @@ class sigmma(nn.Module):
                                 config.activation,
                                 config.dropout)
                 )
-
-        self.contrastive_loss = symmetric_InfoNCE(temperature=config.contrastive_temperature)
 
         self.register_buffer("global_step", torch.zeros((), dtype=torch.long))
 
@@ -147,15 +143,12 @@ class sigmma(nn.Module):
 
         # Spatial embeddings
         g, h_x2 = x2, x2.ndata['feat']
-        loss_contrastive, loss_kl = [], []
         for i in range(self.num_resolutions):
             # spatial encoder
             ## (1) graph layer
             g, h_x2 = self.spatial_encoder[i*2](g, h_x2, layer_id=i)
             ## (2) graph readout layer
             h_x2_pooled = self.spatial_encoder[i*2+1](g, h_x2)
-
-            loss_kl.extend(self.spatial_encoder[i*2].kl_terms)
 
             # corresponding image embeddings
             h_x1 = x1_multiple_resolution[i]
@@ -167,17 +160,9 @@ class sigmma(nn.Module):
             embedding_imgs.append(h_x1_norm)
             embedding_spatial.append(h_x2_norm)
 
-            loss_contrastive.append(self.contrastive_loss(h_x1_norm, h_x2_norm))
-
-        loss_kl = torch.stack(loss_kl).mean()
-        loss_contrastive = torch.stack(loss_contrastive).mean()
-
         self.global_step += 1
 
-        loss = loss_contrastive
-
-        model_outputs = {"loss": loss,
-                         "image_embedding": embedding_imgs,
+        model_outputs = {"image_embedding": embedding_imgs,
                          "spatial_embedding": embedding_spatial}
         return model_outputs
 

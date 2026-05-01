@@ -8,7 +8,6 @@ model:
   spatial_encoder_input_dim: 384 # cell vector dimension from pretrained model (novae: 64, nemo: 384) or raw cell vector dimension (e.g. 4952)
   spatial_encoder_output_dim: 512
   num_resolutions: 3
-  contrastive_temperature: 0.01
   gumbel_temperature: 0.5
   edge_threshold: 0.5
   dropout: 0.1

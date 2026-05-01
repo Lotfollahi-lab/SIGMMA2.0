@@ -250,8 +250,11 @@ def train(
                     num_resolutions = len(model_out['image_embedding'])
                 if config.model.name == "sigmma":
                     loss = 0
+                    contrastive_loss = symmetric_InfoNCE(
+                        temperature=float(config.model.contrastive_temperature)
+                    )
                     for s in range(num_resolutions):
-                        loss += symmetric_InfoNCE()(model_out['image_embedding'][s], model_out['spatial_embedding'][s])
+                        loss += contrastive_loss(model_out['image_embedding'][s], model_out['spatial_embedding'][s])
                     loss = loss / num_resolutions
                 else:
                     if rank == 0:
@@ -300,12 +303,15 @@ def train(
                         if config.model.name == "sigmma":
                             loss = 0
                             num_resolutions = len(model_out['image_embedding'])
+                            contrastive_loss = symmetric_InfoNCE(
+                                temperature=float(config.model.contrastive_temperature)
+                            )
                             for s in range(num_resolutions):
                                 for key in accum_features:
                                     accumulated = accum_features[key]
                                     parts = [accumulated[k][s] for k in range(j)] + [model_out[key][s]] + [accumulated[k][s] for k in range(j+1, len(accumulated))]
                                     inputs_for_loss[key] = torch.cat(parts)
-                                loss += symmetric_InfoNCE()(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
+                                loss += contrastive_loss(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
                             loss = loss / num_resolutions
                             losses = {'contrastive_loss': loss}
                             total_loss = sum(losses.values()) #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
@@ -521,8 +527,11 @@ def evaluate(config, model, eval_dataloader, device):
             all_image_embeddings = local_image
             all_spatial_embeddings = local_spatial
         loss = 0
+        contrastive_loss = symmetric_InfoNCE(
+            temperature=float(config.model.contrastive_temperature)
+        )
         for s in range(num_resolutions):
-            loss += symmetric_InfoNCE()(all_image_embeddings[s], all_spatial_embeddings[s])
+            loss += contrastive_loss(all_image_embeddings[s], all_spatial_embeddings[s])
         loss = loss / num_resolutions
     else:
         local_image = torch.concat(all_image_embeddings, dim=0).to(device)
@@ -533,7 +542,9 @@ def evaluate(config, model, eval_dataloader, device):
         else:
             all_image_embeddings = local_image
             all_spatial_embeddings = local_spatial
-        loss = symmetric_InfoNCE()(all_image_embeddings, all_spatial_embeddings)
+        loss = symmetric_InfoNCE(
+            temperature=float(config.model.contrastive_temperature)
+        )(all_image_embeddings, all_spatial_embeddings)
 
     # retrieval_score does its own forward pass over the dataloader, which
     # under DDP would yield rank-local query/reference matrices. Callers in

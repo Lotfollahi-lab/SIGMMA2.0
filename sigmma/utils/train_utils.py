@@ -228,6 +228,8 @@ def train(
         for batch in train_dataloader:
             if global_step >= max_steps:
                 break
+            if not isinstance(batch.get("image"), torch.Tensor) or batch["image"].numel() == 0:
+                continue
             i += 1
             image = batch["image"].to(device)
             if config.model.name == "sigmma":
@@ -486,6 +488,8 @@ def evaluate(config, model, eval_dataloader, device):
 
     with torch.no_grad():
         for batch in eval_dataloader:
+            if not isinstance(batch.get("image"), torch.Tensor) or batch["image"].numel() == 0:
+                continue
             image = batch["image"].to(device)
             if config.model.name == "sigmma":
                 spatial = batch['spatial_graph'].to(device)

@@ -21,6 +21,8 @@ def load_embeddings(model, dataloader, device, config):
     image_embed_li = []
     spatial_embed_li = []
     for batch in dataloader:
+        if not isinstance(batch.get("image"), torch.Tensor) or batch["image"].numel() == 0:
+            continue
         image = batch["image"].to(device)
 
         if config.model.name == "sigmma":

@@ -378,6 +378,15 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
                 
         return image
 
+_BATCH_TEMPLATE: Mapping = {
+    "image": torch.empty(0),
+    "spatial": torch.empty(0),
+    "spatial_graph": dgl.graph(([], [])),
+    "spatial_text": "",
+    "label": torch.empty(0),
+    "metadata": {"section_id": "", "tissue_type": "", "annotation": ""},
+}
+
 def _empty_batch_like(template: Mapping):
     """Return an empty-but-well-formed batch matching `template`'s structure."""
     out = {}
@@ -396,7 +405,7 @@ def multimodal_collate_dict(batch_dicts):
     # Handle None subdicts
     batch_dicts = [d for d in batch_dicts if d is not None and isinstance(d, Mapping)]
     if not batch_dicts:
-        return {}
+        return _empty_batch_like(_BATCH_TEMPLATE.get("metadata", {}))
 
     # Drop dicts that contain None/empty graphs
     filtered = [d for d in batch_dicts if not _is_empty_sample(d)]
@@ -439,9 +448,10 @@ def multimodal_collate(batch):
     # 0) Strip None samples early (your Dataset might yield None to “skip”)
     batch = [b for b in batch if b is not None and isinstance(b, Mapping)]
     if not batch:
-        # No usable samples: return a safe empty structure
-        # If you can, keep a global/template example to mirror shapes more precisely.
-        return {}
+        # No usable samples: return a skeleton with the same key structure as a
+        # real batch, so all downstream consumers can use a single empty-batch
+        # guard instead of branching on dict-shape.
+        return _empty_batch_like(_BATCH_TEMPLATE)
  
     # 1) Drop samples that contain None/empty DGL graphs anywhere inside
     filtered = [b for b in batch if not _is_empty_sample(b)]

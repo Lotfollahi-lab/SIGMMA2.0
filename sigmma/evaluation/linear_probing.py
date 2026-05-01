@@ -26,6 +26,8 @@ def label_prediction(dataloader, model, device, train_mode=True, method='ridge',
     all_labels = []
     with torch.no_grad():
         for batch in dataloader:
+            if not isinstance(batch.get("image"), torch.Tensor) or batch["image"].numel() == 0:
+                continue
             image = batch["image"].to(device)
             label = batch["label"][predicted_label]
             if norm == 'log1p':

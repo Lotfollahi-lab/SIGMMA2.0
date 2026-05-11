@@ -279,11 +279,21 @@ class UNIBackboneSegmentation(nn.Module):
 # 2. Dataset configs
 # ============================================================
 EVA_CLASSIFICATION_TASKS = {
-    "breakhis": {"dataset_cls": "BreaKHis", "num_classes": 4},
-    "crc":      {"dataset_cls": "CRC",      "num_classes": 9},
-    "gleason":  {"dataset_cls": "GleasonArvaniti", "num_classes": 4},
-    "mhist":    {"dataset_cls": "MHIST",    "num_classes": 2},
-    "patchcam": {"dataset_cls": "PatchCamelyon", "num_classes": 2},
+    # valid_splits: which split names the dataset class actually supports —
+    # used to skip splits like 'test' on BreaKHis/CRC that have no test set.
+    # Without this, eva's lazy split validation surfaces only at predict-time
+    # (KeyError 'test' / "Invalid data split. Use 'train' or 'val'.") and
+    # corrupts the embedding extraction step.
+    "breakhis": {"dataset_cls": "BreaKHis", "num_classes": 4,
+                 "valid_splits": ["train", "val"]},
+    "crc":      {"dataset_cls": "CRC", "num_classes": 9,
+                 "valid_splits": ["train", "val"]},
+    "gleason":  {"dataset_cls": "GleasonArvaniti", "num_classes": 4,
+                 "valid_splits": ["train", "val", "test"]},
+    "mhist":    {"dataset_cls": "MHIST", "num_classes": 2,
+                 "valid_splits": ["train", "test"]},
+    "patchcam": {"dataset_cls": "PatchCamelyon", "num_classes": 2,
+                 "valid_splits": ["train", "val", "test"]},
 }
 
 EVA_WSI_TASKS = {
@@ -324,7 +334,7 @@ DEFAULT_N_RUNS = {
 def _safe_load_split(dataset_cls, root, split, download, **kwargs):
     try:
         ds = dataset_cls(root=root, split=split, download=download, **kwargs)
-        _ = len(ds)  # forces _image_files → _data_directory evaluation
+        _ = len(ds)
         return ds
     except Exception as e:
         print(f"  [INFO] split='{split}' not available: {e}")
@@ -371,7 +381,8 @@ def run_classification(
     if not os.path.exists(manifest_path):
         print(f"\n[{dataset_name}] Extracting embeddings -> {embeddings_dir}")
 
-        split_specs = [("train", download), ("val", False), ("test", False)]
+        valid_splits = task.get("valid_splits", ["train", "val", "test"])
+        split_specs = [(s, download if s == "train" else False) for s in valid_splits]
         predict_datasets = []
         dataloader_idx_map = {}
         for i, (split, dl) in enumerate(split_specs):
@@ -991,7 +1002,7 @@ def main():
                         default=["breakhis", "crc", "gleason", "mhist", "patchcam"],
                         choices=ALL_TASKS)
     parser.add_argument("--data_root", type=str, default="./data")
-    parser.add_argument("--output_root", type=str, default="./logs/sigmma")
+    parser.add_argument("--output_root", type=str, default="./outputs/eva_bench/sigmma")
     parser.add_argument("--download", action="store_true",
                         help="Download datasets if not present")
     parser.add_argument("--n_runs", type=int, default=None,

@@ -1,8 +1,8 @@
 #BSUB -J pathology_benchmark_sanity_check-SIGMMA
 #BSUB -G s10396
 #BSUB -L /usr/bin/bash
-#BSUB -o pathology_benchmark_sanity_check-SIGMMA.%J.out
-#BSUB -e pathology_benchmark_sanity_check-SIGMMA.%J.err
+#BSUB -o logs/job_logs/pathology_benchmark_sanity_check-SIGMMA.%J.out
+#BSUB -e logs/job_logs/pathology_benchmark_sanity_check-SIGMMA.%J.err
 #BSUB -q training-parallel
 #BSUB -gpu "mode=shared:j_exclusive=no:gmem=76GB:num=1"
 #BSUB -n 8
@@ -33,7 +33,7 @@ ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/b
 # per-block / per-target-module breakdown, top-changed layers, and (for
 # per_scale checkpoints) cross-adapter cosine similarity. CSV row-per-layer
 # is dropped under logs/ for notebook plotting.
-mkdir -p ${run_dir}/logs
+mkdir -p ${run_dir}/outputs/diff_uni_weights
 
 # Per-scale checkpoint (3 adapters: scale_0/scale_1/scale_2). Swap to
 # image_pathology_task_sigmma.yaml if the target checkpoint is single-adapter.
@@ -43,4 +43,4 @@ python ${run_dir}/scripts/diff_uni_weights.py \
     --sigmma_config ${SIGMMA_CONFIG} \
     --top_k 20 \
     --cross_adapter \
-    --csv_out ${run_dir}/logs/diff_uni_weights.${LSB_JOBID}.csv
+    --csv_out ${run_dir}/outputs/diff_uni_weights/diff_uni_weights.${LSB_JOBID}.csv

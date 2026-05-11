@@ -7,7 +7,7 @@ model:
   spatial_encoder_input_dim: 384
   spatial_encoder_output_dim: 512
   num_resolutions: 3
-  contrastive_temperature: 10.0
+  contrastive_temperature: 0.07
   gumbel_temperature: 0.5
   edge_threshold: 0.5
   candidate_top_k: 8
@@ -32,11 +32,13 @@ dataset:
     type_pretrained_cell_embedding: "nemo"
     manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv
     fov_size: 256
+    hier_cache_dir: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/hier_cache_fov256_res3_tt20000
   validation:
     pretrained_cell_embedding: True
     type_pretrained_cell_embedding: "nemo"
     manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_val.csv
     fov_size: 256
+    hier_cache_dir: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/hier_cache_fov256_res3_tt20000
 
 train:
   batch_size: 128
@@ -50,4 +52,4 @@ train:
   eval_every: 500
   max_num_eval_samples: 2048
   gradient_accumulation_steps: 10
-  num_workers: 15
+  num_workers: 24

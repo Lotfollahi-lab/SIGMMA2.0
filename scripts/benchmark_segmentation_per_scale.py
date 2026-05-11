@@ -13,7 +13,7 @@ Usage:
         --sigmma_config configs/image_pathology_segmentation_per_scale_sigmma.yaml \
         --datasets consep monusac \
         --data_root ./data \
-        --output_root ./logs/sigmma_per_scale \
+        --output_root ./outputs/eva_bench/sigmma_per_scale \
         --n_runs 5
 """
 
@@ -69,7 +69,7 @@ def main():
                         help="Which scale indices to benchmark "
                              "(0=micro, 1=meso, 2=macro).")
     parser.add_argument("--data_root", default="./data", type=str)
-    parser.add_argument("--output_root", default="./logs/sigmma_per_scale", type=str)
+    parser.add_argument("--output_root", default="./outputs/eva_bench/sigmma_per_scale", type=str)
     parser.add_argument("--download", action="store_true")
     parser.add_argument("--n_runs", type=int, default=5,
                         help="Number of seeds per (scale, dataset). EVA "

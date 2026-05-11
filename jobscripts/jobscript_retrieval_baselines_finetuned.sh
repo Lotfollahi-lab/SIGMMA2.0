@@ -1,8 +1,8 @@
-#BSUB -J retrieval-baselines
+#BSUB -J retrieval-baselines-ft
 #BSUB -G s10396
 #BSUB -L /usr/bin/bash
-#BSUB -o retrieval-baselines.%J.out
-#BSUB -e retrieval-baselines.%J.err
+#BSUB -o logs/job_logs/retrieval-baselines-ft.%J.out
+#BSUB -e logs/job_logs/retrieval-baselines-ft.%J.err
 #BSUB -q training-parallel
 #BSUB -gpu "mode=shared:j_exclusive=no:gmem=76GB:num=1"
 #BSUB -n 20
@@ -20,30 +20,27 @@ export PATH="/nfs/users/nfs_d/dj16/.local/bin:$PATH"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 run_dir="/nfs/team361/dj16/projects/SIGMMA"
-output_dir="/lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs"
+output_dir="${run_dir}/outputs/retrieval/baselines"
 
 ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/bin/activate"
 [ -f $ENV_PATH ] && source $ENV_PATH || echo "Failed to activate: ${ENV_PATH}"
 
-# === Baseline retrieval evaluation ===========================================
-# Three baselines (CLIP / PLIP / OmiCLIP) are evaluated zero-shot from their
-# official checkpoints. BLEEP requires a checkpoint produced by
-# jobscript_train_baselines.sh; update the path inside its config first.
+# === Fine-tuned baseline retrieval ===========================================
+# Evaluates BLEEP / CLIP / PLIP using their job-18189 fine-tuned checkpoints
+# (step 1000). OmiCLIP is excluded — re-add its config once 18306 finishes
+# and a fine-tuned OmiCLIP checkpoint is available.
 # =============================================================================
 
-# Comment out any baseline you don't want to run this job.
-# BLEEP is uncommented only after jobscript_train_baselines.sh has produced a
-# checkpoint and configs/in-house_retrieval_bleep.yaml has been updated.
 configs=(
-    "in-house_retrieval_clip.yaml"
-    "in-house_retrieval_plip.yaml"
-    "in-house_retrieval_omiclip.yaml"
-    "in-house_retrieval_bleep.yaml"
+    "in-house_retrieval_bleep_finetuned.yaml"
+    "in-house_retrieval_clip_finetuned.yaml"
+    "in-house_retrieval_plip_finetuned.yaml"
+    "in-house_retrieval_omiclip_finetuned.yaml"  # add after 18306 done
 )
 
 for cfg in "${configs[@]}"; do
     cfg_name="${cfg%.yaml}"
-    job_outdir="${output_dir}/${cfg_name}_${LSB_JOBID}"
+    job_outdir="${output_dir}/${cfg_name}/${LSB_JOBID}"
     mkdir -p ${job_outdir}
     cp ${run_dir}/configs/${cfg} ${job_outdir}/
 

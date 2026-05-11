@@ -23,7 +23,7 @@ Usage
     python scripts/diff_uni_weights.py \
         --sigmma_config /path/to/sigmma_config.yaml         \
         [--top_k 20]                                        \
-        [--csv_out logs/diff_uni_weights.csv]               \
+        [--csv_out outputs/diff_uni_weights/diff_uni_weights.csv]               \
         [--cross_adapter]
 """
 import argparse

@@ -5,7 +5,7 @@ model:
   # via checkpoint_path below.
   pretrained_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/loki/checkpoint.pt
   # Fine-tuned OmiCLIP from jobscript_train_baselines.sh job 18306.
-  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs/in-house_train_omiclip_18306/checkpoint-step1000.pth
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/checkpoints/baselines/omiclip/18306/checkpoint-step1000.pth
 
 dataset:
   split_type: "section_split"

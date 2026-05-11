@@ -1,8 +1,8 @@
 #BSUB -J retrieval-SIGMMA
 #BSUB -G s10396 
 #BSUB -L /usr/bin/bash
-#BSUB -o retrieval-SIGMMA.%J.out
-#BSUB -e retrieval-SIGMMA.%J.err
+#BSUB -o logs/job_logs/retrieval-SIGMMA.%J.out
+#BSUB -e logs/job_logs/retrieval-SIGMMA.%J.err
 #BSUB -q training-parallel
 #BSUB -gpu "mode=shared:j_exclusive=no:gmem=76GB:num=1"
 #BSUB -n 20
@@ -23,11 +23,11 @@ export PATH="/nfs/users/nfs_d/dj16/.local/bin:$PATH"
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 run_dir="/nfs/team361/dj16/projects/SIGMMA"
-output_dir="/lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs"
+output_dir="${run_dir}/outputs/retrieval/sigmma"
 
 ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/bin/activate"
 
 [ -f $ENV_PATH ] && source $ENV_PATH || echo "Failed to activate: ${ENV_PATH}"
 
 # === RUN
-python -u scripts/benchmark_retrieval.py -config_file ${run_dir}/configs/in-house_retrieval_sigmma.yaml -out_dir ${output_dir}/in-house_sigmma_${LSB_JOBID}
+python -u scripts/benchmark_retrieval.py -config_file ${run_dir}/configs/in-house_retrieval_sigmma.yaml -out_dir ${output_dir}/${LSB_JOBID}

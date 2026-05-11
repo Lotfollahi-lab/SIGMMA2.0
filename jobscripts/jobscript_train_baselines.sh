@@ -1,8 +1,8 @@
 #BSUB -J train-baselines
 #BSUB -G s10396
 #BSUB -L /usr/bin/bash
-#BSUB -o train-baselines.%J.out
-#BSUB -e train-baselines.%J.err
+#BSUB -o logs/job_logs/train-baselines.%J.out
+#BSUB -e logs/job_logs/train-baselines.%J.err
 #BSUB -q training-parallel
 #BSUB -gpu "mode=shared:j_exclusive=no:gmem=76GB:num=2"
 #BSUB -n 20
@@ -20,7 +20,7 @@ export PATH="/nfs/users/nfs_d/dj16/.local/bin:$PATH"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 run_dir="/nfs/team361/dj16/projects/SIGMMA"
-output_dir="/lustre/scratch126/cellgen/lotfollahi/dj16/projects/img_spatial_alignment/outputs"
+output_dir="/lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/checkpoints/baselines"
 
 ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/bin/activate"
 [ -f $ENV_PATH ] && source $ENV_PATH || echo "Failed to activate: ${ENV_PATH}"
@@ -40,7 +40,7 @@ configs=(
 
 for cfg in "${configs[@]}"; do
     cfg_name="${cfg%.yaml}"
-    job_outdir="${output_dir}/${cfg_name}_${LSB_JOBID}"
+    job_outdir="${output_dir}/${cfg_name}/${LSB_JOBID}"
     mkdir -p ${job_outdir}
     cp ${run_dir}/configs/${cfg} ${job_outdir}/
 

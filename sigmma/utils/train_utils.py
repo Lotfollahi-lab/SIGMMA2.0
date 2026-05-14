@@ -3,6 +3,7 @@ import random
 import numpy as np
 import torch
 import torch.nn.functional as F
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional
 from ml_collections.config_dict import ConfigDict
@@ -258,6 +259,8 @@ def train(
                     for s in range(num_resolutions):
                         loss += contrastive_loss(model_out['image_embedding'][s], model_out['spatial_embedding'][s])
                     loss = loss / num_resolutions
+                    image_embedding = model_out["image_embedding"]
+                    spatial_embedding = model_out["spatial_embedding"]
                 else:
                     if rank == 0:
                         print('Loss', model_out['loss'])
@@ -294,34 +297,54 @@ def train(
 
                 # Take gradients for the last accum_freq batches
                 # Re-do the forward pass for those batches, and use the cached features from the other batches as negatives.
+                #
+                # DDP `no_sync` optimisation: when there are multiple accum
+                # micro-batches AND the model is DDP-wrapped, wrap all but the
+                # FINAL micro-batch's backward in `model.no_sync()`. This skips
+                # the per-backward gradient all-reduce; the single sync on the
+                # final backward all-reduces the accumulated gradient bucket,
+                # which is mathematically equivalent to per-backward sync
+                #   avg_ranks(sum_j local_grad_j) == sum_j avg_ranks(local_grad_j)
+                # but reduces gradient-comm volume by ~1/accum_freq.
+                # `nullcontext` covers single-GPU (no DDP wrapper) and the
+                # final iter (which must sync).
                 optimizer.zero_grad()
                 total_loss = None
-                for j in range(len(accum_images)):
+                n_accum = len(accum_images)
+                ddp_has_no_sync = hasattr(model, "no_sync")
+                for j in range(n_accum):
                     image = to_device_if_tensor(accum_images[j], device)
                     spatial = to_device_if_tensor(accum_spatial[j], device)
-                    with torch.amp.autocast(device.type, dtype=torch.bfloat16, enabled=True):
-                        model_out = model(image, spatial)
-                        inputs_for_loss = {}
-                        if config.model.name == "sigmma":
-                            loss = 0
-                            num_resolutions = len(model_out['image_embedding'])
-                            contrastive_loss = symmetric_InfoNCE(
-                                temperature=float(config.model.contrastive_temperature)
-                            )
-                            for s in range(num_resolutions):
-                                for key in accum_features:
-                                    accumulated = accum_features[key]
-                                    parts = [accumulated[k][s] for k in range(j)] + [model_out[key][s]] + [accumulated[k][s] for k in range(j+1, len(accumulated))]
-                                    inputs_for_loss[key] = torch.cat(parts)
-                                loss += contrastive_loss(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
-                            loss = loss / num_resolutions
-                            losses = {'contrastive_loss': loss}
-                            total_loss = sum(losses.values()) #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
-                            losses['loss'] = total_loss
-                        else:
-                            raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
-                        del inputs_for_loss
-                    total_loss.backward()
+                    is_last_accum = (j == n_accum - 1)
+                    sync_ctx = (
+                        model.no_sync()
+                        if ddp_has_no_sync and not is_last_accum
+                        else nullcontext()
+                    )
+                    with sync_ctx:
+                        with torch.amp.autocast(device.type, dtype=torch.bfloat16, enabled=True):
+                            model_out = model(image, spatial)
+                            inputs_for_loss = {}
+                            if config.model.name == "sigmma":
+                                loss = 0
+                                num_resolutions = len(model_out['image_embedding'])
+                                contrastive_loss = symmetric_InfoNCE(
+                                    temperature=float(config.model.contrastive_temperature)
+                                )
+                                for s in range(num_resolutions):
+                                    for key in accum_features:
+                                        accumulated = accum_features[key]
+                                        parts = [accumulated[k][s] for k in range(j)] + [model_out[key][s]] + [accumulated[k][s] for k in range(j+1, len(accumulated))]
+                                        inputs_for_loss[key] = torch.cat(parts)
+                                    loss += contrastive_loss(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
+                                loss = loss / num_resolutions
+                                losses = {'contrastive_loss': loss}
+                                total_loss = sum(losses.values()) #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
+                                losses['loss'] = total_loss
+                            else:
+                                raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
+                            del inputs_for_loss
+                        total_loss.backward()
                 loss = total_loss.item()
 
                 optimizer.step()

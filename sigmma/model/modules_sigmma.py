@@ -198,6 +198,45 @@ class sigmma(nn.Module):
             image_embedding_norm = torch.nn.functional.normalize(image_embedding, dim=-1)
         return image_embedding_norm
 
+    @torch.no_grad()
+    def get_image_patch_tokens_per_scale(self, x1):
+        """Per-scale region patch tokens for downstream probes.
+
+        Runs the same single ViT forward + per-scale adaptive_avg_pool2d as
+        ``_encode_image_multiscale``, but stops before scale_pools / scale_mlps
+        so callers see the spatial layout the trained head queries over.
+
+        Returns
+        -------
+        list[Tensor] length ``num_resolutions``, fine -> coarse, each
+        ``(B, D, g, g)`` with g = 2^(num_resolutions - 1 - s).
+        """
+        assert x1.dim() == 4, "x1 must be [B, C, H, W]"
+        B, _, H, W = x1.shape
+        assert H == W, "x1 must be square"
+        if H != self.encoder_input_size:
+            x1 = F.interpolate(
+                x1, size=(self.encoder_input_size, self.encoder_input_size),
+                mode="bilinear", align_corners=False,
+            )
+        if self.use_imagenet_norm:
+            x1 = (x1 - self.mean_rgb) / self.std_rgb
+        adapter_names = getattr(self.image_encoder, "lora_adapter_names", None)
+        if adapter_names:
+            set_lora_adapter(self.image_encoder, adapter_names[0])
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=x1.is_cuda):
+            tokens_all = self.image_encoder.model.forward_features(x1)  # (B, 1+P^2, D)
+        patches = tokens_all[:, 1:, :].float()
+        P = self.encoder_input_size // 16
+        assert patches.shape[1] == P * P
+        D = patches.shape[-1]
+        patches_2d = patches.transpose(1, 2).contiguous().view(B, D, P, P)
+        out = []
+        for s in range(self.num_resolutions):
+            g = 2 ** (self.num_resolutions - 1 - s)
+            out.append(F.adaptive_avg_pool2d(patches_2d, g))                # (B, D, g, g)
+        return out
+
     def get_spatial_features(self, x2):
         with torch.no_grad():
             g, h_x2 = x2, x2.ndata['feat']

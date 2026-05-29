@@ -67,8 +67,8 @@ class sigmma(nn.Module):
                 )
 
         # Scale-specific image-side heads on top of a single ViT forward.
-        # ViT yields a 14x14 patch grid (for encoder_input_size=224); each scale
-        # adaptively pools that grid to (2^k)x(2^k) regions (fine -> coarse),
+        # ViT yields a PxP patch grid (UNI v1: P=14, UNI2-h: P=16 at S=224); each
+        # scale adaptively pools that grid to (2^k)x(2^k) regions (fine -> coarse),
         # then a learnable query + multihead cross-attention reduces regions to
         # one (B, D) vector, followed by a per-scale 2-layer MLP.
         D = config.image_encoder_input_dim
@@ -103,7 +103,7 @@ class sigmma(nn.Module):
         Pipeline
         --------
         x1 (B, C, H, W) -- bilinear --> (B, C, S, S), S = encoder_input_size
-                       -- ViT -------> patch tokens (B, P^2, D), P = S // 16
+                       -- ViT -------> patch tokens (B, P^2, D), P = S // patch_size
                        -- per scale s -> adaptive_avg_pool2d to (g_s, g_s) regions
                                         g_s = 2^(num_resolutions - 1 - s)
                                         (fine s=0 -> g_max, coarse s=last -> 1)
@@ -134,11 +134,15 @@ class sigmma(nn.Module):
             set_lora_adapter(self.image_encoder, adapter_names[0])
 
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=x1.is_cuda):
-            tokens_all = self.image_encoder.model.forward_features(x1)  # (B, 1+P^2, D)
-        patches = tokens_all[:, 1:, :].float()  # drop CLS, cast to fp32 for heads
-        P = self.encoder_input_size // 16
+            tokens_all = self.image_encoder.model.forward_features(x1)  # (B, num_prefix+P^2, D)
+        # UNI v1: num_prefix=1 (CLS), patch_size=16; UNI2-h: num_prefix=9 (CLS+8 reg), patch_size=14
+        num_prefix = int(getattr(self.image_encoder.model, "num_prefix_tokens", 1))
+        patches = tokens_all[:, num_prefix:, :].float()
+        pe = self.image_encoder.model.patch_embed.patch_size
+        patch_size = int(pe[0] if isinstance(pe, (tuple, list)) else pe)
+        P = self.encoder_input_size // patch_size
         assert patches.shape[1] == P * P, (
-            f"unexpected patch count {patches.shape[1]} for P={P}"
+            f"unexpected patch count {patches.shape[1]} for P={P} (patch_size={patch_size}, num_prefix={num_prefix})"
         )
         D = patches.shape[-1]
         patches_2d = patches.transpose(1, 2).contiguous().view(B, D, P, P)
@@ -199,6 +203,43 @@ class sigmma(nn.Module):
         return image_embedding_norm
 
     @torch.no_grad()
+    def get_lora_image_patch_tokens(self, x1):
+        """LoRA-adapted ViT patch tokens at full spatial resolution.
+
+        Stops before any scale-specific pooling — useful for probes that
+        want to isolate the effect of SIGMMA's LoRA finetuning on the
+        UNI2-h backbone without the scale_pools/scale_mlps bottleneck.
+
+        Returns
+        -------
+        Tensor of shape ``(B, D, P, P)`` where P = encoder_input_size //
+        patch_size.
+        """
+        assert x1.dim() == 4, "x1 must be [B, C, H, W]"
+        B, _, H, W = x1.shape
+        assert H == W, "x1 must be square"
+        if H != self.encoder_input_size:
+            x1 = F.interpolate(
+                x1, size=(self.encoder_input_size, self.encoder_input_size),
+                mode="bilinear", align_corners=False,
+            )
+        if self.use_imagenet_norm:
+            x1 = (x1 - self.mean_rgb) / self.std_rgb
+        adapter_names = getattr(self.image_encoder, "lora_adapter_names", None)
+        if adapter_names:
+            set_lora_adapter(self.image_encoder, adapter_names[0])
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=x1.is_cuda):
+            tokens_all = self.image_encoder.model.forward_features(x1)
+        num_prefix = int(getattr(self.image_encoder.model, "num_prefix_tokens", 1))
+        patches = tokens_all[:, num_prefix:, :].float()
+        pe = self.image_encoder.model.patch_embed.patch_size
+        patch_size = int(pe[0] if isinstance(pe, (tuple, list)) else pe)
+        P = self.encoder_input_size // patch_size
+        assert patches.shape[1] == P * P
+        D = patches.shape[-1]
+        return patches.transpose(1, 2).contiguous().view(B, D, P, P)
+
+    @torch.no_grad()
     def get_image_patch_tokens_per_scale(self, x1):
         """Per-scale region patch tokens for downstream probes.
 
@@ -225,9 +266,12 @@ class sigmma(nn.Module):
         if adapter_names:
             set_lora_adapter(self.image_encoder, adapter_names[0])
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=x1.is_cuda):
-            tokens_all = self.image_encoder.model.forward_features(x1)  # (B, 1+P^2, D)
-        patches = tokens_all[:, 1:, :].float()
-        P = self.encoder_input_size // 16
+            tokens_all = self.image_encoder.model.forward_features(x1)
+        num_prefix = int(getattr(self.image_encoder.model, "num_prefix_tokens", 1))
+        patches = tokens_all[:, num_prefix:, :].float()
+        pe = self.image_encoder.model.patch_embed.patch_size
+        patch_size = int(pe[0] if isinstance(pe, (tuple, list)) else pe)
+        P = self.encoder_input_size // patch_size
         assert patches.shape[1] == P * P
         D = patches.shape[-1]
         patches_2d = patches.transpose(1, 2).contiguous().view(B, D, P, P)

@@ -32,6 +32,59 @@ collate_fn_map[str] = collate_str_fn
 collate_fn_map[bytes] = collate_str_fn
 
 
+def _load_panel_aware_svgs(
+    svg_panel_dir: Path | str,
+    panel_index_json: Path | str,
+    k_max: int = 100,
+) -> tuple[dict[str, str], dict[str, list[str]], dict[str, int]]:
+    """Load panel-aware SVG target lists produced by
+    ``scripts/compute_panel_aware_svgs.py``.
+
+    Returns
+    -------
+    section_to_panel : sid -> panel_id (str)
+    panel_to_genes   : panel_id -> ordered list of SVG gene names
+                       (length K_panel, possibly <= k_max — short panels are
+                       padded by callers to k_max with valid_mask=False)
+    panel_to_int     : panel_id -> deterministic int (sorted by panel_id)
+    """
+    import json as _json
+    svg_dir = Path(svg_panel_dir)
+    section_to_panel: dict[str, str] = _json.loads(Path(panel_index_json).read_text())
+    panels_in_use = sorted(set(section_to_panel.values()))
+    panel_to_genes: dict[str, list[str]] = {}
+    panel_to_int: dict[str, int] = {pid: i for i, pid in enumerate(panels_in_use)}
+    for pid in panels_in_use:
+        npy_files = sorted((svg_dir / pid).glob("svg_top*.npy"))
+        if not npy_files:
+            raise FileNotFoundError(
+                f"No svg_top*.npy found for panel {pid} under {svg_dir}"
+            )
+        # Pick the largest-K npy that fits within k_max
+        chosen = None
+        for p in reversed(npy_files):  # reversed = largest K first by lexsort
+            arr = np.load(p, allow_pickle=True)
+            if len(arr) <= k_max:
+                chosen = arr
+                break
+        if chosen is None:
+            # fallback: truncate the largest to k_max
+            arr = np.load(npy_files[-1], allow_pickle=True)
+            chosen = arr[:k_max]
+        panel_to_genes[pid] = [str(g) for g in chosen]
+    return section_to_panel, panel_to_genes, panel_to_int
+
+
+def _load_raw_gex_panel(npy_path: Path | str) -> list[str]:
+    """Load a precomputed gene-name panel saved as an object-dtype npy.
+
+    Created by ``scripts/compute_in_house_5k_hvg.py`` (or any analogous script
+    that runs ``compute_top_k_hvg_by_dispersion`` once offline).
+    """
+    arr = np.load(str(npy_path), allow_pickle=True)
+    return [str(g) for g in arr]
+
+
 class MultiSectionDataset(torch.utils.data.Dataset):
     def __init__(self,
                  manifest_path: Path | str,
@@ -45,8 +98,17 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                  pretrained_cell_embedding: bool = True,
                  type_pretrained_cell_embedding: str = 'nemo',
                  is_train: bool = False,
-                 model_name: Optional[str] = None):
-        manifest =  pd.read_csv(manifest_path)
+                 model_name: Optional[str] = None,
+                 hier_cache_dir: Optional[Path | str] = None,
+                 raw_gex_panel_npy: Optional[Path | str] = None,
+                 svg_panel_dir: Optional[Path | str] = None,
+                 panel_index_json: Optional[Path | str] = None,
+                 k_max: int = 100):
+        manifest = pd.read_csv(manifest_path)
+        # Dedupe by sample_name — some slides (e.g. Sml4-PNC) have multiple
+        # rows pointing at different sequencing runs. ``keep="last"`` matches
+        # the pre-computed hier_cache (built from the second/RUN2 entry).
+        manifest = manifest.drop_duplicates(subset="sample_name", keep="last").reset_index(drop=True)
         slides = manifest['sample_name']
         li_datsets = []
         for slide in slides:
@@ -72,6 +134,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                 type_pretrained_cell_embedding=type_pretrained_cell_embedding,
                 is_train=is_train,
                 model_name=model_name,
+                hier_cache_dir=hier_cache_dir,
             )
             if len(dataset) > 0:
                 li_datsets.append(dataset)
@@ -80,7 +143,77 @@ class MultiSectionDataset(torch.utils.data.Dataset):
         
         if len(li_datsets) == 0:
             raise ValueError("No valid datasets found after filtering. All slides were empty.")
-        
+
+        # Shared HVG panel via gene NAMES (panel-agnostic).
+        # ``raw_gex_panel_npy`` points to an object-dtype npy of gene symbols
+        # produced offline by scripts/compute_in_house_5k_hvg.py (or analogous).
+        # Each section maps these names to LOCAL positions in its own
+        # ``_var_index``; sections lacking any panel gene fail explicitly so
+        # the training cohort can be re-filtered upstream.
+        # Panel-aware SVG target loading (new): per-section panel_id → SVG list
+        # OR legacy shared HVG panel via raw_gex_panel_npy. Mutually exclusive.
+        if svg_panel_dir is not None and panel_index_json is not None:
+            if raw_gex_panel_npy is not None:
+                raise ValueError(
+                    "Cannot use both raw_gex_panel_npy and svg_panel_dir simultaneously."
+                )
+            section_to_panel, panel_to_genes, panel_to_int = _load_panel_aware_svgs(
+                svg_panel_dir, panel_index_json, k_max=k_max,
+            )
+            self.svg_panel_dir = Path(svg_panel_dir)
+            self.panel_to_int = panel_to_int
+            self.hvg_gene_names = None   # per-section now, not shared
+            self.hvg_idx = None
+            self.k_max = int(k_max)
+            kept = []
+            for d in li_datsets:
+                pid = section_to_panel.get(d.section_id)
+                if pid is None:
+                    if int(os.environ.get("RANK", "0")) == 0:
+                        print(f"  [panel filter] skipping {d.section_id}: not in panel_index.json")
+                    continue
+                panel_genes = panel_to_genes[pid]
+                name_to_pos = {g: i for i, g in enumerate(d._var_index)}
+                # SVG genes may not all be present in this section's var.index
+                # (esp. merged-panel intersections). Skip section if 0 valid.
+                hvg_idx = np.array(
+                    [name_to_pos.get(g, -1) for g in panel_genes], dtype=np.int64
+                )
+                if (hvg_idx >= 0).sum() == 0:
+                    print(f"  [panel filter] skipping {d.section_id}: 0 of {len(panel_genes)} panel SVGs present")
+                    continue
+                d.hvg_idx = hvg_idx
+                d.panel_id_str = pid
+                d.panel_id_int = panel_to_int[pid]
+                d.k_max = k_max
+                kept.append(d)
+            if not kept:
+                raise ValueError(
+                    "Panel-aware mode: no sections survived panel_index filter. "
+                    f"Check {panel_index_json} covers the manifest."
+                )
+            li_datsets = kept
+        elif raw_gex_panel_npy is not None:
+            panel_names = _load_raw_gex_panel(raw_gex_panel_npy)
+            self.hvg_gene_names = np.array(panel_names)
+            for d in li_datsets:
+                name_to_pos = {g: i for i, g in enumerate(d._var_index)}
+                missing = [g for g in panel_names if g not in name_to_pos]
+                if missing:
+                    raise ValueError(
+                        f"raw_gex_panel_npy {raw_gex_panel_npy} contains genes not present "
+                        f"in section {d.section_id}: missing {len(missing)} (first: {missing[:5]}). "
+                        f"Filter the training manifest to slides that share the panel, or "
+                        f"regenerate the panel against a wider cohort."
+                    )
+                d.hvg_idx = np.array([name_to_pos[g] for g in panel_names], dtype=np.int64)
+            self.hvg_idx = li_datsets[0].hvg_idx
+        else:
+            # No raw_gex panel configured — leave per-section hvg_idx unset so
+            # SpatialPatchDataset.__getitem__ falls back to zeros for raw_gex.
+            self.hvg_gene_names = None
+            self.hvg_idx = None
+
         self.modality_datasets = torch.utils.data.ConcatDataset(li_datsets)
         # Store the first dataset to access gene count
         self.first_dataset = li_datsets[0]
@@ -122,6 +255,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         type_pretrained_cell_embedding: str = 'nemo',
         is_train: bool = False,
         model_name: Optional[str] = None,
+        hier_cache_dir: Optional[Path | str] = None,
     ):
         self.image_file = str(image_file)
         self.indices_file = str(indices_file)
@@ -196,6 +330,38 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         self.is_train = is_train
         self.model_name = model_name
 
+        # Optional pre-computed hierarchical-subgraph cache (one .npz per
+        # slide section_id). When loaded, __getitem__ skips the per-tile
+        # CSR slicing + dgl.from_scipy loop that dominates the dataloader
+        # cost (profile_dataloader.py showed ~52% of per-tile time).
+        self._hier_cache: Optional[dict] = None
+        if hier_cache_dir is not None:
+            cache_path = Path(hier_cache_dir) / f"{self.section_id}.npz"
+            if cache_path.exists():
+                with np.load(cache_path) as f:
+                    cache = {k: f[k] for k in f.files}
+                # Sanity check: cache must cover the same valid tiles this
+                # dataset will iterate.
+                if self.valid_indices is not None and \
+                        not np.array_equal(cache['valid_indices'].astype(np.int64),
+                                           self.valid_indices.astype(np.int64)):
+                    raise ValueError(
+                        f"hier_cache valid_indices mismatch for {self.section_id}: "
+                        f"cache has {cache['valid_indices'].size} tiles, "
+                        f"dataset has {self.valid_indices.size}. "
+                        "Re-run precompute_hierarchical_subgraphs.py with the "
+                        "same tissue_filtering_threshold."
+                    )
+                if int(cache['fov_size']) != fov_size or \
+                        int(cache['num_resolutions']) != num_resolutions:
+                    raise ValueError(
+                        f"hier_cache fov/num_res mismatch for {self.section_id}: "
+                        f"cache=(fov={int(cache['fov_size'])}, "
+                        f"num_res={int(cache['num_resolutions'])}), "
+                        f"dataset=(fov={fov_size}, num_res={num_resolutions})."
+                    )
+                self._hier_cache = cache
+
         if self.pretrained_cell_embedding:
             assert type_pretrained_cell_embedding in ['nemo', 'novae', 'X_pca_harmony'], \
                 "type_pretrained_cell_embedding must be 'nemo', 'novae', or 'X_pca_harmony'"
@@ -220,6 +386,9 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         return dgl.from_scipy(sub_conn)
 
     def __getitem__(self, idx):
+        # cache_pos is the position in self.valid_indices (== position in
+        # the hier_cache arrays); idx is then remapped to the raw zarr index.
+        cache_pos = idx
         idx = int(self.valid_indices[idx]) if self.valid_indices is not None else idx
 
         # 0. tile coordinates from index array
@@ -264,24 +433,65 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         if self.hierarchical_graph:
             grid_size = self.fov_size // 2 ** self.num_resolutions
 
-            subgraphs = []
-            for x_g, y_g in product(range(0, self.fov_size, grid_size), range(0, self.fov_size, grid_size)):
-                mask_grid = (
-                    (x_start + x_g  <= points[:, 0]) & (points[:, 0] < x_start + x_g + grid_size) &
-                    (y_start + y_g   <= points[:, 1]) & (points[:, 1] < y_start + y_g + grid_size)
+            if self._hier_cache is not None:
+                # Cached path: rebuild the disjoint-batched graph from
+                # pre-computed cell ordering + intra-sub-FOV edge lists,
+                # avoiding the per-tile CSR slicing + dgl.from_scipy loop.
+                cache = self._hier_cache
+                c0 = int(cache['cell_offsets'][cache_pos])
+                c1 = int(cache['cell_offsets'][cache_pos + 1])
+                cells = cache['cell_indices'][c0:c1]
+                e0 = int(cache['edge_offsets'][cache_pos])
+                e1 = int(cache['edge_offsets'][cache_pos + 1])
+                src = cache['edge_src'][e0:e1]
+                dst = cache['edge_dst'][e0:e1]
+                sf_off = cache['subfov_cell_offsets'][cache_pos]  # (n_subfov + 1,)
+
+                n_total = int(cells.size)
+                n_per_dim = self.fov_size // grid_size
+                n_subfov = n_per_dim * n_per_dim
+
+                # Reproduce disjoint.ndata['x_pos'], ['y_pos'] from sub-FOV
+                # iteration order matching `product(range(0, fov, gs), ...)`
+                # (x_g outer, y_g inner ⇒ sf_idx = x_idx * n_per_dim + y_idx).
+                x_pos = np.empty(n_total, dtype=np.int64)
+                y_pos = np.empty(n_total, dtype=np.int64)
+                for sf_idx in range(n_subfov):
+                    s_, e_ = int(sf_off[sf_idx]), int(sf_off[sf_idx + 1])
+                    if s_ == e_:
+                        continue
+                    x_pos[s_:e_] = sf_idx // n_per_dim
+                    y_pos[s_:e_] = sf_idx % n_per_dim
+
+                disjoint = dgl.graph(
+                    (torch.from_numpy(src.astype(np.int64)),
+                     torch.from_numpy(dst.astype(np.int64))),
+                    num_nodes=n_total,
                 )
+                disjoint.ndata['feat'] = torch.from_numpy(self._nemo[cells])
+                disjoint.ndata['x_pos'] = torch.from_numpy(x_pos)
+                disjoint.ndata['y_pos'] = torch.from_numpy(y_pos)
+                disjoint.ndata['cell_coordinates'] = torch.from_numpy(self._coords[cells])
+                disjoint.num_subgraphs = n_subfov
+            else:
+                subgraphs = []
+                for x_g, y_g in product(range(0, self.fov_size, grid_size), range(0, self.fov_size, grid_size)):
+                    mask_grid = (
+                        (x_start + x_g  <= points[:, 0]) & (points[:, 0] < x_start + x_g + grid_size) &
+                        (y_start + y_g   <= points[:, 1]) & (points[:, 1] < y_start + y_g + grid_size)
+                    )
 
-                sg = self._subgraph_from_mask(mask_grid)   # no h5ad slicing!
+                    sg = self._subgraph_from_mask(mask_grid)   # no h5ad slicing!
 
-                # Node features – always use nemo for subgraphs (same as original)
-                sg.ndata['feat'] = torch.from_numpy(self._nemo[mask_grid])
-                sg.ndata['x_pos'] = torch.full((sg.num_nodes(),), x_g // grid_size)
-                sg.ndata['y_pos'] = torch.full((sg.num_nodes(),), y_g // grid_size)
-                sg.ndata['cell_coordinates'] = torch.from_numpy(points[mask_grid])
-                subgraphs.append(sg)
+                    # Node features – always use nemo for subgraphs (same as original)
+                    sg.ndata['feat'] = torch.from_numpy(self._nemo[mask_grid])
+                    sg.ndata['x_pos'] = torch.full((sg.num_nodes(),), x_g // grid_size)
+                    sg.ndata['y_pos'] = torch.full((sg.num_nodes(),), y_g // grid_size)
+                    sg.ndata['cell_coordinates'] = torch.from_numpy(points[mask_grid])
+                    subgraphs.append(sg)
 
-            disjoint = dgl.batch(subgraphs)
-            disjoint.num_subgraphs = disjoint.batch_size
+                disjoint = dgl.batch(subgraphs)
+                disjoint.num_subgraphs = disjoint.batch_size
 
             # Compute edge mask with torch ops (no Python set/dict loops)
             src_full,  dst_full  = spatial_graph.edges()
@@ -310,6 +520,51 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         else:
             X_fov = self._X[mask]
 
+        # 1-4b. FOV-level raw GEX over the panel. Two modes:
+        # (a) legacy: shared raw_gex_panel_npy → hvg_idx is length-K shared,
+        #     no padding/mask needed (all entries valid).
+        # (b) panel-aware: per-section hvg_idx of length K_panel (may contain
+        #     -1 for SVGs absent from this section's var.index). Pad to
+        #     `k_max` (e.g. 100) with zeros; raw_gex_valid_mask marks
+        #     positions where the gene is actually measured by this section.
+        # When standalone (no MultiSectionDataset wrap), return placeholders
+        # so probe/inference paths don't crash.
+        hvg_idx = getattr(self, "hvg_idx", None)
+        k_max = int(getattr(self, "k_max", 0))
+        panel_id_int = int(getattr(self, "panel_id_int", -1))
+        if hvg_idx is not None and k_max > 0:
+            # Panel-aware mode
+            raw_gex_fov = X_fov.sum(axis=0).ravel()
+            G = raw_gex_fov.shape[0]
+            valid_local = hvg_idx >= 0
+            raw_gex_padded = np.zeros(k_max, dtype=np.float32)
+            valid_mask = np.zeros(k_max, dtype=bool)
+            K_panel = int(hvg_idx.shape[0])
+            if K_panel > k_max:
+                # truncate (shouldn't happen if compute_panel_aware_svgs respects k=100)
+                hvg_use = hvg_idx[:k_max]
+                valid_use = valid_local[:k_max]
+            else:
+                hvg_use = hvg_idx
+                valid_use = valid_local
+            valid_positions_in_kmax = np.arange(min(K_panel, k_max))
+            local_idx = hvg_use.copy()
+            local_idx[~valid_use] = 0  # safe gather; masked later
+            raw_gex_padded[valid_positions_in_kmax] = raw_gex_fov[local_idx].astype(np.float32)
+            # Zero out padding positions
+            raw_gex_padded[valid_positions_in_kmax[~valid_use]] = 0.0
+            valid_mask[valid_positions_in_kmax] = valid_use
+            raw_gex_hvg = raw_gex_padded
+            raw_gex_valid_mask = valid_mask
+        elif hvg_idx is not None:
+            # Legacy shared-panel mode
+            raw_gex_fov = X_fov.sum(axis=0).ravel()
+            raw_gex_hvg = raw_gex_fov[hvg_idx].astype(np.float32)
+            raw_gex_valid_mask = np.ones(raw_gex_hvg.shape[0], dtype=bool)
+        else:
+            raw_gex_hvg = np.zeros(1, dtype=np.float32)
+            raw_gex_valid_mask = np.zeros(1, dtype=bool)
+
         var_index = self._var_index
         if self.housekeeping_genes is not None:
             hk_set = set(self.housekeeping_genes)
@@ -335,9 +590,14 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             "spatial_graph": spatial_graph,
             "spatial_text": spatial_text,
             "label": topK_exp,
-            "metadata": {"section_id": self.section_id, 
+            "raw_gex": torch.from_numpy(raw_gex_hvg),
+            "raw_gex_valid_mask": torch.from_numpy(raw_gex_valid_mask),
+            "panel_id": panel_id_int,
+            "metadata": {"section_id": self.section_id,
                          "tissue_type": self.tissue_type,
-                         "annotation": self.spatial_annotation_file}
+                         "annotation": self.spatial_annotation_file,
+                         "y_start": int(y_start),
+                         "x_start": int(x_start)}
         }
 
     def __len__(self) -> int:
@@ -384,6 +644,9 @@ _BATCH_TEMPLATE: Mapping = {
     "spatial_graph": dgl.graph(([], [])),
     "spatial_text": "",
     "label": torch.empty(0),
+    "raw_gex": torch.empty(0),
+    "raw_gex_valid_mask": torch.empty(0, dtype=torch.bool),
+    "panel_id": -1,
     "metadata": {"section_id": "", "tissue_type": "", "annotation": ""},
 }
 

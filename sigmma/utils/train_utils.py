@@ -14,6 +14,7 @@ from sigmma.model import sigmma
 from sigmma.model import UNI, ResNet50
 from sigmma.model.models_image_backbones import H_optimus_zero, apply_lora_to_backbone
 from sigmma.model import symmetric_InfoNCE, bleep_cross_entropy
+from sigmma.model.losses import GEXAwareSoftContrastiveLoss
 from sigmma.model.baselines import openAI_CLIP, PLIP, loki_OmiCLIP, BLEEP
 from ..evaluation.evaluate_retrieval import retrieval_score, eval_retrieval
 
@@ -51,7 +52,12 @@ def load_dataset(config_dataset, is_train=False, model_name=None):
                                   pretrained_cell_embedding=config_dataset.pretrained_cell_embedding,
                                   type_pretrained_cell_embedding=config_dataset.type_pretrained_cell_embedding,
                                   is_train=is_train,
-                                  model_name=model_name)
+                                  model_name=model_name,
+                                  hier_cache_dir=config_dataset.get("hier_cache_dir", None),
+                                  raw_gex_panel_npy=config_dataset.get("raw_gex_panel_npy", None),
+                                  svg_panel_dir=config_dataset.get("svg_panel_dir", None),
+                                  panel_index_json=config_dataset.get("panel_index_json", None),
+                                  k_max=int(config_dataset.get("k_max", 100)))
 
     return dataset
 
@@ -89,6 +95,8 @@ def load_model(config:ConfigDict,
             loss_temperature=(float(config.model.contrastive_temperature)
                               if train and config.model.get("contrastive_temperature") is not None
                               else None),
+            image_backbone=str(config.model.get("image_backbone", "default")),
+            uni_ckpt_path=config.model.get("uni_ckpt_path", None),
         )
 
     elif config.model.name == "PLIP":
@@ -98,6 +106,8 @@ def load_model(config:ConfigDict,
             loss_temperature=(float(config.model.contrastive_temperature)
                               if train and config.model.get("contrastive_temperature") is not None
                               else None),
+            image_backbone=str(config.model.get("image_backbone", "default")),
+            uni_ckpt_path=config.model.get("uni_ckpt_path", None),
         )
 
     elif config.model.name == "loki_OmiCLIP":
@@ -109,6 +119,8 @@ def load_model(config:ConfigDict,
             loss_temperature=(float(config.model.contrastive_temperature)
                               if train and config.model.get("contrastive_temperature") is not None
                               else None),
+            image_backbone=str(config.model.get("image_backbone", "default")),
+            uni_ckpt_path=config.model.get("uni_ckpt_path", None),
         )
 
     elif config.model.name == "BLEEP":
@@ -121,6 +133,8 @@ def load_model(config:ConfigDict,
             dropout=float(config.model.get("dropout", 0.1)),
             image_size=int(config.model.get("image_size", 224)),
             pretrained_image_encoder=bool(config.model.get("pretrained_image_encoder_imagenet", True)),
+            image_backbone=str(config.model.get("image_backbone", "default")),
+            uni_ckpt_path=config.model.get("uni_ckpt_path", None),
         )
 
     else:
@@ -217,19 +231,33 @@ def train(
     accum_freq = config.get("train.gradient_accumulation_steps", 1)
     if accum_freq > 1:
         accum_images, accum_spatial, accum_features = [], [], {}
+        accum_raw_gex = []
+        accum_raw_gex_valid_mask = []
+        accum_panel_ids = []
 
     global_step = 0
     i = -1
     pass_index = 0
     steps_per_pass = len(train_dataloader)
     train_sampler = getattr(train_dataloader, "sampler", None)
+    # Sync per-batch skips across DDP ranks — a unilateral `continue` desyncs
+    # the next DDP allreduce/eval all_gather and hangs NCCL.
+    train_is_distributed = dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
     while global_step < max_steps:
         if hasattr(train_sampler, "set_epoch"):
             train_sampler.set_epoch(pass_index)
         for batch in train_dataloader:
             if global_step >= max_steps:
                 break
-            if not isinstance(batch.get("image"), torch.Tensor) or batch["image"].numel() == 0:
+            local_skip = int(
+                not isinstance(batch.get("image"), torch.Tensor) or batch["image"].numel() == 0
+            )
+            if train_is_distributed:
+                skip_t = torch.tensor([local_skip], device=device, dtype=torch.long)
+                dist.all_reduce(skip_t, op=dist.ReduceOp.MAX)
+                if int(skip_t.item()) == 1:
+                    continue
+            elif local_skip:
                 continue
             i += 1
             image = batch["image"].to(device)
@@ -253,11 +281,50 @@ def train(
                     num_resolutions = len(model_out['image_embedding'])
                 if config.model.name == "sigmma":
                     loss = 0
-                    contrastive_loss = symmetric_InfoNCE(
-                        temperature=float(config.model.contrastive_temperature)
-                    )
-                    for s in range(num_resolutions):
-                        loss += contrastive_loss(model_out['image_embedding'][s], model_out['spatial_embedding'][s])
+                    gex_cfg = config.model.get("gex_aware_soft_loss", None)
+                    use_gex_aware = bool(gex_cfg is not None and gex_cfg.get("enabled", False))
+                    if use_gex_aware:
+                        contrastive_loss = GEXAwareSoftContrastiveLoss(
+                            tau=float(config.model.contrastive_temperature),
+                            tau_gex=float(gex_cfg.get("tau_gex", 0.1)),
+                            alpha=float(gex_cfg.get("alpha", 0.2)),
+                            mode=str(gex_cfg.get("mode", "topk")),
+                            topk=int(gex_cfg.get("topk", 5)),
+                            gex_preprocess=str(gex_cfg.get("gex_preprocess", "log1p_zscore")),
+                            clamp_negative_gex_sim=bool(gex_cfg.get("clamp_negative_gex_sim", True)),
+                            symmetric=bool(gex_cfg.get("symmetric", True)),
+                            detach_gex_targets=bool(gex_cfg.get("detach_gex_targets", True)),
+                        )
+                        gex_batch = batch["raw_gex"].to(device)
+                        # Panel-aware extras (None when legacy raw_gex_panel_npy used)
+                        gex_mask_batch = batch.get("raw_gex_valid_mask")
+                        if gex_mask_batch is not None and gex_mask_batch.numel() > 0:
+                            gex_mask_batch = gex_mask_batch.to(device)
+                        else:
+                            gex_mask_batch = None
+                        panel_ids_batch = batch.get("panel_id")
+                        if panel_ids_batch is not None and panel_ids_batch.numel() > 0:
+                            panel_ids_batch = panel_ids_batch.to(device)
+                            # int default (-1) is the "no panel" sentinel — panel-aware
+                            # path only activates if all entries are >=0.
+                            if (panel_ids_batch < 0).any():
+                                panel_ids_batch = None
+                        else:
+                            panel_ids_batch = None
+                        for s in range(num_resolutions):
+                            loss += contrastive_loss(
+                                model_out['image_embedding'][s],
+                                model_out['spatial_embedding'][s],
+                                gex=gex_batch,
+                                raw_gex_valid_mask=gex_mask_batch,
+                                panel_ids=panel_ids_batch,
+                            )
+                    else:
+                        contrastive_loss = symmetric_InfoNCE(
+                            temperature=float(config.model.contrastive_temperature)
+                        )
+                        for s in range(num_resolutions):
+                            loss += contrastive_loss(model_out['image_embedding'][s], model_out['spatial_embedding'][s])
                     loss = loss / num_resolutions
                     image_embedding = model_out["image_embedding"]
                     spatial_embedding = model_out["spatial_embedding"]
@@ -283,6 +350,14 @@ def train(
 
                     accum_images.append(image)
                     accum_spatial.append(spatial)
+                    accum_raw_gex.append(batch["raw_gex"].to(device))
+                    # Panel-aware extras (graceful if missing)
+                    rg_mask = batch.get("raw_gex_valid_mask")
+                    if rg_mask is not None and rg_mask.numel() > 0:
+                        accum_raw_gex_valid_mask.append(rg_mask.to(device))
+                    pid_b = batch.get("panel_id")
+                    if pid_b is not None and pid_b.numel() > 0:
+                        accum_panel_ids.append(pid_b.to(device))
                     if "image_embedding" not in accum_features:
                         accum_features["image_embedding"] = [image_embedding]
                         accum_features["spatial_embedding"] = [spatial_embedding]
@@ -298,16 +373,16 @@ def train(
                 # Take gradients for the last accum_freq batches
                 # Re-do the forward pass for those batches, and use the cached features from the other batches as negatives.
                 #
-                # DDP `no_sync` optimisation: when there are multiple accum
+                # DDP `no_sync` optimisation: when there are more than one accum
                 # micro-batches AND the model is DDP-wrapped, wrap all but the
                 # FINAL micro-batch's backward in `model.no_sync()`. This skips
-                # the per-backward gradient all-reduce; the single sync on the
-                # final backward all-reduces the accumulated gradient bucket,
-                # which is mathematically equivalent to per-backward sync
+                # the per-backward gradient all-reduce; the single sync at the
+                # final backward all-reduces the accumulated bucket contents,
+                # giving the same mathematical result
                 #   avg_ranks(sum_j local_grad_j) == sum_j avg_ranks(local_grad_j)
-                # but reduces gradient-comm volume by ~1/accum_freq.
-                # `nullcontext` covers single-GPU (no DDP wrapper) and the
-                # final iter (which must sync).
+                # but at ~1/accum_freq the gradient-comm volume.
+                # `nullcontext` is used in the non-DDP path (single-GPU) and on
+                # the last iteration (which must trigger the sync).
                 optimizer.zero_grad()
                 total_loss = None
                 n_accum = len(accum_images)
@@ -328,15 +403,63 @@ def train(
                             if config.model.name == "sigmma":
                                 loss = 0
                                 num_resolutions = len(model_out['image_embedding'])
-                                contrastive_loss = symmetric_InfoNCE(
-                                    temperature=float(config.model.contrastive_temperature)
+                                gex_cfg = config.model.get("gex_aware_soft_loss", None)
+                                use_gex_aware = bool(
+                                    gex_cfg is not None and gex_cfg.get("enabled", False)
                                 )
+                                if use_gex_aware:
+                                    contrastive_loss = GEXAwareSoftContrastiveLoss(
+                                        tau=float(config.model.contrastive_temperature),
+                                        tau_gex=float(gex_cfg.get("tau_gex", 0.1)),
+                                        alpha=float(gex_cfg.get("alpha", 0.2)),
+                                        mode=str(gex_cfg.get("mode", "topk")),
+                                        topk=int(gex_cfg.get("topk", 5)),
+                                        gex_preprocess=str(gex_cfg.get("gex_preprocess", "log1p_zscore")),
+                                        clamp_negative_gex_sim=bool(gex_cfg.get("clamp_negative_gex_sim", True)),
+                                        symmetric=bool(gex_cfg.get("symmetric", True)),
+                                        detach_gex_targets=bool(gex_cfg.get("detach_gex_targets", True)),
+                                    )
+                                    # raw_gex has no gradient dependence; concat across
+                                    # accum batches in the original ordering so diagonal
+                                    # positions match image/spatial concat.
+                                    gex_cat = torch.cat(accum_raw_gex, dim=0)
+                                    # Panel-aware extras: only valid if every accum
+                                    # batch provided them (else fall back to None).
+                                    if len(accum_raw_gex_valid_mask) == len(accum_raw_gex):
+                                        gex_mask_cat = torch.cat(accum_raw_gex_valid_mask, dim=0)
+                                    else:
+                                        gex_mask_cat = None
+                                    if len(accum_panel_ids) == len(accum_raw_gex):
+                                        panel_ids_cat = torch.cat(accum_panel_ids, dim=0)
+                                        if (panel_ids_cat < 0).any():
+                                            panel_ids_cat = None
+                                    else:
+                                        panel_ids_cat = None
+                                else:
+                                    contrastive_loss = symmetric_InfoNCE(
+                                        temperature=float(config.model.contrastive_temperature)
+                                    )
+                                    gex_cat = None
+                                    gex_mask_cat = None
+                                    panel_ids_cat = None
                                 for s in range(num_resolutions):
                                     for key in accum_features:
                                         accumulated = accum_features[key]
                                         parts = [accumulated[k][s] for k in range(j)] + [model_out[key][s]] + [accumulated[k][s] for k in range(j+1, len(accumulated))]
                                         inputs_for_loss[key] = torch.cat(parts)
-                                    loss += contrastive_loss(inputs_for_loss['image_embedding'], inputs_for_loss['spatial_embedding'])
+                                    if use_gex_aware:
+                                        loss += contrastive_loss(
+                                            inputs_for_loss['image_embedding'],
+                                            inputs_for_loss['spatial_embedding'],
+                                            gex=gex_cat,
+                                            raw_gex_valid_mask=gex_mask_cat,
+                                            panel_ids=panel_ids_cat,
+                                        )
+                                    else:
+                                        loss += contrastive_loss(
+                                            inputs_for_loss['image_embedding'],
+                                            inputs_for_loss['spatial_embedding'],
+                                        )
                                 loss = loss / num_resolutions
                                 losses = {'contrastive_loss': loss}
                                 total_loss = sum(losses.values()) #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
@@ -353,6 +476,9 @@ def train(
                 # Reset accumulators
                 if accum_freq > 1:
                     accum_images, accum_spatial, accum_features = [], [], {}
+                    accum_raw_gex = []
+                    accum_raw_gex_valid_mask = []
+                    accum_panel_ids = []
 
             if (global_step + 1) % config.train.save_every == 0:
                 save_checkpoint(
@@ -509,9 +635,23 @@ def evaluate(config, model, eval_dataloader, device):
     all_image_embeddings = []
     all_spatial_embeddings = []
 
+    # Empty-batch skips must be synchronised across DDP ranks: each rank sees
+    # the same number of batches (DistributedSampler pads), but per-batch
+    # all-None samples differ — a unilateral `continue` desyncs the downstream
+    # all_gather and hangs NCCL.
+    skip_is_distributed = dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
+
     with torch.no_grad():
         for batch in eval_dataloader:
-            if not isinstance(batch.get("image"), torch.Tensor) or batch["image"].numel() == 0:
+            local_skip = int(
+                not isinstance(batch.get("image"), torch.Tensor) or batch["image"].numel() == 0
+            )
+            if skip_is_distributed:
+                skip_t = torch.tensor([local_skip], device=device, dtype=torch.long)
+                dist.all_reduce(skip_t, op=dist.ReduceOp.MAX)
+                if int(skip_t.item()) == 1:
+                    continue
+            elif local_skip:
                 continue
             image = batch["image"].to(device)
             if config.model.name == "sigmma":
@@ -537,11 +677,26 @@ def evaluate(config, model, eval_dataloader, device):
     is_distributed = dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
 
     def _all_gather(t: torch.Tensor) -> torch.Tensor:
-        # DistributedSampler with drop_last=False pads to equal length per rank,
-        # so shapes already match across ranks.
-        tensors = [torch.zeros_like(t) for _ in range(dist.get_world_size())]
-        dist.all_gather(tensors, t.contiguous())
-        return torch.concat(tensors, dim=0)
+        # Per-rank dim-0 length can differ when multimodal_collate drops
+        # None/empty samples asymmetrically across ranks, so we cannot assume
+        # shape symmetry: gather sizes first, pad to max, then trim.
+        world = dist.get_world_size()
+        local_n = torch.tensor([t.shape[0]], device=t.device, dtype=torch.long)
+        sizes = [torch.zeros_like(local_n) for _ in range(world)]
+        dist.all_gather(sizes, local_n)
+        sizes = [int(s.item()) for s in sizes]
+        max_n = max(sizes)
+        if max_n == 0:
+            return t[:0].contiguous()
+        pad_n = max_n - t.shape[0]
+        if pad_n > 0:
+            pad = torch.zeros((pad_n, *t.shape[1:]), device=t.device, dtype=t.dtype)
+            t_padded = torch.cat([t, pad], dim=0)
+        else:
+            t_padded = t
+        tensors = [torch.zeros_like(t_padded) for _ in range(world)]
+        dist.all_gather(tensors, t_padded.contiguous())
+        return torch.cat([tensors[i][: sizes[i]] for i in range(world)], dim=0)
 
     if config.model.name == "sigmma":
         num_resolutions = len(all_image_embeddings[0])

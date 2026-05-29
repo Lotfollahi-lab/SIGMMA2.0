@@ -7,17 +7,69 @@ from peft.tuners.lora import LoraModel
 from peft.tuners.tuners_utils import BaseTunerLayer
 from peft import LoraConfig, inject_adapter_in_model
 
+def _build_uni_v1():
+    """Original MahmoodLab/UNI (UNI v1): ViT-L/16, 1024-d, GELU MLP."""
+    return timm.create_model(
+        "vit_large_patch16_224",
+        img_size=224,
+        patch_size=16,
+        init_values=1e-5,
+        num_classes=0,
+        dynamic_img_size=True,
+    )
+
+
+def _build_uni2_h():
+    """MahmoodLab/UNI2-h: ViT-H custom, 1536-d, patch_size=14, 8 reg tokens,
+    SwiGLU MLP (mlp_ratio=5.33). Kwargs mirror EVA's `pathology/mahmood_uni2_h`
+    registration (https://github.com/kaiko-ai/eva/blob/main/src/eva/vision/
+    models/networks/backbones/pathology/mahmood.py).
+    """
+    return timm.create_model(
+        "vit_large_patch14_224",  # placeholder; kwargs override architecture
+        pretrained=False,
+        img_size=224,
+        patch_size=14,
+        depth=24,
+        num_heads=24,
+        init_values=1e-5,
+        embed_dim=1536,
+        mlp_ratio=2.66667 * 2,
+        num_classes=0,
+        no_embed_class=True,
+        mlp_layer=timm.layers.SwiGLUPacked,
+        act_layer=torch.nn.SiLU,
+        reg_tokens=8,
+        dynamic_img_size=True,
+    )
+
+
+_UNI_BUILDERS = {
+    "uni": _build_uni_v1,        # legacy ViT-L/16, 1024-d
+    "uni2_h": _build_uni2_h,     # current default — UNI2-h, 1536-d
+}
+
+
 class UNI(nn.Module):
-    def __init__(self, checkpoint_path=None):
+    """UNI image encoder wrapper.
+
+    Defaults to `variant="uni2_h"` (UNI2-h, 1536-d, ViT-H custom) as of
+    2026-05-15 migration. Pass `variant="uni"` to load the legacy UNI v1
+    (ViT-L/16, 1024-d) — only useful for back-compat diagnostics; all new
+    SIGMMA training uses UNI2-h.
+
+    `feature_dim` is exposed so callers don't have to hardcode 1024 vs 1536.
+    """
+
+    def __init__(self, checkpoint_path=None, variant: str = "uni2_h"):
         super(UNI, self).__init__()
-        uni_model = timm.create_model(
-            "vit_large_patch16_224",
-            img_size=224,
-            patch_size=16,
-            init_values=1e-5,
-            num_classes=0,
-            dynamic_img_size=True,
-        )
+        if variant not in _UNI_BUILDERS:
+            raise ValueError(
+                f"Unknown UNI variant: {variant!r}; choose from {list(_UNI_BUILDERS)}"
+            )
+        self.variant = variant
+        uni_model = _UNI_BUILDERS[variant]()
+        self.feature_dim = int(uni_model.embed_dim)
 
         if checkpoint_path:
             uni_model.load_state_dict(
@@ -90,11 +142,12 @@ def apply_lora_to_backbone(backbone: nn.Module, lora_cfg, num_adapters: int = 1)
         )
 
     if num_adapters <= 1:
-        # Single adapter: inject_adapter_in_model returns a LoraModel whose
-        # `.model` is the (in-place patched) original module. We discard the
-        # LoraModel wrapper and keep the patched base module to preserve type.
-        lora_wrapper = inject_adapter_in_model(_make_config(), backbone.model)
-        backbone.model = lora_wrapper.model
+        # Single adapter: inject_adapter_in_model patches `backbone.model` in
+        # place and returns it (peft >= 0.11 returns the bare model, not a
+        # LoraModel wrapper). The original module's type is preserved so
+        # native methods like `forward_features` / `set_grad_checkpointing`
+        # remain callable.
+        inject_adapter_in_model(_make_config(), backbone.model)
         backbone.lora_adapter_names = None
     else:
         adapter_names = [f"scale_{i}" for i in range(num_adapters)]

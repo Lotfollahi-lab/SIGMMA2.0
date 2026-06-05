@@ -144,7 +144,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
         if len(li_datsets) == 0:
             raise ValueError("No valid datasets found after filtering. All slides were empty.")
 
-        # Shared HVG panel via gene NAMES (panel-agnostic).
+        # Shared selected-gene panel via gene NAMES (panel-agnostic).
         # ``raw_gex_panel_npy`` points to an object-dtype npy of gene symbols
         # produced offline by scripts/compute_in_house_5k_hvg.py (or analogous).
         # Each section maps these names to LOCAL positions in its own
@@ -162,8 +162,8 @@ class MultiSectionDataset(torch.utils.data.Dataset):
             )
             self.svg_panel_dir = Path(svg_panel_dir)
             self.panel_to_int = panel_to_int
-            self.hvg_gene_names = None   # per-section now, not shared
-            self.hvg_idx = None
+            self.selected_gene_names = None   # per-section now, not shared
+            self.selected_gene_idx = None
             self.k_max = int(k_max)
             kept = []
             for d in li_datsets:
@@ -176,13 +176,13 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                 name_to_pos = {g: i for i, g in enumerate(d._var_index)}
                 # SVG genes may not all be present in this section's var.index
                 # (esp. merged-panel intersections). Skip section if 0 valid.
-                hvg_idx = np.array(
+                selected_gene_idx = np.array(
                     [name_to_pos.get(g, -1) for g in panel_genes], dtype=np.int64
                 )
-                if (hvg_idx >= 0).sum() == 0:
+                if (selected_gene_idx >= 0).sum() == 0:
                     print(f"  [panel filter] skipping {d.section_id}: 0 of {len(panel_genes)} panel SVGs present")
                     continue
-                d.hvg_idx = hvg_idx
+                d.selected_gene_idx = selected_gene_idx
                 d.panel_id_str = pid
                 d.panel_id_int = panel_to_int[pid]
                 d.k_max = k_max
@@ -195,7 +195,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
             li_datsets = kept
         elif raw_gex_panel_npy is not None:
             panel_names = _load_raw_gex_panel(raw_gex_panel_npy)
-            self.hvg_gene_names = np.array(panel_names)
+            self.selected_gene_names = np.array(panel_names)
             for d in li_datsets:
                 name_to_pos = {g: i for i, g in enumerate(d._var_index)}
                 missing = [g for g in panel_names if g not in name_to_pos]
@@ -206,13 +206,13 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                         f"Filter the training manifest to slides that share the panel, or "
                         f"regenerate the panel against a wider cohort."
                     )
-                d.hvg_idx = np.array([name_to_pos[g] for g in panel_names], dtype=np.int64)
-            self.hvg_idx = li_datsets[0].hvg_idx
+                d.selected_gene_idx = np.array([name_to_pos[g] for g in panel_names], dtype=np.int64)
+            self.selected_gene_idx = li_datsets[0].selected_gene_idx
         else:
-            # No raw_gex panel configured — leave per-section hvg_idx unset so
+            # No raw_gex panel configured — leave per-section selected_gene_idx unset so
             # SpatialPatchDataset.__getitem__ falls back to zeros for raw_gex.
-            self.hvg_gene_names = None
-            self.hvg_idx = None
+            self.selected_gene_names = None
+            self.selected_gene_idx = None
 
         self.modality_datasets = torch.utils.data.ConcatDataset(li_datsets)
         # Store the first dataset to access gene count
@@ -521,48 +521,48 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             X_fov = self._X[mask]
 
         # 1-4b. FOV-level raw GEX over the panel. Two modes:
-        # (a) legacy: shared raw_gex_panel_npy → hvg_idx is length-K shared,
+        # (a) legacy: shared raw_gex_panel_npy → selected_gene_idx is length-K shared,
         #     no padding/mask needed (all entries valid).
-        # (b) panel-aware: per-section hvg_idx of length K_panel (may contain
+        # (b) panel-aware: per-section selected_gene_idx of length K_panel (may contain
         #     -1 for SVGs absent from this section's var.index). Pad to
         #     `k_max` (e.g. 100) with zeros; raw_gex_valid_mask marks
         #     positions where the gene is actually measured by this section.
         # When standalone (no MultiSectionDataset wrap), return placeholders
         # so probe/inference paths don't crash.
-        hvg_idx = getattr(self, "hvg_idx", None)
+        selected_gene_idx = getattr(self, "selected_gene_idx", None)
         k_max = int(getattr(self, "k_max", 0))
         panel_id_int = int(getattr(self, "panel_id_int", -1))
-        if hvg_idx is not None and k_max > 0:
+        if selected_gene_idx is not None and k_max > 0:
             # Panel-aware mode
             raw_gex_fov = X_fov.sum(axis=0).ravel()
             G = raw_gex_fov.shape[0]
-            valid_local = hvg_idx >= 0
+            valid_local = selected_gene_idx >= 0
             raw_gex_padded = np.zeros(k_max, dtype=np.float32)
             valid_mask = np.zeros(k_max, dtype=bool)
-            K_panel = int(hvg_idx.shape[0])
+            K_panel = int(selected_gene_idx.shape[0])
             if K_panel > k_max:
                 # truncate (shouldn't happen if compute_panel_aware_svgs respects k=100)
-                hvg_use = hvg_idx[:k_max]
+                selected_gene_use = selected_gene_idx[:k_max]
                 valid_use = valid_local[:k_max]
             else:
-                hvg_use = hvg_idx
+                selected_gene_use = selected_gene_idx
                 valid_use = valid_local
             valid_positions_in_kmax = np.arange(min(K_panel, k_max))
-            local_idx = hvg_use.copy()
+            local_idx = selected_gene_use.copy()
             local_idx[~valid_use] = 0  # safe gather; masked later
             raw_gex_padded[valid_positions_in_kmax] = raw_gex_fov[local_idx].astype(np.float32)
             # Zero out padding positions
             raw_gex_padded[valid_positions_in_kmax[~valid_use]] = 0.0
             valid_mask[valid_positions_in_kmax] = valid_use
-            raw_gex_hvg = raw_gex_padded
+            raw_gex_selected = raw_gex_padded
             raw_gex_valid_mask = valid_mask
-        elif hvg_idx is not None:
+        elif selected_gene_idx is not None:
             # Legacy shared-panel mode
             raw_gex_fov = X_fov.sum(axis=0).ravel()
-            raw_gex_hvg = raw_gex_fov[hvg_idx].astype(np.float32)
-            raw_gex_valid_mask = np.ones(raw_gex_hvg.shape[0], dtype=bool)
+            raw_gex_selected = raw_gex_fov[selected_gene_idx].astype(np.float32)
+            raw_gex_valid_mask = np.ones(raw_gex_selected.shape[0], dtype=bool)
         else:
-            raw_gex_hvg = np.zeros(1, dtype=np.float32)
+            raw_gex_selected = np.zeros(1, dtype=np.float32)
             raw_gex_valid_mask = np.zeros(1, dtype=bool)
 
         var_index = self._var_index
@@ -590,7 +590,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
             "spatial_graph": spatial_graph,
             "spatial_text": spatial_text,
             "label": topK_exp,
-            "raw_gex": torch.from_numpy(raw_gex_hvg),
+            "raw_gex": torch.from_numpy(raw_gex_selected),
             "raw_gex_valid_mask": torch.from_numpy(raw_gex_valid_mask),
             "panel_id": panel_id_int,
             "metadata": {"section_id": self.section_id,

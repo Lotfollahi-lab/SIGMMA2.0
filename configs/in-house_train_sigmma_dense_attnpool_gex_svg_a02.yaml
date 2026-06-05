@@ -1,0 +1,85 @@
+# Panel-aware SVG-target soft contrastive loss — alpha=0.2.
+# Differs from in-house_train_sigmma_dense_attnpool_gex_a01.yaml in:
+#   - dataset.{train,validation}.svg_panel_dir + panel_index_json (replaces raw_gex_panel_npy)
+#   - manifest switched to full train/val (panel filter is now per-section via panel_index)
+#   - dataset.{train,validation}.k_max: 100  (raw_gex padded to this, mask emitted)
+#
+# Loss-side behavior (sigmma/model/losses.py GEXAwareSoftContrastiveLoss):
+#   - Q_gex computed only on same-panel off-diagonal pairs (cross-panel masked
+#     out of softmax denominator AND target distribution).
+#   - Per-row alpha_i = alpha * 1[row has same-panel partner in batch].
+#     Rows with no same-panel partner fall back to exact vanilla InfoNCE.
+model:
+  name: sigmma
+  pretrained_image_encoder: UNI
+  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
+  image_encoder_input_dim: 1536
+  image_encoder_output_dim: 512
+  spatial_encoder_input_dim: 384
+  spatial_encoder_output_dim: 512
+  num_resolutions: 3
+  contrastive_temperature: 0.07
+  gex_aware_soft_loss:
+    enabled: true
+    tau_gex: 0.1
+    alpha: 0.2
+    mode: topk
+    topk: 5
+    gex_preprocess: zscore
+    clamp_negative_gex_sim: true
+    symmetric: true
+    detach_gex_targets: true
+  gumbel_temperature: 0.5
+  edge_threshold: 0.5
+  candidate_top_k: 8
+  candidate_sim_threshold: 0.5
+  dropout: 0.1
+  activation: "leaky_relu"
+  aggregate: "attn_pool"
+  num_graph_layers: 2
+  image_mlp_hidden_dim: 2048
+  image_attn_pool_heads: 8
+  lora:
+    enabled: true
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules: ["qkv", "proj"]
+    bias: "none"
+    per_scale: false
+
+dataset:
+  split_type: "section_split"
+  train:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv
+    fov_size: 256
+    hier_cache_dir: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/hier_cache_fov256_res3_tt20000_2026_05_31
+    svg_panel_dir: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/svg_panels
+    panel_index_json: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/svg_panels/panel_index.json
+    k_max: 100
+  validation:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_val.csv
+    fov_size: 256
+    hier_cache_dir: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/hier_cache_fov256_res3_tt20000_2026_05_31
+    svg_panel_dir: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/svg_panels
+    panel_index_json: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/svg_panels/panel_index.json
+    k_max: 100
+
+train:
+  batch_size: 64
+  max_steps: 20000
+  learning_rate: 0.0001
+  weight_decay: 0.001
+  lr_scheduler: "warmup_cosine"
+  lr_warmup_steps: 50
+  lr_min: 0.000001
+  save_every: 500
+  eval_every: 500
+  max_num_eval_samples: 2048
+  gradient_accumulation_steps: 20
+  num_workers: 32
+  prefetch_factor: 8

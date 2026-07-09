@@ -207,3 +207,4 @@ scripts/tcga_tsr/
 /jobscript_viz/jobscript_tcga_kirc_region_overlay_full.sh
 /jobscript_viz/jobscript_tcga_kirc_region_overlay.sh
 /scripts/biomarker/predict_tcga_gene.py
+/jobscripts/jobscript_biomarker_predict_tcga.sh

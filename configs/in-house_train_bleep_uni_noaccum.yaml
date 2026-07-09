@@ -1,0 +1,44 @@
+model:
+  name: BLEEP
+  spot_input_dim: 384            # nemo embedding dim (matches dataset)
+  image_embedding_dim: 1536      # UNI2-h ViT-H custom output (auto-overridden via baselines._UNIImageBackbone.out_features)
+  projection_dim: 256
+  spot_hidden_dim: 512
+  contrastive_temperature: 1.0
+  dropout: 0.1
+  image_size: 224
+  # When image_backbone=uni the ImageNet ResNet50 weights are unused.
+  pretrained_image_encoder_imagenet: False
+  # Controlled-backbone variant: swap ResNet50 -> UNI (full FT).
+  image_backbone: uni
+  uni_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
+  # train_utils.train() reads pretrained_image_encoder for naming/logging.
+  pretrained_image_encoder: "UNI"
+
+dataset:
+  split_type: "section_split"
+  train:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv
+    fov_size: 256
+  validation:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_val.csv
+    fov_size: 256
+
+train:
+  # UNI ViT-L (303M) is heavier than ResNet50; halve the BLEEP batch.
+  batch_size: 128
+  max_steps: 5000
+  # Lower LR matches the large-Transformer regime used by CLIP/PLIP/OmiCLIP FT.
+  learning_rate: 0.00001
+  weight_decay: 0.001
+  lr_scheduler: "warmup_cosine"
+  lr_warmup_steps: 50
+  lr_min: 0.000001
+  save_every: 500
+  eval_every: 100
+  gradient_accumulation_steps: 1
+  num_workers: 15

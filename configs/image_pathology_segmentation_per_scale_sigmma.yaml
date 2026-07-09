@@ -1,9 +1,9 @@
 model:
   name: sigmma
-  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/checkpoints/sigmma/18328/checkpoint-step1000.pth
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/checkpoints/sigmma_dense_attnpool_gex_svg_a01/36852/checkpoint-step2000.pth
   pretrained_image_encoder: UNI
-  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/
-  image_encoder_input_dim: 1024
+  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
+  image_encoder_input_dim: 1536
   image_encoder_output_dim: 512
   spatial_encoder_input_dim: 384
   spatial_encoder_output_dim: 512

@@ -1,0 +1,28 @@
+# H4 EVA-critique inference template. checkpoint_path is overridden by
+# jobscripts/jobscript_eva_sigmma_h4.sh at runtime via env var H4_CKPT.
+model:
+  name: sigmma
+  checkpoint_path: PLACEHOLDER_OVERRIDDEN_BY_JOBSCRIPT
+  pretrained_image_encoder: UNI
+  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
+  image_encoder_input_dim: 1536
+  image_encoder_output_dim: 512
+  spatial_encoder_input_dim: 384
+  spatial_encoder_output_dim: 512
+  num_resolutions: 3
+  gumbel_temperature: 0.5
+  edge_threshold: 0.5
+  candidate_top_k: 8
+  candidate_sim_threshold: 0.5
+  dropout: 0.1
+  activation: "leaky_relu"
+  aggregate: "attn_pool"
+  num_graph_layers: 2
+  lora:
+    enabled: true
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules: ["qkv", "proj"]
+    bias: "none"
+    per_scale: true

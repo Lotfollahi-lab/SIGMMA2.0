@@ -1,0 +1,35 @@
+model:
+  name: PLIP
+  hf_model_id: "vinid/plip"
+  contrastive_temperature: 0.07
+  # Controlled-backbone variant: swap PLIP visual -> UNI (full FT).
+  image_backbone: uni
+  uni_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
+  pretrained_image_encoder: "UNI"
+
+dataset:
+  split_type: "section_split"
+  train:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv
+    fov_size: 256
+  validation:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_val.csv
+    fov_size: 256
+
+train:
+  batch_size: 128
+  max_steps: 2000
+  learning_rate: 0.000005
+  weight_decay: 0.01
+  lr_scheduler: "warmup_cosine"
+  lr_warmup_steps: 50
+  lr_min: 0.000001
+  save_every: 250
+  eval_every: 100
+  max_num_eval_samples: 2048
+  gradient_accumulation_steps: 10
+  num_workers: 15

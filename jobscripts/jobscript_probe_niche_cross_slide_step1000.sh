@@ -22,7 +22,7 @@ run_dir="/nfs/team361/dj16/projects/SIGMMA"
 features_dir="/lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/cell_niche/features/19044"
 out_dir="${run_dir}/outputs/cell_niche/${LSB_JOBID}"
 
-ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/bin/activate"
+ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 [ -f $ENV_PATH ] && source $ENV_PATH || echo "Failed to activate: ${ENV_PATH}"
 
 python -u ${run_dir}/scripts/probe_niche_cross_slide.py \

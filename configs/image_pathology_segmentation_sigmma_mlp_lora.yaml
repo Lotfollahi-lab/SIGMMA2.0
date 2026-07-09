@@ -1,0 +1,31 @@
+# EVA-critique inference config for SIGMMA MLP-LoRA ablation (C).
+# Filled in once job 21544 (training) produces a step-1000 checkpoint.
+
+model:
+  name: sigmma
+  pretrained_image_encoder: UNI
+  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
+  # TODO(after 21544 done): replace with actual jobid path
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/checkpoints/sigmma/21544/checkpoint-step1000.pth
+  image_encoder_input_dim: 1536
+  image_encoder_output_dim: 512
+  spatial_encoder_input_dim: 384
+  spatial_encoder_output_dim: 512
+  num_resolutions: 3
+  contrastive_temperature: 0.07
+  gumbel_temperature: 0.5
+  edge_threshold: 0.5
+  candidate_top_k: 8
+  candidate_sim_threshold: 0.5
+  dropout: 0.1
+  activation: "leaky_relu"
+  aggregate: "attn_pool"
+  num_graph_layers: 2
+  lora:
+    enabled: true
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules: ["qkv", "proj", "fc1", "fc2"]
+    bias: "none"
+    per_scale: true

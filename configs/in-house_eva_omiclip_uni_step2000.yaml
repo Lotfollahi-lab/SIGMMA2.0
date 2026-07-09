@@ -1,0 +1,7 @@
+model:
+  name: loki_OmiCLIP
+  pretrained_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/loki/checkpoint.pt
+  image_backbone: uni
+  uni_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
+  # Fine-tuned OmiCLIP-UNI checkpoint (job 21169).
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/checkpoints/baselines/in-house_train_omiclip_uni/36642_3/checkpoint-step2000.pth

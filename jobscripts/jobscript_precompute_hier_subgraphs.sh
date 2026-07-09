@@ -16,13 +16,18 @@ module load python-3.11.6
 export PYTHONUNBUFFERED=1
 export PATH="/nfs/users/nfs_d/dj16/.local/bin:$PATH"
 
-run_dir="/nfs/team361/dj16/projects/SIGMMA"
-out_dir="/lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/hier_cache_fov256_res3_tt20000"
+# Date suffix for the cache dir, passed as $1 (e.g. `bsub jobscript.sh 2026_05_31`).
+# Defaults to today if omitted. Output: hier_cache_fov256_res3_tt20000_<DATE>.
+DATE="${1:-$(date +%Y_%m_%d)}"
 
-ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/bin/activate"
+run_dir="/nfs/team361/dj16/projects/SIGMMA"
+out_dir="/lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/hier_cache_fov256_res3_tt20000_${DATE}"
+echo "Building hier_cache at: ${out_dir}"
+
+ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 [ -f $ENV_PATH ] && source $ENV_PATH || echo "Failed to activate: ${ENV_PATH}"
 
-# Build cache for both train and val manifests so eval also benefits.
+# Build cache for train, val and test manifests so eval also benefits.
 for manifest in \
     /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv \
     /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_val.csv \

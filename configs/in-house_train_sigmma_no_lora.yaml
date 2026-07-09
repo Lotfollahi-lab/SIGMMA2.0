@@ -1,0 +1,52 @@
+model:
+  name: sigmma
+  pretrained_image_encoder: UNI
+  pretrained_image_encoder_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
+  image_encoder_input_dim: 1536
+  image_encoder_output_dim: 512
+  spatial_encoder_input_dim: 384
+  spatial_encoder_output_dim: 512
+  num_resolutions: 3
+  contrastive_temperature: 0.07
+  gumbel_temperature: 0.5
+  edge_threshold: 0.5
+  candidate_top_k: 8
+  candidate_sim_threshold: 0.5
+  dropout: 0.1
+  activation: "leaky_relu"
+  aggregate: "attn_pool"
+  num_graph_layers: 2
+  # No-LoRA ablation: full UNI fine-tuning, shared across 3 scales.
+  # Per-scale variation lives only in the graph encoders + projection heads.
+  lora:
+    enabled: false
+
+dataset:
+  split_type: "section_split"
+  train:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv
+    fov_size: 256
+    hier_cache_dir: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/hier_cache_fov256_res3_tt20000_2026_05_31
+  validation:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_val.csv
+    fov_size: 256
+    hier_cache_dir: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/hier_cache_fov256_res3_tt20000_2026_05_31
+
+train:
+  batch_size: 128
+  # Match the SIGMMA ckpt used by EVA-critique (in-house_sigmma_18328 step 1000).
+  max_steps: 1000
+  learning_rate: 0.0001
+  weight_decay: 0.001
+  lr_scheduler: "warmup_cosine"
+  lr_warmup_steps: 50
+  lr_min: 0.000001
+  save_every: 500
+  eval_every: 500
+  max_num_eval_samples: 2048
+  gradient_accumulation_steps: 10
+  num_workers: 24

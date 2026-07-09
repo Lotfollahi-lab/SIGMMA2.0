@@ -1,0 +1,40 @@
+model:
+  name: loki_OmiCLIP
+  pretrained_ckpt_path: /nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/loki/checkpoint.pt
+  contrastive_temperature: 0.07
+  # Controlled-backbone variant: swap CoCa ViT-L/14 visual -> UNI (full FT).
+  # The CoCa text tower is kept (gene-as-sentence remains the ST side).
+  image_backbone: uni
+  uni_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
+  pretrained_image_encoder: "UNI"
+
+dataset:
+  split_type: "section_split"
+  train:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_train.csv
+    fov_size: 256
+  validation:
+    pretrained_cell_embedding: True
+    type_pretrained_cell_embedding: "nemo"
+    manifest_path: /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_val.csv
+    fov_size: 256
+
+train:
+  # UNI (303M) + CoCa text (frozen visual still loaded, ~430M w/o visual ≈ a
+  # few-hundred-MB text tower). micro-batch stays 64; effective contrastive batch
+  # = 128 × gradient_accumulation_steps (10) = 1280, matching SIGMMA via the
+  # GradCache-style negative pooling in train_utils.py (accum path).
+  batch_size: 128
+  max_steps: 2000
+  learning_rate: 0.000005
+  weight_decay: 0.01
+  lr_scheduler: "warmup_cosine"
+  lr_warmup_steps: 50
+  lr_min: 0.000001
+  save_every: 250
+  eval_every: 100
+  max_num_eval_samples: 2048
+  gradient_accumulation_steps: 10
+  num_workers: 15

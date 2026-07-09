@@ -1,0 +1,18 @@
+model:
+  name: BLEEP
+  spot_input_dim: 384            # nemo embedding dim
+  image_embedding_dim: 1536      # UNI2-h ViT-H output (auto-overridden in BLEEP ctor)
+  projection_dim: 256
+  spot_hidden_dim: 512
+  contrastive_temperature: 1.0
+  dropout: 0.1
+  image_size: 224
+  pretrained_image_encoder_imagenet: False
+  image_backbone: uni
+  uni_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
+  # Fine-tuned BLEEP-UNI checkpoint (job 21523, current-arch refactor).
+  # Job 21166 used the pre-refactor _BLEEPSpotEncoder MLP (+1.6M params) and
+  # is incompatible with the simplified BLEEP class; previous EVA-critique
+  # row (AJI 0.4257) ran on 21166 and is not directly comparable with the
+  # other UNI-FT baselines.
+  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/checkpoints/baselines/in-house_train_bleep_uni/26355/checkpoint-step1000.pth

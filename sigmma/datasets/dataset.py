@@ -103,7 +103,10 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                  raw_gex_panel_npy: Optional[Path | str] = None,
                  svg_panel_dir: Optional[Path | str] = None,
                  panel_index_json: Optional[Path | str] = None,
-                 k_max: int = 100):
+                 k_max: int = 100,
+                 use_full_panel: bool = False,
+                 gex_lognorm: bool = False,
+                 gex_lognorm_target_sum: float = 1e4):
         manifest = pd.read_csv(manifest_path)
         # Dedupe by sample_name — some slides (e.g. Sml4-PNC) have multiple
         # rows pointing at different sequencing runs. ``keep="last"`` matches
@@ -152,7 +155,72 @@ class MultiSectionDataset(torch.utils.data.Dataset):
         # the training cohort can be re-filtered upstream.
         # Panel-aware SVG target loading (new): per-section panel_id → SVG list
         # OR legacy shared HVG panel via raw_gex_panel_npy. Mutually exclusive.
-        if svg_panel_dir is not None and panel_index_json is not None:
+        if use_full_panel:
+            # Full-panel mode: use EVERY measured gene in each panel (no SVG
+            # subselection). Panels are still defined by panel_index.json so the
+            # GEX-aware loss can keep same-panel pairs as the only soft-target
+            # candidates. ``svg_panel_dir`` is unused here; only
+            # ``panel_index_json`` is required (for panel grouping). ``k_max`` is
+            # auto-computed as the max gene count across kept sections so
+            # ``multimodal_collate`` can stack fixed-size tensors.
+            if panel_index_json is None:
+                raise ValueError(
+                    "use_full_panel=True requires panel_index_json (used to group "
+                    "sections by gene panel)."
+                )
+            if raw_gex_panel_npy is not None:
+                raise ValueError(
+                    "Cannot use both raw_gex_panel_npy and use_full_panel simultaneously."
+                )
+            import json as _json
+            section_to_panel: dict[str, str] = _json.loads(
+                Path(panel_index_json).read_text()
+            )
+            panels_in_use = sorted(set(section_to_panel.values()))
+            panel_to_int = {pid: i for i, pid in enumerate(panels_in_use)}
+            self.panel_to_int = panel_to_int
+            self.selected_gene_names = None
+            self.selected_gene_idx = None
+            kept = []
+            panel_gene_count: dict[str, int] = {}
+            for d in li_datsets:
+                pid = section_to_panel.get(d.section_id)
+                if pid is None:
+                    if int(os.environ.get("RANK", "0")) == 0:
+                        print(f"  [panel filter] skipping {d.section_id}: not in panel_index.json")
+                    continue
+                n_genes = int(len(d._var_index))
+                # Same-panel sections must share an identical gene axis (panels
+                # are defined by exact var.index hash). Guard against a mismatch
+                # that would break the loss's canonical-mask assumption.
+                if pid in panel_gene_count and panel_gene_count[pid] != n_genes:
+                    raise ValueError(
+                        f"Panel {pid} has sections with differing gene counts "
+                        f"({panel_gene_count[pid]} vs {n_genes}); full-panel mode "
+                        f"requires same-panel sections to share var.index."
+                    )
+                panel_gene_count[pid] = n_genes
+                d.selected_gene_idx = np.arange(n_genes, dtype=np.int64)
+                d.panel_id_str = pid
+                d.panel_id_int = panel_to_int[pid]
+                d.gex_lognorm = bool(gex_lognorm)
+                d.gex_lognorm_target_sum = float(gex_lognorm_target_sum)
+                kept.append(d)
+            if not kept:
+                raise ValueError(
+                    "Full-panel mode: no sections survived panel_index filter. "
+                    f"Check {panel_index_json} covers the manifest."
+                )
+            global_k_max = max(int(len(d._var_index)) for d in kept)
+            for d in kept:
+                d.k_max = global_k_max
+            self.k_max = global_k_max
+            if int(os.environ.get("RANK", "0")) == 0:
+                print(f"  [full-panel] using all genes per panel; "
+                      f"k_max={global_k_max}, panels={len(panel_gene_count)}, "
+                      f"gex_lognorm={bool(gex_lognorm)}")
+            li_datsets = kept
+        elif svg_panel_dir is not None and panel_index_json is not None:
             if raw_gex_panel_npy is not None:
                 raise ValueError(
                     "Cannot use both raw_gex_panel_npy and svg_panel_dir simultaneously."
@@ -186,6 +254,8 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                 d.panel_id_str = pid
                 d.panel_id_int = panel_to_int[pid]
                 d.k_max = k_max
+                d.gex_lognorm = bool(gex_lognorm)
+                d.gex_lognorm_target_sum = float(gex_lognorm_target_sum)
                 kept.append(d)
             if not kept:
                 raise ValueError(
@@ -535,6 +605,14 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         if selected_gene_idx is not None and k_max > 0:
             # Panel-aware mode
             raw_gex_fov = X_fov.sum(axis=0).ravel()
+            if getattr(self, "gex_lognorm", False):
+                # Library-size normalize the FOV pseudobulk over ALL measured
+                # genes, then log1p, so values enter the GEX-aware loss
+                # log-normalized (loss should use gex_preprocess=zscore only).
+                total = float(raw_gex_fov.sum())
+                if total > 0.0:
+                    target_sum = float(getattr(self, "gex_lognorm_target_sum", 1e4))
+                    raw_gex_fov = np.log1p(raw_gex_fov / total * target_sum)
             G = raw_gex_fov.shape[0]
             valid_local = selected_gene_idx >= 0
             raw_gex_padded = np.zeros(k_max, dtype=np.float32)
@@ -559,6 +637,14 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         elif selected_gene_idx is not None:
             # Legacy shared-panel mode
             raw_gex_fov = X_fov.sum(axis=0).ravel()
+            if getattr(self, "gex_lognorm", False):
+                # Library-size normalize the FOV pseudobulk over ALL measured
+                # genes, then log1p, so values enter the GEX-aware loss
+                # log-normalized (loss should use gex_preprocess=zscore only).
+                total = float(raw_gex_fov.sum())
+                if total > 0.0:
+                    target_sum = float(getattr(self, "gex_lognorm_target_sum", 1e4))
+                    raw_gex_fov = np.log1p(raw_gex_fov / total * target_sum)
             raw_gex_selected = raw_gex_fov[selected_gene_idx].astype(np.float32)
             raw_gex_valid_mask = np.ones(raw_gex_selected.shape[0], dtype=bool)
         else:

@@ -15,7 +15,10 @@ from sigmma.model import UNI, ResNet50
 from sigmma.model.models_image_backbones import H_optimus_zero, apply_lora_to_backbone
 from sigmma.model import symmetric_InfoNCE, bleep_cross_entropy
 from sigmma.model.losses import GEXAwareSoftContrastiveLoss
-from sigmma.model.baselines import openAI_CLIP, PLIP, loki_OmiCLIP, BLEEP
+from sigmma.baselines.openai_clip import openAI_CLIP
+from sigmma.baselines.plip import PLIP
+from sigmma.baselines.omiclip import loki_OmiCLIP
+from sigmma.baselines.bleep import BLEEP
 from ..evaluation.evaluate_retrieval import retrieval_score, eval_retrieval
 
 from sklearn.decomposition import PCA
@@ -57,7 +60,10 @@ def load_dataset(config_dataset, is_train=False, model_name=None):
                                   raw_gex_panel_npy=config_dataset.get("raw_gex_panel_npy", None),
                                   svg_panel_dir=config_dataset.get("svg_panel_dir", None),
                                   panel_index_json=config_dataset.get("panel_index_json", None),
-                                  k_max=int(config_dataset.get("k_max", 100)))
+                                  k_max=int(config_dataset.get("k_max", 100)),
+                                  use_full_panel=bool(config_dataset.get("use_full_panel", False)),
+                                  gex_lognorm=bool(config_dataset.get("gex_lognorm", False)),
+                                  gex_lognorm_target_sum=float(config_dataset.get("gex_lognorm_target_sum", 1e4)))
 
     return dataset
 
@@ -350,20 +356,27 @@ def train(
 
                     accum_images.append(image)
                     accum_spatial.append(spatial)
-                    accum_raw_gex.append(batch["raw_gex"].to(device))
-                    # Panel-aware extras (graceful if missing)
-                    rg_mask = batch.get("raw_gex_valid_mask")
-                    if rg_mask is not None and rg_mask.numel() > 0:
-                        accum_raw_gex_valid_mask.append(rg_mask.to(device))
-                    pid_b = batch.get("panel_id")
-                    if pid_b is not None and pid_b.numel() > 0:
-                        accum_panel_ids.append(pid_b.to(device))
-                    if "image_embedding" not in accum_features:
-                        accum_features["image_embedding"] = [image_embedding]
-                        accum_features["spatial_embedding"] = [spatial_embedding]
+                    if config.model.name == "sigmma":
+                        accum_raw_gex.append(batch["raw_gex"].to(device))
+                        # Panel-aware extras (graceful if missing)
+                        rg_mask = batch.get("raw_gex_valid_mask")
+                        if rg_mask is not None and rg_mask.numel() > 0:
+                            accum_raw_gex_valid_mask.append(rg_mask.to(device))
+                        pid_b = batch.get("panel_id")
+                        if pid_b is not None and pid_b.numel() > 0:
+                            accum_panel_ids.append(pid_b.to(device))
+                        feat_keys = ("image_embedding", "spatial_embedding")
                     else:
-                        accum_features["image_embedding"].append(image_embedding)
-                        accum_features["spatial_embedding"].append(spatial_embedding)
+                        # Baselines: cache loss-space embeddings (BLEEP's loss uses
+                        # UNnormalized projections, so we cannot reuse the normalized
+                        # "image_embedding"). The grad step pools these into the full
+                        # effective-batch contrastive matrix.
+                        feat_keys = ("image_embedding_for_loss", "spatial_embedding_for_loss")
+                    for key in feat_keys:
+                        if key not in accum_features:
+                            accum_features[key] = [model_out[key]]
+                        else:
+                            accum_features[key].append(model_out[key])
 
                 if (i+1) % accum_freq > 0:
                     if rank == 0:
@@ -465,7 +478,28 @@ def train(
                                 total_loss = sum(losses.values()) #+ model_out["loss_csc_img"] #+ model_out["loss_kl"]
                                 losses['loss'] = total_loss
                             else:
-                                raise NotImplementedError(f"Model {config.model.name} is not implemented for training.")
+                                # Baselines: GradCache-style negative pooling. The
+                                # current micro-batch j carries gradients; the other
+                                # accumulated micro-batches are cached/detached
+                                # negatives. Compute the model's own contrastive loss
+                                # over the concatenated full effective batch.
+                                base_model = model.module if hasattr(model, "module") else model
+                                pooled = {}
+                                for key in ("image_embedding_for_loss", "spatial_embedding_for_loss"):
+                                    cached = accum_features[key]
+                                    parts = (
+                                        [cached[k] for k in range(j)]
+                                        + [model_out[key]]
+                                        + [cached[k] for k in range(j + 1, len(cached))]
+                                    )
+                                    pooled[key] = torch.cat(parts)
+                                loss = base_model.contrastive_loss_from_embeddings(
+                                    pooled["image_embedding_for_loss"],
+                                    pooled["spatial_embedding_for_loss"],
+                                )
+                                losses = {'contrastive_loss': loss}
+                                total_loss = loss
+                                losses['loss'] = total_loss
                             del inputs_for_loss
                         total_loss.backward()
                 loss = total_loss.item()

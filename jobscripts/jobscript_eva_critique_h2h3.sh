@@ -17,7 +17,7 @@ export PATH="/nfs/users/nfs_d/dj16/.local/bin:$PATH"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 run_dir="/nfs/team361/dj16/projects/SIGMMA"
-ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/bin/activate"
+ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 [ -f $ENV_PATH ] && source $ENV_PATH || echo "Failed to activate $ENV_PATH"
 
 CFG="${run_dir}/configs/image_pathology_segmentation_per_scale_sigmma.yaml"

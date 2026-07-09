@@ -18,7 +18,7 @@ export PATH="/nfs/users/nfs_d/dj16/.local/bin:$PATH"
 
 run_dir="/nfs/team361/dj16/projects/SIGMMA"
 
-ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/bin/activate"
+ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 [ -f $ENV_PATH ] && source $ENV_PATH || echo "Failed to activate: ${ENV_PATH}"
 
 # Take the first slide from the train manifest

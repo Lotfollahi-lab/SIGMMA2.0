@@ -74,9 +74,9 @@ def eval_retrieval(scores_img2spatial, scores_spatial2img):
         inds = np.argsort(score)[::-1]
         ranks[index] = np.where(inds == gt_indices[index])[0][0]
     # == Top@percent Recall ==
+    img_r_1percent = len(np.where(ranks < int(num_reference*0.01))[0]) / len(ranks)
     img_r_5percent = len(np.where(ranks < int(num_reference*0.05))[0]) / len(ranks)
     img_r_10percent = len(np.where(ranks < int(num_reference*0.1))[0]) / len(ranks)
-    img_r_15percent = len(np.where(ranks < int(num_reference*0.15))[0]) / len(ranks)
 
     # == Top@k Recall ==
     img_r1 = np.mean(ranks == 0)
@@ -86,23 +86,23 @@ def eval_retrieval(scores_img2spatial, scores_spatial2img):
     for index, score in enumerate(scores_spatial2img):
         inds = np.argsort(score)[::-1]
         ranks[index] = np.where(inds == gt_indices[index])[0][0]
-    
+
     # === Top@percent Recall ===
+    spatial_r_1percent = len(np.where(ranks < int(num_reference*0.01))[0]) / len(ranks)
     spatial_r_5percent = len(np.where(ranks < int(num_reference*0.05))[0]) / len(ranks)
     spatial_r_10percent = len(np.where(ranks < int(num_reference*0.1))[0]) / len(ranks)
-    spatial_r_15percent = len(np.where(ranks < int(num_reference*0.15))[0]) / len(ranks)
 
     # == Top@k Recall ==
     spatial_r1 = np.mean(ranks == 0)
     spatial_r5 = np.mean(ranks < 5)
     spatial_r10 = np.mean(ranks < 10)
 
-    eval_results = {"image_recall@5percent": img_r_5percent,
+    eval_results = {"image_recall@1percent": img_r_1percent,
+                     "image_recall@5percent": img_r_5percent,
                      "image_recall@10percent": img_r_10percent,
-                     "image_recall@15percent": img_r_15percent,
+                     "spatial_recall@1percent": spatial_r_1percent,
                      "spatial_recall@5percent": spatial_r_5percent,
                      "spatial_recall@10percent": spatial_r_10percent,
-                     "spatial_recall@15percent": spatial_r_15percent,
                      "image_recall@1": img_r1,
                      "image_recall@5": img_r5,
                      "image_recall@10": img_r10,

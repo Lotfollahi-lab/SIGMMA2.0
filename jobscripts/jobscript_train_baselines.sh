@@ -22,7 +22,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 run_dir="/nfs/team361/dj16/projects/SIGMMA"
 output_dir="/lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/checkpoints/baselines"
 
-ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/bin/activate"
+ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 [ -f $ENV_PATH ] && source $ENV_PATH || echo "Failed to activate: ${ENV_PATH}"
 
 # === Baseline fine-tuning =====================================================
@@ -49,7 +49,7 @@ for cfg in "${configs[@]}"; do
     echo "Output dir: ${job_outdir}"
     echo "=========================================="
 
-    torchrun --standalone --nproc_per_node 2 scripts/train_model.py \
+    torchrun --standalone --nproc_per_node 2 scripts/train/train_model.py \
         -config_file ${run_dir}/configs/${cfg} \
         -out_dir ${job_outdir}
 done

@@ -18,7 +18,7 @@ export PATH="/nfs/users/nfs_d/dj16/.local/bin:$PATH"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 run_dir="/nfs/team361/dj16/projects/SIGMMA"
-ENV_PATH="/nfs/team361/dj16/.cache/pypoetry/virtualenvs/sigmma-7B1Zyy1z-py3.11/bin/activate"
+ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 [ -f "$ENV_PATH" ] && source "$ENV_PATH" || echo "Failed to activate $ENV_PATH"
 cd "${run_dir}"
 
@@ -35,11 +35,14 @@ cd "${run_dir}"
 #   OUT_DIR      — embedding output dir.
 # ---------------------------------------------------------------------------
 TISSUE="${TISSUE:-renal_cell_carcinoma}"
-MAX_SLIDES="${MAX_SLIDES:-1}"
+# Default to "no cap" — pass MAX_SLIDES=1 explicitly for smoke runs.
+MAX_SLIDES="${MAX_SLIDES-}"
 BATCH_SIZE="${BATCH_SIZE:-128}"
 NUM_WORKERS="${NUM_WORKERS:-8}"
 CONFIG="${CONFIG:-configs/in-house_retrieval_sigmma.yaml}"
 OUT_DIR="${OUT_DIR:-outputs/cross_tissue_retrieval/embeddings}"
+# SPLIT=test (held-out, default) | all (full train+val+test for in-house tissues).
+SPLIT="${SPLIT:-test}"
 
 extra_args=()
 [ -n "$MAX_SLIDES" ] && extra_args+=(--max_slides "$MAX_SLIDES")
@@ -50,4 +53,5 @@ python -m scripts.cross_tissue_extract_patches \
     --out_dir "$OUT_DIR" \
     --batch_size "$BATCH_SIZE" \
     --num_workers "$NUM_WORKERS" \
+    --split "$SPLIT" \
     "${extra_args[@]}"

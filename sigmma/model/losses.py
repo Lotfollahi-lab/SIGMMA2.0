@@ -249,7 +249,16 @@ class GEXAwareSoftContrastiveLoss(nn.Module):
         panel_ids: Optional[torch.Tensor] = None,
         return_dict: bool = False,
     ):
-        """h_img, h_spatial: (B, D); gex: (B, G_gex) raw counts (unnormalized).
+        """h_img, h_spatial: (B, D); gex: (B, G_gex).
+
+        ``gex`` is whatever the dataset feeds — either a top-K selected-gene
+        subset (could be SVGs or HVGs depending on how the panel was built) or
+        the FULL panel gene axis (``use_full_panel`` in the dataset). The
+        per-panel cosine similarity here works for any gene count via
+        ``raw_gex_valid_mask``. If the dataset already log-normalizes the FOV
+        pseudobulk (``gex_lognorm``), set ``gex_preprocess='zscore'`` to avoid
+        double-logging; otherwise ``gex`` is raw counts and ``log1p_zscore``
+        applies the log here.
 
         Panel-aware mode (when `panel_ids` is given):
           - Q_gex defined only on same-panel off-diagonals (cross-panel

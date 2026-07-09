@@ -1,7 +1,0 @@
-model:
-  name: PLIP
-  hf_model_id: "vinid/plip"
-  image_backbone: uni
-  uni_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
-  # Fine-tuned PLIP-UNI checkpoint (job 21168).
-  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/checkpoints/baselines/in-house_train_plip_uni/26375_2/checkpoint-step300.pth

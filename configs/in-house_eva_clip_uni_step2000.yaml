@@ -1,7 +1,0 @@
-model:
-  name: openAI_CLIP
-  hf_model_id: "openai/clip-vit-base-patch32"
-  image_backbone: uni
-  uni_ckpt_path: /nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/
-  # Fine-tuned CLIP-UNI checkpoint (job 21167).
-  checkpoint_path: /lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/checkpoints/baselines/in-house_train_clip_uni/36642_1/checkpoint-step2000.pth

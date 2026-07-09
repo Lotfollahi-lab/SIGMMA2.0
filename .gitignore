@@ -170,3 +170,40 @@ configs/eva_official/
 
 # TCGA TSR pipeline: kept local, not tracked in remote.
 scripts/tcga_tsr/
+
+# TCGA jobscripts + biomarker predictor depending on scripts/tcga_tsr: kept local.
+/jobscripts/jobscript_biomarker_dense_seg.sh
+/jobscripts/jobscript_kirc_clinical_risk_screen.sh
+/jobscripts/jobscript_stage_separability_inhouse.sh
+/jobscripts/jobscript_stage_separability_tcga.sh
+/jobscripts/jobscript_tcga_brca_convert_seg_array.sh
+/jobscripts/jobscript_tcga_brca_prep_manifest.sh
+/jobscripts/jobscript_tcga_brca_protocol_refined.sh
+/jobscripts/jobscript_tcga_coad_convert_seg_array.sh
+/jobscripts/jobscript_tcga_coad_harvest.sh
+/jobscripts/jobscript_tcga_coad_protocol_refined.sh
+/jobscripts/jobscript_tcga_coad_protocol_tsr.sh
+/jobscripts/jobscript_tcga_coad_tutorial_tsr.sh
+/jobscripts/jobscript_tcga_coad_voronoi_tsr.sh
+/jobscripts/jobscript_tcga_colorectal_protocol_refined.sh
+/jobscripts/jobscript_tcga_convert_seg_array.sh
+/jobscripts/jobscript_tcga_harvest.sh
+/jobscripts/jobscript_tcga_kirc_build_manifest.sh
+/jobscripts/jobscript_tcga_kirc_cell_diag.sh
+/jobscripts/jobscript_tcga_kirc_central_tsr.sh
+/jobscripts/jobscript_tcga_kirc_convert_seg_array.sh
+/jobscripts/jobscript_tcga_kirc_cox_group_lifelines.sh
+/jobscripts/jobscript_tcga_kirc_cox_group.sh
+/jobscripts/jobscript_tcga_kirc_endpoints.sh
+/jobscripts/jobscript_tcga_kirc_grid_build_array.sh
+/jobscripts/jobscript_tcga_kirc_grid_harvest.sh
+/jobscripts/jobscript_tcga_kirc_harvest.sh
+/jobscripts/jobscript_tcga_kirc_os_sensitivity.sh
+/jobscripts/jobscript_tcga_kirc_survival_minos30.sh
+/jobscripts/jobscript_tcga_seg_array.sh
+/jobscripts/jobscript_tcga_train_tso_probe.sh
+/jobscripts/jobscript_tile_apply_cj4637.sh
+/jobscript_viz/jobscript_cj4637_grid235_redraw.sh
+/jobscript_viz/jobscript_tcga_kirc_region_overlay_full.sh
+/jobscript_viz/jobscript_tcga_kirc_region_overlay.sh
+/scripts/biomarker/predict_tcga_gene.py

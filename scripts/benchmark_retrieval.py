@@ -1,6 +1,7 @@
 # Retrieval evaluation logic adapted from BLIP (https://github.com/salesforce/BLIP/blob/main/eval_retrieval_video.py)
 
 import copy
+import json
 import os
 import argparse
 import numpy as np
@@ -89,8 +90,19 @@ def main(args):
     # Retrieval
     scores_img2spatial, scores_spatial2img = retrieval_score(model, query_dataloader, reference_dataloader, device, config)
 
+    # Cache score matrices so any future @K / @percent threshold can be
+    # recomputed without re-running the model.
+    np.savez_compressed(
+        os.path.join(config.outdir, "score_matrices.npz"),
+        scores_img2spatial=scores_img2spatial,
+        scores_spatial2img=scores_spatial2img,
+    )
+
     # Compute recall@K
     result = eval_retrieval(scores_img2spatial, scores_spatial2img)
+
+    with open(os.path.join(config.outdir, "recall_metrics.json"), "w") as f:
+        json.dump({k: float(v) for k, v in result.items()}, f, indent=2)
 
     table = wandb.Table(columns=["metric", "value"])
     for metric, value in result.items():

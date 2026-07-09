@@ -10,7 +10,8 @@ from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 from ml_collections.config_dict import ConfigDict
 import yaml
 
-from sigmma.utils import load_dataset, load_model, linear_probing, WandbLogger
+from sigmma.utils import load_dataset, load_model, WandbLogger
+from sigmma.evaluation import linear_probing
 from sigmma.model import UNI, H_optimus_zero, ResNet50
 from sigmma.datasets import multimodal_collate
 
@@ -86,7 +87,7 @@ def main(args):
     multimodal_model = load_model(config, device, pretrained_image_encoder=config.model.get("pretrained_image_encoder", None), pretrained_ckpt_path=config.model.get("checkpoint_path", None), train=False, dataset=dataset)
     multimodal_model.eval()
 
-    unimodal_image_encoder_UNI = UNI(checkpoint_path="/nfs/team361/dj16/projects/img_spatial_alignment/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/")
+    unimodal_image_encoder_UNI = UNI(checkpoint_path="/nfs/team361/dj16/projects/SIGMMA/assets/ckpts/uni_h/")
     unimodal_image_encoder_UNI.to(device)
     unimodal_image_encoder_UNI.eval()
 

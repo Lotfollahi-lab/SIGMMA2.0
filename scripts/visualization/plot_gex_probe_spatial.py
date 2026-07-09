@@ -8,7 +8,8 @@ so the eye can compare GT vs predictions of UNI vs SIGMMA spatially, the same
 way the niche overlay showed labels on H&E.
 
 Reads:
-  - /lustre/.../sigmma_outputs/cache/gex_2d/{uni,sigmma}/<sample>/fov_*.npz
+  - /lustre/.../sigmma_outputs/cache/gex_2d/{uni,sigmma}/<sample>.h5  (features)
+  - /lustre/.../sigmma_outputs/cache/data/gex_2d/<tag>/<sample>.h5    (GT + bbox)
   - outputs/gex_2d/heads/{uni,concat}/best.pt
   - outputs/gex_2d/results/{uni,concat}.json              (per-gene Pearson)
   - outputs/gex_2d/gene_panel.json
@@ -28,9 +29,15 @@ import torch.nn.functional as F
 import zarr
 
 from sigmma.evaluation.gex_2d_probing import ProbingHead2D
+from sigmma.evaluation.gex_cache_io import iter_section_fovs, read_fov_ids
 
 SAMPLE = "BK24-SKI-27-FO-01-S3"
 CACHE_ROOT = Path("/lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/gex_2d")
+# GT targets + FOV bboxes live in the data cache (one <sample>.h5 per section);
+# point this at the data-cache dir for the SAME panel the heads were trained on.
+DATA_ROOT = Path(
+    "/lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache/data/gex_2d/dispersion_g56_fov256"
+)
 HEADS = Path("outputs/gex_2d/heads")
 PANEL_FILE = Path("outputs/gex_2d/gene_panel.json")
 RES_DIR = Path("outputs/gex_2d/results")
@@ -63,14 +70,14 @@ def assemble_uni(uni_npz: dict) -> torch.Tensor:
                          mode="bilinear", align_corners=False)
 
 
-def get_val_paths(sample: str, seed: int = 42) -> list[str]:
+def get_val_ids(sample: str, seed: int = 42) -> list[int]:
     """Reproduce the smoke-0b intra-slide 80/20 split used in training."""
-    paths = sorted(str(p) for p in (CACHE_ROOT / "uni" / sample).glob("fov_*.npz"))
+    ids = sorted(read_fov_ids(CACHE_ROOT / "uni", sample))
     rng = np.random.default_rng(seed)
-    idx = np.arange(len(paths))
+    idx = np.arange(len(ids))
     rng.shuffle(idx)
-    n_val = max(1, int(0.2 * len(paths)))
-    return [paths[i] for i in idx[:n_val]]
+    n_val = max(1, int(0.2 * len(ids)))
+    return [ids[i] for i in idx[:n_val]]
 
 
 def pick_top_genes(k: int = 3) -> list[tuple[str, int, float, float]]:
@@ -101,13 +108,18 @@ def main():
     head_concat = ProbingHead2D(in_channels=3072, num_genes=G).to(device).eval()
     head_concat.load_state_dict(torch.load(HEADS / "concat" / "best.pt", map_location=device))
 
-    val_paths = get_val_paths(SAMPLE)
-    print(f"[paths] |val|={len(val_paths)}")
+    val_ids = get_val_ids(SAMPLE)
+    print(f"[paths] |val|={len(val_ids)}")
 
     # Pick 4 FOVs spread across the val set.
-    chosen = [val_paths[i] for i in np.linspace(0, len(val_paths) - 1, 4).astype(int)]
-    chosen_ids = [int(np.load(p)["fov_id"]) for p in chosen]
+    chosen_ids = [val_ids[i] for i in np.linspace(0, len(val_ids) - 1, 4).astype(int)]
     print(f"[fovs] chosen ids: {chosen_ids}")
+
+    # Join the per-section caches by fov_id: features (uni), scales (sigmma),
+    # GT + bbox (data).
+    uni_by_id = {d["fov_id"]: d for d in iter_section_fovs(CACHE_ROOT / "uni", SAMPLE, fields=["features"])}
+    sig_by_id = {d["fov_id"]: d for d in iter_section_fovs(CACHE_ROOT / "sigmma", SAMPLE, fields=["micro", "meso", "macro"])}
+    data_by_id = {d["fov_id"]: d for d in iter_section_fovs(DATA_ROOT, SAMPLE, fields=["target"])}
 
     top_genes = pick_top_genes(k=3)
     gene_idx = [gi for _, gi, _, _ in top_genes]
@@ -115,21 +127,22 @@ def main():
 
     # Pre-compute per-FOV: he_tile, gt[g], uni_pred[g], concat_pred[g]
     rows = []
-    for p in chosen:
-        uni_npz = np.load(p)
-        sigmma_npz = np.load(p.replace("/uni/", "/sigmma/"))
-        x_start = int(uni_npz["x_start"]); y_start = int(uni_npz["y_start"])
-        fov_size = int(uni_npz["fov_size"])
+    for fid in chosen_ids:
+        uni_fov = uni_by_id[fid]
+        sig_fov = sig_by_id[fid]
+        data_fov = data_by_id[fid]
+        x_start = data_fov["x_start"]; y_start = data_fov["y_start"]
+        fov_size = data_fov["fov_size"]
         he = read_he_tile(x_start, y_start, fov_size)
         with torch.no_grad():
-            feats_uni = assemble_uni(uni_npz)
-            feats_cat = assemble_concat(sigmma_npz)
+            feats_uni = assemble_uni(uni_fov)
+            feats_cat = assemble_concat(sig_fov)
             pred_uni = head_uni(feats_uni)[0].cpu().numpy()       # (G, 56, 56)
             pred_cat = head_concat(feats_cat)[0].cpu().numpy()
-        gt = np.log1p(uni_npz["target"].astype(np.float32))       # (G, 56, 56)
+        gt = np.log1p(data_fov["target"].astype(np.float32))      # (G, 56, 56)
         rows.append({
             "he": he, "gt": gt, "pred_uni": pred_uni, "pred_cat": pred_cat,
-            "fov_id": int(uni_npz["fov_id"]),
+            "fov_id": int(fid),
         })
 
     # Layout: 4 rows × (1 H&E + 3 genes × 3 panels) = 4 × 10

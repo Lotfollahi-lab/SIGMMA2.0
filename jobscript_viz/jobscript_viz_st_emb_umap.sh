@@ -27,4 +27,4 @@ cd "${run_dir}"
 # ---------------------------------------------------------------------------
 SCALE="${SCALE:-all}"
 
-python scripts/viz_st_emb_umap_tissue_dataset.py --scale "$SCALE"
+python scripts/visualization/viz_st_emb_umap_tissue_dataset.py --scale "$SCALE"

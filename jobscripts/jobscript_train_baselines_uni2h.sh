@@ -49,6 +49,6 @@ echo "[ARRAY ${LSB_JOBINDEX}/3] Fine-tuning ${cfg} on UNI2-h"
 echo "Output dir: ${job_outdir}"
 echo "=========================================="
 
-torchrun --standalone --nproc_per_node 2 scripts/train_model.py \
+torchrun --standalone --nproc_per_node 2 scripts/train/train_model.py \
     -config_file ${run_dir}/configs/${cfg} \
     -out_dir ${job_outdir}

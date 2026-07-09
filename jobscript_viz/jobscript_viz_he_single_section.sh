@@ -19,4 +19,4 @@ ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 [ -f "$ENV_PATH" ] && source "$ENV_PATH" || echo "Failed to activate $ENV_PATH"
 cd "${run_dir}"
 
-python scripts/viz_he_single_section.py
+python scripts/visualization/viz_he_single_section.py

@@ -49,7 +49,7 @@ for cfg in "${configs[@]}"; do
     echo "Output dir: ${job_outdir}"
     echo "=========================================="
 
-    torchrun --standalone --nproc_per_node 2 scripts/train_model.py \
+    torchrun --standalone --nproc_per_node 2 scripts/train/train_model.py \
         -config_file ${run_dir}/configs/${cfg} \
         -out_dir ${job_outdir}
 done

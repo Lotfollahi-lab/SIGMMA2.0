@@ -33,4 +33,4 @@ ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 
 mkdir -p ${output_dir}/${LSB_JOBID}
 cp ${config_file} ${output_dir}/${LSB_JOBID}/
-torchrun --standalone --nproc_per_node 2 scripts/train_model.py -config_file ${config_file} -out_dir ${output_dir}/${LSB_JOBID}
+torchrun --standalone --nproc_per_node 2 scripts/train/train_model.py -config_file ${config_file} -out_dir ${output_dir}/${LSB_JOBID}

@@ -23,7 +23,7 @@ out_dir="${run_dir}/outputs/diagnostics/scale_correlation/${LSB_JOBID}"
 ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 [ -f $ENV_PATH ] && source $ENV_PATH || echo "Failed to activate: ${ENV_PATH}"
 
-python -u ${run_dir}/scripts/diagnose_scale_correlation.py \
+python -u ${run_dir}/scripts/diagnostics/diagnose_scale_correlation.py \
     --config   ${run_dir}/configs/analyze_scale_divergence_sigmma.yaml \
     --slide    BK39-SKI-27-FO-1-S3 \
     --manifest /lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/sanger_MANIFEST_test.csv \

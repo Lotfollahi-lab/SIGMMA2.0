@@ -17,4 +17,4 @@ ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 [ -f "$ENV_PATH" ] && source "$ENV_PATH"
 cd "${run_dir}"
 
-python scripts/plot_manifest_tissue_stats.py
+python scripts/visualization/plot_manifest_tissue_stats.py

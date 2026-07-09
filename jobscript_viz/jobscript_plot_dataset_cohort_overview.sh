@@ -18,4 +18,4 @@ ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 [ -f "$ENV_PATH" ] && source "$ENV_PATH"
 cd "${run_dir}"
 
-python scripts/plot_dataset_cohort_overview.py
+python scripts/visualization/plot_dataset_cohort_overview.py

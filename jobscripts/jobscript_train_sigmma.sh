@@ -32,10 +32,10 @@ ENV_PATH="/nfs/team361/dj16/projects/SIGMMA/.venv/bin/activate"
 # Save the config file to the output directory for reference
 # mkdir -p ${output_dir}/${LSB_JOBID}
 # cp ${run_dir}/configs/in-house_train_sigmma.yaml ${output_dir}/${LSB_JOBID}/
-# python -u scripts/train_model.py -config_file ${run_dir}/configs/in-house_train_sigmma.yaml -out_dir ${output_dir}/${LSB_JOBID}
+# python -u scripts/train/train_model.py -config_file ${run_dir}/configs/in-house_train_sigmma.yaml -out_dir ${output_dir}/${LSB_JOBID}
 
 # === RUN With DDP
 # Save the config file to the output directory for reference
 mkdir -p ${output_dir}/${LSB_JOBID}
 cp ${run_dir}/configs/in-house_train_sigmma.yaml ${output_dir}/${LSB_JOBID}/
-torchrun --standalone --nproc_per_node 2 scripts/train_model.py -config_file ${run_dir}/configs/in-house_train_sigmma.yaml -out_dir ${output_dir}/${LSB_JOBID}
+torchrun --standalone --nproc_per_node 2 scripts/train/train_model.py -config_file ${run_dir}/configs/in-house_train_sigmma.yaml -out_dir ${output_dir}/${LSB_JOBID}

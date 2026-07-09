@@ -167,3 +167,6 @@ configs/eva_official/
 /jobscripts/jobscript_train_gex_aware_svg_a01.sh
 /jobscripts/jobscript_train_sigmma_dense_attnpool.sh
 /jobscript_viz/jobscript_cj4637_grid235_overlay.sh
+
+# TCGA TSR pipeline: kept local, not tracked in remote.
+scripts/tcga_tsr/

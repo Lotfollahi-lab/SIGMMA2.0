@@ -92,6 +92,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                  number_of_genes: int = 50,
                  num_resolutions: int = 3,
                  num_cell_types: Optional[int] = None,
+                 image_resolution_um_per_pixel: float = 0.5,
                  housekeeping_genes: Optional[Sequence[str]] = None,
                  hierarchical_graph: bool = True,
                  tissue_filtering_threshold: float = 20000,
@@ -138,6 +139,7 @@ class MultiSectionDataset(torch.utils.data.Dataset):
                 is_train=is_train,
                 model_name=model_name,
                 hier_cache_dir=hier_cache_dir,
+                image_resolution_um_per_pixel=image_resolution_um_per_pixel,
             )
             if len(dataset) > 0:
                 li_datsets.append(dataset)
@@ -317,6 +319,7 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
         fov_size: int = 256,
         number_of_genes: int = 50,
         num_resolutions: int = 3,
+        image_resolution_um_per_pixel: float = 0.5,
         num_cell_types: Optional[int] = None,
         housekeeping_genes: Optional[Sequence[str]] = None,
         hierarchical_graph: bool = True,
@@ -341,6 +344,8 @@ class SpatialPatchDataset(torch.utils.data.Dataset):
 
         # Spatial coordinates  (N, 2)
         self._coords: np.ndarray = np.array(adata.obsm["spatial"], dtype=np.float32)
+        ## spatil coordinates in um, convert to pixels
+        self._coords = (self._coords / image_resolution_um_per_pixel).astype(np.float32)
 
         # Cell embeddings
         self._nemo: np.ndarray = np.array(adata.obsm["nemo_latent"], dtype=np.float32)

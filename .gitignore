@@ -211,3 +211,8 @@ scripts/tcga_tsr/
 
 # sigmma/misc is package source, not the top-level misc/ scratch dir
 !sigmma/misc/
+
+# Python packaging
+dist/
+build/
+*.egg-info/

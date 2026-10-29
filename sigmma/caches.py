@@ -18,15 +18,17 @@ backbone/version/ckpt drift cannot pollute results.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-CACHE_ROOT = Path(
-    "/lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache"
-)
-REPO_ROOT = Path("/nfs/team361/dj16/projects/SIGMMA")
+CACHE_ROOT = Path(os.environ.get(
+    "SIGMMA_CACHE_ROOT",
+    "/lustre/scratch126/cellgen/lotfollahi/dj16/projects/sigmma_outputs/cache",
+))
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 _META_NAME = "cache_meta.json"
 

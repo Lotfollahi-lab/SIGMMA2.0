@@ -15,10 +15,6 @@ from sigmma.model import UNI, ResNet50
 from sigmma.model.models_image_backbones import H_optimus_zero, apply_lora_to_backbone
 from sigmma.model import symmetric_InfoNCE, bleep_cross_entropy
 from sigmma.model.losses import GEXAwareSoftContrastiveLoss
-from sigmma.baselines.openai_clip import openAI_CLIP
-from sigmma.baselines.plip import PLIP
-from sigmma.baselines.omiclip import loki_OmiCLIP
-from sigmma.baselines.bleep import BLEEP
 from ..evaluation.evaluate_retrieval import retrieval_score, eval_retrieval
 
 from sklearn.decomposition import PCA
@@ -94,7 +90,10 @@ def load_model(config:ConfigDict,
 
         model = sigmma(config.model, pretrained_image_encoder)
 
+    # Baselines live in the source repo only (excluded from the PyPI wheel),
+    # so they are imported on demand.
     elif config.model.name == "openAI_CLIP":
+        from sigmma.baselines.openai_clip import openAI_CLIP
         model = openAI_CLIP(
             hf_model_id=config.model.get("hf_model_id", "openai/clip-vit-base-patch32"),
             freeze_encoders=not bool(train),
@@ -106,6 +105,7 @@ def load_model(config:ConfigDict,
         )
 
     elif config.model.name == "PLIP":
+        from sigmma.baselines.plip import PLIP
         model = PLIP(
             hf_model_id=config.model.get("hf_model_id", "vinid/plip"),
             freeze_encoders=not bool(train),
@@ -119,6 +119,7 @@ def load_model(config:ConfigDict,
     elif config.model.name == "loki_OmiCLIP":
         ckpt = config.model.pretrained_ckpt_path
         assert Path(ckpt).exists(), f"OmiCLIP checkpoint not found at {ckpt}"
+        from sigmma.baselines.omiclip import loki_OmiCLIP
         model = loki_OmiCLIP(
             pretrained_ckpt_path=str(ckpt),
             freeze_encoders=not bool(train),
@@ -130,6 +131,7 @@ def load_model(config:ConfigDict,
         )
 
     elif config.model.name == "BLEEP":
+        from sigmma.baselines.bleep import BLEEP
         model = BLEEP(
             spot_input_dim=int(config.model.spot_input_dim),
             image_embedding_dim=int(config.model.get("image_embedding_dim", 2048)),

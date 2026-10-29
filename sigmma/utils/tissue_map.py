@@ -16,14 +16,17 @@ two skin cohorts (beacon + CTCL) into a single 'skin' group, and ``PUBLIC_TT``
 to drop external HEST-1k public sections (genuine OOD, no Sanger panel).
 """
 from __future__ import annotations
+import os
 from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
 
-# Canonical path; fall back to the lustre_dabin symlink if the scratch mount
-# is not visible from this host.
+# $SIGMMA_SAMPLE_METADATA_CSV wins if set; otherwise the canonical path, then
+# the lustre_dabin symlink if the scratch mount is not visible from this host.
 _CANDIDATES = [
+    *([Path(os.environ["SIGMMA_SAMPLE_METADATA_CSV"])]
+      if "SIGMMA_SAMPLE_METADATA_CSV" in os.environ else []),
     Path("/lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium/"
          "sample_metadata.csv"),
     Path("/nfs/users/nfs_d/dj16/lustre_dabin/data/sanger_in_house_xenium/"

@@ -21,15 +21,24 @@ internally.
 from __future__ import annotations
 
 import glob
+import os
 from pathlib import Path
 from typing import Optional, Sequence
 
 import numpy as np
 import pyarrow.parquet as pq
 
-LUSTRE_DATA_ROOT = "/lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium"
-PUBLIC_DATA_ROOT = "/lustre/scratch126/cellgen/lotfollahi/dj16/data/public_xenium"
-NFS_DATA_ROOT = "/nfs/team361/data/data_platform/data_staging"
+LUSTRE_DATA_ROOT = os.environ.get(
+    "SIGMMA_IN_HOUSE_DATA_ROOT",
+    "/lustre/scratch126/cellgen/lotfollahi/dj16/data/sanger_in_house_xenium",
+)
+PUBLIC_DATA_ROOT = os.environ.get(
+    "SIGMMA_PUBLIC_DATA_ROOT",
+    "/lustre/scratch126/cellgen/lotfollahi/dj16/data/public_xenium",
+)
+NFS_DATA_ROOT = os.environ.get(
+    "SIGMMA_NFS_DATA_ROOT", "/nfs/team361/data/data_platform/data_staging"
+)
 
 # Back-compat aliases (other modules may import these by name).
 LUSTRE_HE_ROOT = LUSTRE_DATA_ROOT + "/sanger_beacon"
